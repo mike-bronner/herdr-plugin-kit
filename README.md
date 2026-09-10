@@ -3,10 +3,10 @@
 Shared building blocks for [Herdr](https://github.com/herdrdev/herdr) plugins.
 
 Three published Herdr plugins each hand-maintain the same socket client, the same
-environment loader, and the same build shims. One has no `--version` at all. Another
-sends errors through a mechanism proven not to fire. This kit ends the duplication, and
-turns a Herdr release into an ingestion step rather than a manual patch across three
-repositories.
+environment loader, and the same build shims. One has no `--version` at all. Two send
+toasts and throw away the answer that says whether the toast arrived. This kit ends the
+duplication, and turns a Herdr release into an ingestion step rather than a manual patch
+across three repositories.
 
 `SCOPE.md` is the full specification. Read it before changing anything here.
 

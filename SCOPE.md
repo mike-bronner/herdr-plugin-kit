@@ -13,10 +13,10 @@ Facts marked ✅ were measured. Everything else is design intent.
 ## 1. Purpose
 
 Three published Herdr plugins each hand-maintain the same socket client, the same
-environment loader, and the same build shims. One has no `--version` at all. Another
-sends errors through a mechanism proven not to fire. This kit ends the duplication and
-turns a Herdr release into an ingestion step rather than a manual patch across three
-repositories.
+environment loader, and the same build shims. One has no `--version` at all. Two send
+toasts and throw away the answer that says whether the toast arrived. This kit ends the
+duplication and turns a Herdr release into an ingestion step rather than a manual patch
+across three repositories.
 
 **In scope:** wire types, transport, environment, version reporting, error popups, update
 checking, distribution shims, CI.
@@ -28,19 +28,37 @@ marketplace index, and the kit is not an installable plugin.
 
 ### 1.1 Measured duplication this replaces
 
+✅ Re-measured 2026-09-10, after project-finder shipped 0.8.0 and agentic-panes-layout
+shipped 0.4.0. Five figures moved since this table was first written.
+
 | Concern | project-finder | recent-spaces | agentic-panes-layout |
 |---|---|---|---|
-| `api.rs` | 223 lines | 158 | 360 |
+| `api.rs` | 223 lines | 158 | 302 |
 | `config.rs` | 402 lines | 275 | 493 |
-| `--version` | absent | `version.rs`, 119 lines | ~90 inline in `main.rs` |
-| `build.rs` stamp | absent | present | present |
-| Error popup | `notification.show` | absent | `issues.rs`, 202 lines |
+| `--version` | absent | `version.rs`, 151 lines | ~90 inline in `main.rs` |
+| `build.rs` stamp | absent | 95 lines | 197 lines |
+| Error popup | `notification.show` | absent | `issues.rs`, 204 lines |
 
-✅ `find_cargo()` is byte-identical in all three `bin/build` scripts. So is `needs_build()`
-in all three launchers.
+✅ `find_cargo()` is byte-identical in **two** of the three `bin/build` scripts, and
+`needs_build()` is byte-identical in **two** of the three launchers. recent-spaces holds
+the odd copy of each, because it moved `find_cargo` out into its own `bin/find-cargo`.
+Two identical copies plus one that has drifted is the duplication problem at its next
+stage, not the absence of one.
 
-The drift matters more than the duplication. project-finder's error path runs on
-`notification.show`, which agentic-panes-layout's own measurements proved does not fire.
+#### The claim this table used to make, withdrawn
+
+🚨 This section said that project-finder's error path runs on `notification.show`,
+"which agentic-panes-layout's own measurements proved does not fire". **That is
+retracted. The claim was false.** §7.1 carries the correction, the measurement that
+overturned it, and how it came to be written.
+
+✅ The real defect is smaller, and it is duplicated rather than unique. Both plugins that
+send a toast discard the whole response: `let _ = client.call("notification.show", ...)`
+at `project-finder/src/api.rs:218` and `agentic-panes-layout/src/api.rs:297`, literally
+that. recent-spaces sends none, so this is two of three rather than all three.
+
+So a dropped toast and a delivered one are indistinguishable to the caller, from
+information the caller already received. §7.2 is what the kit does about it.
 
 ---
 
@@ -360,14 +378,104 @@ part of the compile-time `version_report!()` macro.
 
 Promoted from agentic-panes-layout's `issues.rs`.
 
-✅ Toasts cannot carry diagnostics. `notification.show` has no severity, allows one at a
-time, is rate limited, and returns `shown: false` with `no_foreground_client` or
-`disabled`.
+### 7.1 RETRACTED 2026-09-10: system toasts are not dropped
 
-⚠️ **project-finder's current error path is built on exactly this mechanism.** Fixing it
-is a real behaviour change, which is why that plugin migrates last.
+🚨 **This section said that `notification.show` returns `shown: false` with
+`no_foreground_client` under Mike's own `ui.toast.delivery = "system"`, so a plugin toast
+never rendered. That claim is withdrawn.** It is withdrawn from §1.1 as well, and from
+four files in agentic-panes-layout by commit `46a0023`.
 
-Design:
+**Measured** 2026-09-10 against Mike's live 0.9.0 server, with
+`ui.toast.delivery = "system"` unchanged on disk:
+
+```
+$ herdr notification show "agent layout" --body "probe: checking notification delivery"
+{"id":"cli:notification:show","result":{"reason":"shown","shown":true,"type":"notification_show"}}
+```
+
+✅ `shown: true`, three times: twice independently, and once with the setting confirmed
+still in place on disk.
+
+⚠️ **The serving path is unidentified, and no mechanism is asserted here.** Herdr's own
+`src/app/api.rs` at v0.9.0 matches the Terminal and System delivery kinds straight to
+`NoForegroundClient` with no client check at all, which contradicts the live result. A
+separate headless notifications module exists in the same tree, so `app/api.rs` may not
+be the handler in force when a client is attached. **Nobody has established which path
+serves this call.** Supplying one is what produced the retracted claim.
+
+#### How the wrong claim arose, which matters more than the claim
+
+| Hop | Claim | Evidence for the mechanism |
+|---|---|---|
+| 0 | `no_foreground_client` for every call on an isolated headless server. **It stated its own limit:** a headless server answers the same way for the other delivery setting, so the setting could not be separated from the absent client | ✅ the measurement itself |
+| 1 | It fails because of `ui.toast.delivery = "system"` | ❌ none. The caveat was dropped in relay and the setting asserted as the cause |
+| 2 | It fails because no foreground client is present | ❌ none. A different mechanism asserted in its place |
+| — | Live measurement, setting unchanged on disk | Kills hop 1. Does **not** establish hop 2 |
+
+Both substitutions were mechanism claims carrying no more evidence than the ones they
+replaced. Each read as more careful than the original, because each was more specific.
+
+⚠️ **This failure mode is one-way.** A caveat makes a claim less useful, so every relay is
+under quiet pressure to drop one and under none to restore one. Full write-up:
+`insights/2026-09-10-caveat-decay-is-one-way.md`.
+
+**The rule this document now follows, in every section it touches: separate measured
+behaviour from explanation, and mark the explanation as unverified where nobody has
+established a mechanism.** Four documented Herdr claims in one day were right about the
+conclusion and wrong about the cause. Each survived its first check, because the check
+was aimed at the conclusion rather than at the cause.
+
+### 7.2 What replaces it: return the reason, never assume the outcome
+
+✅ **Measured in the schema.** `notification.show` answers with `shown: bool` and a
+`reason` that is a genuine enum of five values. It generates as a real Rust enum,
+`generated::NotificationShowReason`:
+
+`shown`, `disabled`, `rate_limited`, `no_foreground_client`, `busy`.
+
+🚨 ✅ Both plugins that send a toast throw that answer away (§1.1). **That discarded
+response is the actual defect, and the false claim was hiding it.** It is a silent
+failure detectable from information the caller already receives, which is the same shape
+as the stale binary `--version` exists to catch.
+
+**So the kit returns the reason rather than a bare success.** `report` hands the caller
+the `NotificationShowReason`, and falls back to a pane on this policy.
+
+| `reason` | Fall back to a pane | Why |
+|---|---|---|
+| `no_foreground_client` | ✅ yes | nothing was there to draw it, so nothing was delivered |
+| `rate_limited` | ✅ yes | the message was dropped rather than shown |
+| `busy` | ✅ yes | one toast is live at a time, and this was not it |
+| `shown` | ❌ no | it was delivered |
+| `disabled`, cosmetic message | ❌ no | respected, and see below |
+| `disabled`, diagnostic that stops the plugin working | ✅ yes | overridden, and see below |
+
+**Decided by Mike.** ⚠️ **Carry this reason with the rule wherever the rule lands, in code
+comments included, because the rule on its own reads like a plugin ignoring a user
+preference.** A user who turns off toasts has said something about toasts, not about
+diagnostics. So `disabled` is respected for anything cosmetic, and overridden only for a
+diagnostic that stops the plugin working.
+
+### 7.3 What still justifies a pane for the detail
+
+Two measurements survive the retraction untouched. Both were taken separately from the
+retracted claim, and neither rests on it.
+
+- ✅ **No severity.** Herdr hardcodes every API-originated notification to one kind, so a
+  plugin cannot style an error differently from a success.
+- ✅ **One at a time.** Only one toast is live, and the next answers `busy`.
+
+⚠️ A rate limit is a third limit, and it has a weaker basis than those two here: what is
+established is that the schema declares a `rate_limited` reason the server can return.
+That is why §7.2 routes on the reason rather than predicting when it fires.
+
+A pane has none of the three limits. It is the plugin's own terminal, carrying every
+issue at once.
+
+⚠️ **project-finder's current error path sends a toast and reads nothing back.** Moving it
+onto §7.2 is a real behaviour change, which is why that plugin migrates last.
+
+### 7.4 The pane itself
 
 - Write diagnostics to a uniquely-named temp file, keyed on pid **and** an atomic
   counter. ✅ Pid alone caused a real race that failed the test suite about one run in four.
@@ -693,5 +801,6 @@ Written 2026-09-10 from a design session that measured, rather than assumed:
 - The three plugins' release and asset state.
 
 Related vault notes: `decisions/2026-09-10-herdr-plugin-kit-shared-crate.md`,
-`insights/2026-09-10-typify-drops-discriminator-beside-sibling-property.md`.
+`insights/2026-09-10-typify-drops-discriminator-beside-sibling-property.md`,
+`insights/2026-09-10-caveat-decay-is-one-way.md`.
 
