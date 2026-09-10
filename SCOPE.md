@@ -125,7 +125,7 @@ implementation.
 | `success_response` | 71 | 64 | ✅ clean |
 | `event` | 16 | 26 | ✅ clean |
 | `subscription_event` | 10 | 3 | ⚠️ untagged, named, functional |
-| `error_response` | 1 | 0 | ✅ clean |
+| `error_response` | 1 | 0 | ✅ clean, and validates nothing (§3.5) |
 
 ✅ All 384 `$ref` values are self-referential. No sub-schema references another.
 
@@ -206,6 +206,12 @@ variant, and no params shape, so it survives every regeneration untouched.
 - `#[serde(flatten)]` buffers through a map, so `deny_unknown_fields` does not work
   through the envelope.
 - `subscription_event` does not cross-check event kind against payload.
+- 🚨 ✅ **No error code is enumerated anywhere in the schema.** `ErrorBody` declares
+  `code` and `message` as bare strings, both required, with no enum, so `generated.rs`
+  emits `pub code: ::std::string::String`. **So no error code is generatable, and none
+  is checkable.** A claim that some call answers a particular code cannot be verified
+  against the published contract, even when the observation behind it is real. §4.2
+  carries what follows from this for the transport.
 
 ---
 
@@ -236,6 +242,31 @@ never threatens it.
 - Request ids from an atomic counter, prefixed with the plugin id.
 - Read and write timeouts, defaulting to 5 seconds, matching recent-spaces today.
 - A typed `CallError` distinguishing connect, timeout, protocol, and server-error cases.
+
+#### 4.2.1 Error codes are hand-maintained, and never generated
+
+§3.5 measured the reason: the schema enumerates no error code at all, so nothing here
+can be generated, and nothing here can be checked against the published contract.
+
+✅ **Prefer reading an enumerated field on a success result over matching an error-code
+string.** An enumerated field generates as a real Rust enum, so an unknown value fails
+to deserialize rather than falling through a match. It also survives regeneration two
+ways a string match does not: a changed value lands in the diff a human has to read
+(§12), and an exhaustive `match` on the enum stops compiling. A string match absorbs the
+same change in silence.
+
+⚠️ The three codegen guards (§3.2) do **not** cover this. None of them watches enum
+values, and adding one is not proposed here. The compiler and the diff review are the
+whole of the protection.
+
+`NotificationShowReason` (§7.2) is the worked example. It answers "did this message
+land?" from a success result, without matching one string.
+
+Where an error code genuinely has to be matched, that list is **hand-maintained beside
+the transport, never in the generated layer**, and every entry carries the measurement
+that put it there: the call, the Herdr version, and what came back. ⚠️ An entry with no
+measurement beside it is a claim rather than a check, and nothing in the pipeline can
+tell the two apart.
 
 ### 4.3 The protocol handshake
 
