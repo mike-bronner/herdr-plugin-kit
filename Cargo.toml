@@ -1,0 +1,18 @@
+[workspace]
+members = ["crates/herdr-plugin-kit"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+# 1.80, not the 1.75 the three plugins declare today. cargo-typify emits
+# `std::sync::LazyLock` for every pattern-constrained string in Herdr's schema,
+# and that landed in 1.80. Raising it is not optional while the types are
+# generated, because the generated file is never hand-edited.
+rust-version = "1.80"
+license = "MIT"
+repository = "https://github.com/mike-bronner/herdr-plugin-kit"
+
+[workspace.dependencies]
+regress = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
