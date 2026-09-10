@@ -537,20 +537,99 @@ machinery.
   minimum interval. Default 24 hours. No new process for the two on-demand plugins.
   recent-spaces folds the check into its existing poll loop.
 - **Check:** `git ls-remote --tags` against the plugin's origin. No auth, no rate limit.
+  ⚠️ **Safe here only because of the bullets around it, and wrong on the bootstrap path.**
+  §9.6 rejects it for `bin/build` on three grounds. Two of the three apply here as well.
+
+  | Ground for rejecting it in `bin/build` | Applies to this check? |
+  |---|---|
+  | A network round trip on a hot path, and `bin/build` runs at every server start | ❌ no. This one is on a timer and detached |
+  | ⚠️ It can **hang** on an ssh remote, waiting for a passphrase | ✅ yes. A detached spawn that hangs leaks a process, so give it a timeout |
+  | ⚠️ It is **wrong for a fork**, whose tag points at different code | ✅ yes. A fork's tag says nothing about the upstream release |
+
 - **Never block a launch.** Spawn detached, write the result to the stamp file, prompt on
   the *next* launch.
 - **Prompt:** a popup through `report`, never a toast.
 - **Apply:** managed installs re-run `$HERDR_BIN_PATH plugin install owner/repo --yes`,
   the documented refresh path.
 
-### 8.3 Linked checkouts default to off
+### 8.3 Local installs: ask Herdr, and only where the question is live
+
+**Redesigned 2026-09-10.** This section said only that the kit "asks Herdr what kind of
+install it is, and does nothing when the answer is local". That is still the intent. What
+changed is **where the question gets asked**, and it changed on a measurement.
 
 ⛔ ✅ All three of Mike's installs are `local:` links to working repositories. An updater
-that runs against a working tree is hostile.
+or a downloader that runs against a working tree is hostile: a developer who asked to
+compile silently gets a binary somebody else built.
 
-✅ `InstalledPluginInfo` carries a `source` field, and `HERDR_BIN_PATH` is injected as an
-absolute path. The kit asks Herdr what kind of install it is, and does nothing when the
-answer is local.
+✅ **Herdr answers the question authoritatively.** `InstalledPluginInfo` carries a
+`source`, whose `kind` is the enum `local` or `github`, and it **defaults to `local`**.
+Confirmed in `generated.rs`: `PluginSourceKind` holds exactly those two values, and
+`defaults::plugin_source_info_kind()` returns `Local`. A default of `local` is the safe
+direction, because it sends an unknown install to a compile.
+
+**Decided by Mike: both the check and the developer override belong in the kit**, rather
+than being patched into project-finder. He asked project-finder for a development-first
+override, then moved the whole thing here. See
+`decisions/2026-09-10-local-install-check-belongs-in-plugin-kit.md`.
+
+#### The manifest names the calling context, so the socket does not have to
+
+✅ **`[[build]]` fires only on `herdr plugin install owner/repo`, and never on
+`herdr plugin link`.** Documented by Herdr, and measured 2026-09-09 by the
+agentic-panes-layout session: a throwaway plugin whose build command wrote a marker file
+was linked, and the marker was never created. The plugin registered and its `[[build]]`
+entry parsed, so the entry is understood and simply not triggered.
+
+**So during `[[build]]` the install is `github` by construction, and the question already
+has a fixed answer there.** `link` is the only route to a `local:` install, and `link`
+runs no build command. The question is live only on the `[[startup]]` path, and on a
+direct shim invocation.
+
+⚠️ **Do not resolve this by testing whether the socket is reachable. Nobody has measured
+that.** What is measured:
+
+| Context | `HERDR_SOCKET_PATH` present? |
+|---|---|
+| `[[keys.command]]` | ✅ measured present, 2026-09-05 |
+| plugin event hook | ⚠️ measured **absent** from the injected set |
+| `[[startup]]` | ❓ never measured. Only the absence of `$TERM` is (§10) |
+| `[[build]]` | ❓ never measured, and now irrelevant |
+
+**So let the manifest say which context is calling.** The two entries are already
+declared separately in every plugin manifest, so the install entry passes a flag the
+startup entry does not:
+
+```toml
+[[build]]
+command = ["sh", "bin/build", "--install"]
+platforms = ["linux", "macos"]
+
+[[startup]]
+command = ["sh", "bin/build"]
+platforms = ["linux", "macos"]
+```
+
+The flag names the **context**, not the action, which is the point of the redesign. The
+manifest reports where the call came from, and the kit decides what to do about it.
+
+| Situation | What the kit does |
+|---|---|
+| Install context, the flag is present | ✅ Fetch. The install is `github` by construction |
+| Runtime context, `source.kind` is `local` | ✅ Build from source. It is somebody's working tree |
+| Runtime context, `source.kind` is `github` | ✅ Fetch |
+| Runtime context, the socket cannot be reached | ✅ **Build from source** |
+
+🔑 **An unreachable socket means build from source, which is the safe direction.** A
+developer gets the compile they wanted, and a GitHub user compiles once instead of
+fetching. So being wrong about socket availability costs a slow compile, never a wrong
+binary, and **correctness needs no measurement of the `[[startup]]` environment at all**.
+That is what makes this safe to build before anyone measures it.
+
+⚠️ Socket availability at `[[startup]]` remains worth measuring as an **optimisation**
+question. It is no longer a correctness one.
+
+Full measurements: `insights/2026-09-10-herdr-build-never-runs-for-local-installs.md`.
 
 ---
 
@@ -563,8 +642,11 @@ binary, so it cannot live inside it.
 
 | Fetch | Runs | Lives |
 |---|---|---|
-| Bootstrap | install, no binary yet | 🐚 shell, `bin/build` |
+| Bootstrap | install, and every server start with no current binary | 🐚 shell, `bin/build` |
 | Update | plugin already running | 🦀 Rust, `update` module |
+
+⚠️ `bin/build` serves both `[[build]]` and `[[startup]]`, which is why §8.3 has to tell
+the two contexts apart, and why §9.6 refuses a network call to resolve a tag.
 
 The kit defines the URL scheme, asset naming, and checksum format as constants. Both
 callers read the same convention.
@@ -577,7 +659,11 @@ entire reason `find_cargo()` exists.
 ✅ `curl`, `tar`, `shasum`, `unzip`, and `git` are all in `/usr/bin`. The fetch path needs
 no PATH workaround, and it drops the Rust toolchain requirement for every user.
 
-### 9.3 Download is on by default from v0.1.0
+✅ Under §9.6's raw-binary convention the fetch path uses only `curl`, `shasum`, and
+`git`. `tar` and `unzip` are no longer on it, which is two fewer tools that have to be
+present for an install to work.
+
+### 9.3 Download is on by default from 0.1.0
 
 **Decided by Mike, overriding a recommendation to ship build-only first.**
 
@@ -587,13 +673,52 @@ delaying the feature.
 
 ### 9.4 Order in `bin/build`
 
-1. Ask Herdr whether this install is local. If so, build from source and stop.
-2. Read `version` from `herdr-plugin.toml`.
-3. Map the host to a target triple.
-4. Fetch the asset and its checksum over HTTPS with an explicit protocol and TLS floor.
-5. Verify the checksum **before anything executes**.
-6. Extract into place, and record provenance.
-7. On any failure, fall back to building, and record why.
+**Rewritten 2026-09-10**, against the shim project-finder actually shipped and against
+the §8.3 redesign.
+
+1. **Is a build needed at all?** Stop if the binary is newer than every compiler-read
+   path. This is `needs_build()`, and it runs first so that the common case costs no
+   network call and no `git`.
+2. **Which context is this?** The manifest flag means install, so fetch. No flag means
+   runtime, so ask Herdr and build from source when the answer is `local`, or when the
+   socket cannot be reached (§8.3).
+3. **Is this checkout releasable?** Read `HEAD`, and ask `git status` about the
+   compiler-read paths only (§9.4.1). A dirty compiler-read path means build from source:
+   no published asset can match this tree.
+4. Read `version` from `herdr-plugin.toml` for the release tag, and take the first twelve
+   characters of `HEAD` for the asset name (§9.6).
+5. Map the host to a platform name (§9.6).
+6. Fetch the asset and its `.sha256` over HTTPS.
+7. Verify the checksum **before anything executes**, and before the file ever reaches the
+   path the launcher execs. ✅ project-finder does this by verifying in a temporary
+   directory and moving only on a match. The move is the gate, so no flag or failure mode
+   can run an unverified file.
+8. Move into place, and record provenance (§6.3).
+9. On any failure, fall back to building, and record why (§9.5).
+
+⚠️ **project-finder 0.8.0 does not yet write provenance at step 8**, though recent-spaces
+does. The kit's template closes that gap, because §6.3's report has nothing to read
+without it.
+
+### 9.4.1 The dirtiness check is narrowed to what the compiler reads
+
+✅ Taken from project-finder's `bin/build`, which asks `git status --porcelain` about one
+pathspec and no more:
+
+```
+src Cargo.toml Cargo.lock build.rs .cargo rust-toolchain rust-toolchain.toml
+```
+
+**An edited README cannot change the binary, and must not force a compile.** The question
+being asked is "what was compiled", not "what does `git status` say about the tree".
+
+⚠️ **Listing both `rust-toolchain` and `rust-toolchain.toml` is not redundant.** Git
+pathspecs match whole path components, so `rust-toolchain` does not match
+`rust-toolchain.toml`. Drop either one and a file the compiler reads goes unwatched.
+
+🔑 **This is the same list the build stamp uses (§6.1).** Both answer "was this binary
+built from committed source?", so letting them differ makes the stamp and the fetch
+disagree about the same tree.
 
 ### 9.5 The fallback is loud, and failure classes differ
 
@@ -610,12 +735,72 @@ must never be quiet, and the bad artifact must never be reused.
 The state directory records the last attempt: timestamp, URL, and outcome. Repeated 404s
 become visible rather than something you have to notice.
 
-### 9.6 Asset convention
+### 9.6 Asset convention: keyed on the commit, not on the version
 
-`<bin>-<version>-<triple>.tar.gz` plus a matching `.sha256`, across six triples:
+**Corrected 2026-09-10.** This section specified `<bin>-<version>-<triple>.tar.gz` plus a
+matching `.sha256`. ✅ **project-finder shipped something different, and it works.** Its
+0.8.0 release carries eight assets. Verified by reading the release and all 320 lines of
+its `bin/build`:
 
-`aarch64-apple-darwin`, `x86_64-apple-darwin`, `aarch64-unknown-linux-gnu`,
-`x86_64-unknown-linux-gnu`, `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`.
+```
+https://github.com/mike-bronner/herdr-plugin-project-finder/releases/download/0.8.0/
+  pick-project-macos-arm64-6c55e13a5445        (and .sha256)
+  pick-project-macos-x64-6c55e13a5445          (and .sha256)
+  pick-project-linux-arm64-6c55e13a5445        (and .sha256)
+  pick-project-linux-x64-6c55e13a5445          (and .sha256)
+```
+
+**Take that convention.** Three things change from the original text.
+
+| Was | Is | Why |
+|---|---|---|
+| Keyed on the version | ✅ Keyed on the **first twelve characters of the checked-out commit** | below |
+| Target triple | ✅ **Platform nickname**, `macos-arm64` | shorter, and it is what shipped |
+| `.tar.gz` archive | ✅ **Raw binary** plus a matching `.sha256` | one file, no extract step, no `tar` |
+
+#### Why the commit, and not the version
+
+🔑 ✅ **The URL itself asserts that the binary was built from the source in this folder.**
+A checkout one commit past the tag asks for a file that does not exist, gets a 404, and
+compiles. That is the correct outcome, and it needs no comparison logic to reach. A
+version-keyed name cannot make the same claim, because two different trees can both call
+themselves `0.8.0`.
+
+🚨 It also **removes any network call to resolve a tag**, which matters because
+`bin/build` runs at every server start (§8.1, §9.1). `git ls-remote` was rejected on that
+path for three reasons, all three of which stand:
+
+- A network round trip on a hot path.
+- ⚠️ It can **hang** on an ssh remote, waiting for a passphrase, with nothing to time it
+  out.
+- ⚠️ It is **wrong for a fork**, whose tag points at different code than the upstream tag
+  of the same name.
+
+§8.2 records which of the three still apply to the update check, where the answer differs.
+
+**The release tag stays version-keyed.** ✅ The shipped URL is
+`releases/download/<version>/<bin>-<platform>-<commit12>`. So the tag names the release a
+human recognises, and the asset name names the tree that produced the binary. §12 governs
+the form of that tag, and a stale `v` there is a silent 404.
+
+#### Six platform names, because six triples ship
+
+⚠️ Four shipped. §11.6 builds six, so the naming has to extend past what has been
+exercised.
+
+| Target triple | Platform name | Shipped in project-finder 0.8.0 |
+|---|---|---|
+| `aarch64-apple-darwin` | `macos-arm64` | ✅ |
+| `x86_64-apple-darwin` | `macos-x64` | ✅ |
+| `aarch64-unknown-linux-gnu` | `linux-arm64` | ✅ |
+| `x86_64-unknown-linux-gnu` | `linux-x64` | ✅ |
+| `aarch64-pc-windows-msvc` | `windows-arm64` | ❌ never built, never fetched |
+| `x86_64-pc-windows-msvc` | `windows-x64` | ❌ never built, never fetched |
+
+⚠️ **The two Windows names are this document's extension of a four-name convention.**
+Nothing has produced or consumed them. The `.exe` suffix they raise is open (§14.2), and
+it belongs with the PowerShell shims (§10.1), where Windows is compile-verified and
+nothing more.
 
 ### 9.7 Security limit, stated plainly
 
@@ -670,7 +855,7 @@ plugin, the `sh` shim never executes, and the asset built for that user is unrea
 Building all six targets while holding the shims produces artifacts nobody can install. The
 shims and the Windows assets are one decision, not two, and cannot be taken separately.
 
-**Answered 2026-09-10: the shims land in v0.1.0.** Decided by Mike, alongside keeping all
+**Answered 2026-09-10: the shims land in 0.1.0.** Decided by Mike, alongside keeping all
 six target triples. The two were one decision, exactly as the paragraph above argues, so
 they were taken together. See §14.
 
@@ -710,8 +895,15 @@ It was originally justified by a stale-binary scare. Under download-by-default i
 guards the download path, because a manifest ahead of its latest tag means **every install
 404s and silently compiles**.
 
-✅ project-finder's manifest says `0.8.0` while its newest release is `v0.7.0`. That is
-the live instance of exactly this failure, and it exists today.
+✅ **The worked example has changed. The gate has not.** This section said that
+project-finder's manifest read `0.8.0` while its newest release was `v0.7.0`, and called
+it the live instance of exactly this failure. Re-measured 2026-09-10: both now read
+`0.8.0`, and that release carries eight assets (§13.1).
+
+**The gate stays, for two reasons.** A fixed instance is not a closed class, and this
+class went wrong once already. ➕ **The gate also asserts the tag *form*, not only the
+version.** §12 records why: a `v` on one side and none on the other 404s and then
+compiles, in silence.
 
 ⚠️ One window the gate cannot close: between the version-bump commit landing on `main`
 and the tag being pushed, `main` advertises an unreleased version. Push the bump and the
@@ -719,13 +911,15 @@ tag together, or trigger the release from the bump commit.
 
 ### 11.5 `plugin-release.yml`
 
-Tag-triggered. Builds the matrix, strips, tars, generates checksums, uploads to the
-release. Produces exactly what section 9 consumes.
+Tag-triggered. Builds the matrix, strips, generates a `.sha256` beside each binary, and
+uploads both. Produces exactly what §9.6 consumes: raw binaries, keyed on the commit, and
+**no archive step**. It also asserts the tag form (§12.2), which is what stops the two
+conventions crossing at the one place that publishes.
 
 Requires the **caller** to grant `contents: write`. A called workflow runs on the
 caller's permissions.
 
-🚧 **Blocking for the kit's own v0.1.0.** Under download-by-default the first migrated
+🚧 **Blocking for the kit's own 0.1.0.** Under download-by-default the first migrated
 plugin release must produce assets, so the release workflow has to be correct before that
 release, not after.
 
@@ -760,7 +954,43 @@ keeps a conflicted branch covered.
 
 ## 12. Versioning and sync policy
 
-- Kit tags as `v0.1.0` onward. Consumers pin to a tag via a git dependency.
+### 12.1 Mike's own tags carry no `v`. Herdr's keep theirs.
+
+**Decided by Mike 2026-09-10**, from project-finder 0.8.0 onward. Git tags and GitHub
+release names are the bare semantic version. SemVer's own FAQ is the reason: a
+`v`-prefixed string is a **tag name**, and the semantic version is the unprefixed part.
+The versions in `herdr-plugin.toml` and `Cargo.toml` were already unprefixed, so the tag
+matches them instead of leaning on a convention. Existing prefixed tags are **not**
+rewritten. See `decisions/2026-09-10-unprefixed-release-tags.md`.
+
+- ✅ **This kit tags `0.1.0` onward**, not `v0.1.0`.
+- ⚠️ **Herdr's release tags keep their `v`, and the schema URL resolves at `v0.9.0`.** So
+  `just sync-api v0.9.0` takes the prefix, because that is Herdr's own tag name. **Do not
+  let the two conventions cross.**
+
+### 12.2 A stale `v` in an asset URL fails silently
+
+🚨 The fetch 404s, falls back to compiling, and the plugin still works. It just stops
+using the prebuilt binary the whole mechanism exists to deliver, and nothing surfaces.
+That is the same failure §9.3 was told to answer by design rather than by delay.
+
+Two requirements follow, and both are requirements rather than advice:
+
+- ➕ **Pin the expected asset URL in a test, whole, including the tag form.** ⚠️ A test
+  that builds the URL the same way the shim builds it cannot catch a wrong tag form. It
+  has to state the expected string.
+- ➕ **The release workflow must reject one of the two forms** (§11.5). Tolerating both
+  `0.8.0` and `v0.8.0` is exactly how two conventions drift apart and then disagree
+  without saying so.
+
+⚠️ **Live instance to carry.** recent-spaces' `bin/build` builds
+`releases/download/v$version/...`. It agrees with that repo's existing `v0.5.0` tag
+today, so nothing is broken yet. It breaks on the **first unprefixed tag that repo cuts**,
+and it breaks by compiling instead of fetching. Fix it when recent-spaces migrates (§13).
+
+### 12.3 The rest
+
+- Consumers pin to a tag via a git dependency.
 - The kit records the Herdr tag and protocol it was generated against.
 - `just sync-api <tag>` refetches and regenerates. **A human reviews the diff before it
   lands.**
@@ -773,29 +1003,38 @@ keeps a conflicted branch covered.
 
 | Order | Plugin | Version | Why |
 |---|---|---|---|
-| 1️⃣ | recent-spaces | 0.5.0 | Smallest at 158 lines of `api.rs`, no TUI, donates the best `version.rs` |
-| 2️⃣ | agentic-panes-layout | 0.3.1 | Donates `issues.rs` |
-| 3️⃣ | project-finder | 0.8.0 | Only one with a real behaviour change |
+| 1️⃣ | recent-spaces | 0.5.0 | Smallest at 158 lines of `api.rs`, no TUI, donates the best `version.rs`, and carries the live `v`-prefix hazard (§12.2) |
+| 2️⃣ | agentic-panes-layout | 0.4.0 | Donates `issues.rs` |
+| 3️⃣ | project-finder | 0.8.0 | Only one with a real behaviour change (§7.3), and donates the shim (§9.4) |
 
 **Ship the kit with `api`, `env`, and `version` only.** Hold `report` and `update` until
 one real consumer has proven the boundaries. Designing abstractions with no consumer is
 how they come out wrong.
 
-### 13.1 Release state as of 2026-09-10
+### 13.1 Release state, re-measured 2026-09-10
 
-✅ All three repos have releases. **None has any assets.**
+**Corrected.** This table said all three repos had releases and **none had any assets**,
+and it named project-finder's manifest-versus-release drift as a live failure. ✅ **Both
+halves have changed.** Re-measured against the GitHub releases:
 
-| Repo | Manifest | Latest release | Assets |
-|---|---|---|---|
-| project-finder | 0.8.0 | v0.7.0 ❌ drift | 0 |
-| recent-spaces | 0.5.0 | v0.5.0 ✅ | 0 |
-| agentic-panes-layout | 0.3.1 | v0.3.1 ✅ | 0 |
+| Repo | Manifest | Latest release | Tag form | Assets |
+|---|---|---|---|---|
+| project-finder | 0.8.0 | `0.8.0` ✅ agrees | ✅ unprefixed | **8** |
+| recent-spaces | 0.5.0 | `v0.5.0` ✅ agrees | ⚠️ still prefixed | 0 |
+| agentic-panes-layout | 0.4.0 | `v0.4.0` ✅ agrees | ⚠️ still prefixed | 0 |
 
-So the first migrated version must be a **new** release cut through the new workflow.
-Nothing existing can be retrofitted meaningfully.
+- ✅ **The drift is fixed.** project-finder's manifest and its latest release both read
+  `0.8.0`. §11.4's worked example moves with it, and the gate itself does not.
+- ✅ **project-finder ships a working toolchain-free install**, eight assets keyed on
+  commit `6c55e13a5445` (§9.6). It is the first of the three to do so.
+- ⚠️ The other two still publish no assets, so their first migrated version must be a
+  **new** release cut through the new workflow. Nothing there can be retrofitted
+  meaningfully.
+- ⚠️ Two of the three tags still carry a `v`. §12 governs which form is right, and why
+  crossing the two is silent rather than loud.
 
-⚠️ agentic-panes-layout currently has 19 uncommitted files on `main` from a concurrent
-session. Settle that before migrating it.
+✅ agentic-panes-layout's 19 uncommitted files are settled. Its tree is clean at `main`,
+so the caution this section carried about migrating it is discharged.
 
 ---
 
@@ -805,7 +1044,7 @@ session. Settle that before migrating it.
 
 | # | Question | Answer |
 |---|---|---|
-| 1 | PowerShell shims in v0.1.0, or Windows assets shipped unreachable until someone can test them? | ✅ **The shims ship in v0.1.0.** Overrides the recommendation in §10.1 to defer them. Building six targets while holding the shims produces artifacts no Windows user can install, so shipping the assets and shipping the shims are one decision |
+| 1 | PowerShell shims in 0.1.0, or Windows assets shipped unreachable until someone can test them? | ✅ **The shims ship in 0.1.0.** Overrides the recommendation in §10.1 to defer them. Building six targets while holding the shims produces artifacts no Windows user can install, so shipping the assets and shipping the shims are one decision |
 | 2 | Keep `aarch64-pc-windows-msvc`, or drop to five targets? | ✅ **All six triples stay.** Overrides the recommendation to drop it. §11.6 records the same decision on the CI matrix |
 
 ⚠️ **Neither answer removes the Windows caveat.** Both are shipped compile-verified only,
@@ -816,6 +1055,8 @@ and nobody on this project has Windows hardware. §10.1 and the README both say 
 | # | Question | Note |
 |---|---|---|
 | 1 | Attestation signing later? | Needs `gh`, which is not on launchd's PATH. §9.7 states the limit checksums do and do not cover |
+| 2 | Does a Windows asset name carry `.exe`? | §9.6 extends a four-name convention to six. Nothing has produced or consumed the two Windows names, and the launcher execs the path it builds |
+| 3 | Is the socket reachable at `[[startup]]`? | ✅ **No longer a correctness question** (§8.3). Purely an optimisation now: measuring it could save a `plugin.list` call |
 
 ---
 
@@ -831,7 +1072,36 @@ Written 2026-09-10 from a design session that measured, rather than assumed:
 - Reusable-workflow and arm64 runner availability.
 - The three plugins' release and asset state.
 
+### 15.1 Corrected 2026-09-10, later the same day
+
+Three sessions working the three donor plugins measured a great deal that contradicted
+this document within hours of it being written. **Every correction below was verified
+against the schema, a repository on disk, or a live server. None was relayed.**
+
+| § | What changed | Kind |
+|---|---|---|
+| 1.1, 7.1 | `notification.show` **does** fire. The claim that it does not is retracted, and no mechanism replaces it | 🚨 retraction |
+| 1.1 | Five figures re-measured. `find_cargo` and `needs_build` are identical in two of three, not three | 📏 re-measurement |
+| 7.2 | The discarded `reason` is the real defect. Mike's fall-back policy replaces the retracted design | 🔧 design |
+| 3.5, 4.2.1 | No error code is enumerated in the schema, so none is generatable or checkable | ➕ new limit |
+| 8.3, 9.4 | The local-install check moves to a manifest-declared context, because `[[build]]` never runs for a linked install | 🔧 design |
+| 9.6 | Assets are keyed on the commit, named for a platform, and are raw binaries | 📏 corrected to what shipped |
+| 12 | Mike's own tags drop the `v`. Herdr's keep it | ➕ new convention |
+| 11.4, 13, 13.1 | project-finder's drift is fixed and it ships eight assets. agentic-panes-layout is 0.4.0 and clean | 📏 re-measurement |
+
+⚠️ **Two of these changed real design, not just wording:** §7.2 and §8.3.
+
+**The standing rule that came out of it, and applies to every future edit: separate
+measured behaviour from explanation, and mark the explanation as unverified wherever
+nobody has established a mechanism.** Four documented Herdr claims in one day were right
+about the conclusion and wrong about the cause. Each survived its first check, because
+the check was aimed at the conclusion rather than at the cause. §7.1 traces one of them
+end to end.
+
 Related vault notes: `decisions/2026-09-10-herdr-plugin-kit-shared-crate.md`,
+`decisions/2026-09-10-local-install-check-belongs-in-plugin-kit.md`,
+`decisions/2026-09-10-unprefixed-release-tags.md`,
 `insights/2026-09-10-typify-drops-discriminator-beside-sibling-property.md`,
+`insights/2026-09-10-herdr-build-never-runs-for-local-installs.md`,
 `insights/2026-09-10-caveat-decay-is-one-way.md`.
 
