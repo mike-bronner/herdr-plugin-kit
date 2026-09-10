@@ -46,26 +46,34 @@ The drift matters more than the duplication. project-finder's error path runs on
 
 ## 2. Repository layout
 
+The target layout. Stage 1 built `crates/herdr-plugin-kit/` and `codegen/`; everything
+else lands in a later stage.
+
 ```
 herdr-plugin-kit/
 ├── Cargo.toml                        # workspace root
 ├── crates/
 │   ├── herdr-plugin-kit/             # runtime crate
-│   │   └── src/
-│   │       ├── lib.rs
-│   │       ├── api/
-│   │       │   ├── mod.rs
-│   │       │   ├── generated.rs      # committed, never hand-edited
-│   │       │   ├── envelope.rs       # the hand-written Request wrapper
-│   │       │   └── client.rs         # transport
-│   │       ├── env.rs
-│   │       ├── version.rs
-│   │       ├── report.rs             # feature: "report"
-│   │       └── update.rs             # feature: "update"
+│   │   ├── src/
+│   │   │   ├── lib.rs
+│   │   │   ├── api/
+│   │   │   │   ├── mod.rs
+│   │   │   │   ├── generated.rs      # committed, never hand-edited
+│   │   │   │   ├── envelope.rs       # the hand-written Request wrapper
+│   │   │   │   └── client.rs         # transport
+│   │   │   ├── env.rs
+│   │   │   ├── version.rs
+│   │   │   ├── report.rs             # feature: "report"
+│   │   │   └── update.rs             # feature: "update"
+│   │   └── tests/
+│   │       └── method_sweep.rs       # generated, the 102-discriminator sweep
 │   └── herdr-plugin-kit-build/       # build-dependency crate only
 ├── codegen/
-│   ├── extract.py
-│   └── lift_envelope.py
+│   ├── sync_api.py                   # the driver: fetch, extract, lift, generate
+│   ├── extract.py                    # stage 2, and the ref and collision guards
+│   ├── lift_envelope.py              # stage 3
+│   ├── emit_sweep.py                 # the sweep, derived from the schema
+│   └── test_codegen.py               # the guards' own tests, no network
 ├── templates/
 │   └── bin/
 │       ├── build            build.ps1
@@ -105,15 +113,34 @@ implementation.
 
 ### 3.2 Pipeline
 
-Four stages, run by `just sync-api <herdr-tag>`:
+Four stages, run by `just sync-api <herdr-tag>` or by `python3 codegen/sync_api.py
+<herdr-tag>` where `just` is absent. Both entry points run the same module, so the
+documented one and the tested one cannot drift apart.
 
 1. **Fetch** the schema at the given tag.
-2. **Extract** each sub-schema, rewriting `#/schemas/<name>/$defs/X` to `#/$defs/X`.
-   Fail closed if a cross-schema reference ever appears.
+2. **Extract** each sub-schema, rewriting `#/schemas/<name>/$defs/X` to `#/$defs/X`, and
+   merge the five into one document. ✅ 219 definitions collapse to 183 distinct ones
+   with zero conflicting bodies, which is what makes `SplitDirection` one Rust type
+   instead of three.
 3. **Lift** the top-level `id` out of `request`.
-4. **Generate** with `cargo-typify`, then commit the output.
+4. **Generate** with `cargo-typify`, then commit the output, along with the
+   102-discriminator sweep derived from the same schema.
 
 ✅ Runs in 0.79 seconds, deterministic and byte-identical across runs.
+
+**Three guards fail closed**, because each catches a change that would otherwise produce
+Rust that compiles and is quietly wrong:
+
+| Guard | Catches |
+|---|---|
+| Every `$ref` points inside its own sub-schema | Herdr starting to share definitions across sub-schemas, which changes what "merge" means |
+| A name defined twice is defined identically | A shared type changed on one side only, or a new type that took a taken name |
+| The request envelope's sibling property is exactly `id: string` | `envelope.rs` hand-writing a field the schema no longer declares |
+
+The collision guard is the ref guard applied to type names instead of references, and it
+is deliberate rather than a side effect of merging. Its message names the type, both
+sub-schemas, and the diff between the two bodies, so the reader can tell a changed shared
+type from a new one within seconds.
 
 ### 3.3 The lift, and why it is mandatory
 
@@ -210,15 +237,86 @@ working.
 
 Promoted from project-finder's `config.rs`, the two-thirds identical across all three.
 
-- `Environment` with `from_process`, `from_pairs`, `get`, `home`, `expanduser`,
-  `overridden`, `overlaid`, `without_plugin_vars`.
+- `Environment` with `from_process`, `from_pairs`, `get`, `home`.
 - `parse_env_file` and `read_env_file`, preserving the existing malformed-line skip.
-- Named constants for every injected variable: `HERDR_SOCKET_PATH`, `HERDR_BIN_PATH`,
-  `HERDR_ENV`, `HERDR_PLUGIN_ID`, `HERDR_PLUGIN_ROOT`, `HERDR_PLUGIN_CONFIG_DIR`,
-  `HERDR_PLUGIN_STATE_DIR`, `HERDR_PLUGIN_CONTEXT_JSON`, `HERDR_PLUGIN_ACTION_ID`,
-  `HERDR_PLUGIN_EVENT`, `HERDR_PLUGIN_EVENT_JSON`, `HERDR_PLUGIN_ENTRYPOINT_ID`.
+- Named constants for the eight injected variables a plugin actually reads:
+  `HERDR_SOCKET_PATH`, `HERDR_BIN_PATH`, `HERDR_CONFIG_PATH`, `HERDR_PLUGIN_ROOT`,
+  `HERDR_PLUGIN_CONFIG_DIR`, `HERDR_PLUGIN_STATE_DIR`, `HERDR_PLUGIN_EVENT`,
+  `HERDR_PLUGIN_EVENT_JSON`.
 
 Plugin-specific config parsing stays in the plugin. Only the shared mechanism moves.
+
+### 5.1 Amended 2026-09-10: why `env` exists, and what it holds
+
+**Decided by Mike, after measuring every variable against the API rather than assuming.**
+
+The challenge was fair: why load environment variables at all, when Herdr has an API?
+
+✅ **Measured answer: the API can replace 2 of 8, and both replacements are circular.**
+Every property name in the 275 KB schema matching `dir`, `path`, or `root` was searched.
+
+| Variable | In the API? |
+|---|---|
+| `HERDR_SOCKET_PATH` | 🔌 impossible by construction — you need the socket to call the API |
+| `HERDR_PLUGIN_ROOT` | ⚠️ `plugin.list` → `plugin_root`, but see below |
+| `HERDR_PLUGIN_CONFIG_DIR` | ❌ no such field anywhere |
+| `HERDR_PLUGIN_STATE_DIR` | ❌ no such field anywhere |
+| `HERDR_CONFIG_PATH` | ❌ no such field anywhere |
+| `HERDR_BIN_PATH` | ❌ no such field anywhere |
+| `HERDR_PLUGIN_EVENT_JSON` | ❌ per-invocation payload, not queryable |
+
+✅ `PluginListParams` is `{"plugin_id": ["string","null"]}`. There is no "self" concept,
+and omitting the filter returns every installed plugin. **To find its own entry a plugin
+must already know its `plugin_id` or `plugin_root`, both of which come from the
+environment.**
+
+Availability seals it. §6.2 requires that nothing in `version` may fail, and `--version`
+must print when the socket is down, which is exactly when it gets run. Routing it through
+the API inverts that guarantee.
+
+So `env` is not a settings loader. It is the reader for Herdr's **launch contract**. The
+API serves shared server state; the environment carries per-invocation facts only the
+launching process knows. Different data, not duplicate data.
+
+**§5 was wrong in both directions, and is corrected above:**
+
+- ❌ Five constants read by **no** plugin anywhere, cut: `HERDR_ENV`, `HERDR_PLUGIN_ID`,
+  `HERDR_PLUGIN_CONTEXT_JSON`, `HERDR_PLUGIN_ACTION_ID`, `HERDR_PLUGIN_ENTRYPOINT_ID`.
+- ➕ One real variable was missing, added: `HERDR_CONFIG_PATH`, read by project-finder
+  (`config.rs:276`) and agentic-panes-layout (`config.rs:123`).
+- 📉 Twelve constants become eight.
+
+✅ Re-measured across all three plugin repositories, counting files that name each
+variable as a string literal in Rust, or anywhere under `bin/`:
+
+| Variable | Rust files | Shell files |
+|---|---|---|
+| `HERDR_SOCKET_PATH` | 12 | 0 |
+| `HERDR_PLUGIN_ROOT` | 10 | 7 |
+| `HERDR_PLUGIN_CONFIG_DIR` | 8 | 0 |
+| `HERDR_CONFIG_PATH` | 5 | 0 |
+| `HERDR_PLUGIN_EVENT_JSON` | 5 | 0 |
+| `HERDR_PLUGIN_STATE_DIR` | 3 | 0 |
+| `HERDR_BIN_PATH` | 2 | 2 |
+| `HERDR_PLUGIN_EVENT` | 1 (a test, setting it) | 1 |
+| *the five cut* | 0 | 0 |
+
+⚠️ `HERDR_PLUGIN_CONTEXT_JSON` was **not** on the original list of four to cut. It has to
+be, or the count does not reach eight, and the measurement above puts it with the other
+zero-reader variables rather than with the readers.
+
+**Four `Environment` methods have exactly one consumer each and stay in project-finder:**
+`expanduser`, `overridden`, `overlaid`, `without_plugin_vars`. It uses them to build a
+child-process environment (`app.rs:62`, `app.rs:80`, `layout.rs:205`). This is the same
+one-consumer bar §13 already applies to hold back `report` and `update`. Promoting them
+anyway would have contradicted the document's own rule.
+
+**Kept**, each with two or more consumers: `from_process`, `from_pairs`, `get`, `home`,
+`parse_env_file`, `read_env_file`. `from_pairs` earns its place as the test seam that
+avoids mutating process globals, which matters more once these crates leave edition 2021
+and `set_var` becomes unsafe.
+
+Full reasoning: `decisions/2026-09-10-herdr-plugin-kit-shared-crate.md`.
 
 ---
 
@@ -433,10 +531,15 @@ plugin, the `sh` shim never executes, and the asset built for that user is unrea
 Building all six targets while holding the shims produces artifacts nobody can install. The
 shims and the Windows assets are one decision, not two, and cannot be taken separately.
 
-**Still open:** whether the shims land in v0.1.0 alongside the six targets, or the Windows
-assets are built and left unreachable until someone can test them. The caveat that survives
-from the old text is unchanged. CI proves the code compiles on Windows. It never proves a
-plugin runs there, and Mike works on macOS arm64.
+**Answered 2026-09-10: the shims land in v0.1.0.** Decided by Mike, alongside keeping all
+six target triples. The two were one decision, exactly as the paragraph above argues, so
+they were taken together. See §14.
+
+The caveat that survives from the old text is unchanged, and it does not expire with the
+decision. **CI proves the code compiles on Windows. It never proves a plugin runs
+there**, and Mike works on macOS arm64. That caveat is stated in the README rather than
+held as a deferral, because a caveat inside a deferral disappears the moment the deferral
+is closed.
 
 ---
 
@@ -557,12 +660,23 @@ session. Settle that before migrating it.
 
 ---
 
-## 14. Open questions
+## 14. Questions, answered and open
+
+### 14.1 Answered 2026-09-10 by Mike
+
+| # | Question | Answer |
+|---|---|---|
+| 1 | PowerShell shims in v0.1.0, or Windows assets shipped unreachable until someone can test them? | ✅ **The shims ship in v0.1.0.** Overrides the recommendation in §10.1 to defer them. Building six targets while holding the shims produces artifacts no Windows user can install, so shipping the assets and shipping the shims are one decision |
+| 2 | Keep `aarch64-pc-windows-msvc`, or drop to five targets? | ✅ **All six triples stay.** Overrides the recommendation to drop it. §11.6 records the same decision on the CI matrix |
+
+⚠️ **Neither answer removes the Windows caveat.** Both are shipped compile-verified only,
+and nobody on this project has Windows hardware. §10.1 and the README both say so plainly.
+
+### 14.2 Still open
 
 | # | Question | Note |
 |---|---|---|
-| 1 | PowerShell shims in v0.1.0, or Windows assets shipped unreachable until someone can test them? | Section 10.1. Forced by the six-target decision. Untestable on Darwin arm64 |
-| 2 | Attestation signing later? | Needs `gh`, which is not on launchd's PATH |
+| 1 | Attestation signing later? | Needs `gh`, which is not on launchd's PATH. §9.7 states the limit checksums do and do not cover |
 
 ---
 
