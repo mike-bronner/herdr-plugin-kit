@@ -15,17 +15,16 @@ across three repositories.
 
 ## Status
 
-Early. The kit currently carries the **wire types only**, generated from Herdr's own
-published API schema. The transport, environment, version, report, and update modules,
-the shell templates, and the CI workflows land in later stages, in the order `SCOPE.md`
-section 13 sets out.
+Early. The transport, the report and update modules, the shell templates, and the CI
+workflows land in later stages, in the order `SCOPE.md` section 13 sets out.
 
 | Piece | State |
 |---|---|
 | `api::generated` — 102 request methods, 187 schema types | ✅ generated and committed |
 | `api::Request` — the hand-written envelope | ✅ |
+| `env` — the reader for Herdr's launch contract | ✅ |
 | `api::client` — transport | ⏳ later stage |
-| `env`, `version` | ⏳ later stage |
+| `version` | ⏳ later stage |
 | `report`, `update` | ⏳ held until one real consumer proves the boundaries |
 | Shell templates, CI workflows | ⏳ later stage |
 

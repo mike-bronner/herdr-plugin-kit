@@ -5,9 +5,9 @@
 //! duplication, and turns a Herdr release into an ingestion step rather than a
 //! manual patch across three repositories.
 //!
-//! Today the kit carries the wire types only. The transport, environment,
-//! version, report, and update modules land in later stages, in the order
-//! SCOPE.md section 13 sets out.
+//! Today the kit carries the wire types, the launch-contract reader, and
+//! version reporting. The transport, report, and update modules land in later
+//! stages, in the order SCOPE.md section 13 sets out.
 //!
 //! # Regenerating
 //!
@@ -18,3 +18,4 @@
 #![forbid(unsafe_code)]
 
 pub mod api;
+pub mod env;
