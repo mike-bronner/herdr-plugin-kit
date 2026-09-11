@@ -305,35 +305,59 @@ pub enum State {
 }
 
 impl State {
+    /// How many terminal cells every glyph occupies.
+    ///
+    /// 🔑 **One, uniformly, which makes it a constant rather than a special
+    /// case.** All four glyphs are East Asian Width `Neutral`, so the title line
+    /// pays the same width in every state and no state can misalign against the
+    /// others.
+    ///
+    /// It is named rather than inlined because the title line computes its width
+    /// instead of measuring it, and a future glyph of a different width has to
+    /// change one place. The test suite pins it against the real Unicode data.
+    pub const GLYPH_CELLS: usize = 1;
+
     /// The glyph drawn in the border, on the title line.
     ///
-    /// 🔑 **The house set, taken from project-finder's `theme.rs`**, where
-    /// `SYMBOLS` and `DOTS` already define this vocabulary. Reused so Mike's
-    /// tools look like each other rather than each inventing a set.
+    /// 🔑 **Plain BMP symbols: one codepoint, no variation selector, no
+    /// emoji.** That combination is what makes them safe rather than what makes
+    /// them pretty, and it took four attempts to land on, each earlier one
+    /// failing a width property nobody had checked before choosing.
     ///
-    /// ⚠️ **These were built for agent status, not dialog severity.** In their
-    /// original use `◐` means working, `×` means blocked, `✓` means done, and
-    /// `●` is a filled status dot. Mike repurposed them deliberately, so the
-    /// meanings here are this module's rather than inherited.
+    /// Three traps avoided, and each was hit in turn:
+    ///
+    /// - ⚠️ **A variation selector** turns a text symbol into an emoji and makes
+    ///   the glyph two codepoints. It is also the specific trigger for
+    ///   Terminal.app drawing a Neutral base character two cells wide while
+    ///   advancing the cursor one.
+    /// - ⚠️ **Emoji** are East Asian Width `Wide`, so they cost two cells. Any
+    ///   set mixing them with narrow characters misaligns one title against the
+    ///   rest.
+    /// - 🚨 **East Asian Width `Ambiguous` is worse than either**, because the
+    ///   *terminal* decides the width from a setting rather than the character
+    ///   deciding it. U+24D8, U+2299 and U+25B2 are all Ambiguous, and enabling
+    ///   that setting in Terminal.app visibly breaks box drawing, which is
+    ///   exactly what this frame is made of.
+    ///
+    /// Private Use Area codepoints are excluded for a separate reason: they
+    /// need a patched font, and this kit is public and feeds three plugins that
+    /// other people install. A user without a Nerd Font would see tofu.
     ///
     /// ⚠️ **Not Herdr's own dialog icons.** Herdr's dialogs carry no glyph at
     /// all, which is visible in the screenshots this design was compared
-    /// against. Describing them otherwise would be the fifth documented claim
-    /// on this project to be right about a conclusion and wrong about its
-    /// source.
-    ///
-    /// Every one is a single-width BMP character and **none is emoji-class**,
-    /// so none carries a variation selector and none can be drawn double-width.
+    /// against. These were chosen for this kit. Describing them otherwise would
+    /// be the fifth documented claim on this project to be right about a
+    /// conclusion and wrong about its source.
     pub fn glyph(self) -> &'static str {
         match self {
-            // U+25CF BLACK CIRCLE
-            State::Info => "\u{25cf}",
+            // U+229D CIRCLED DASH
+            State::Info => "\u{229d}",
             // U+2713 CHECK MARK
             State::Success => "\u{2713}",
-            // U+25D0 CIRCLE WITH LEFT HALF BLACK
-            State::Warning => "\u{25d0}",
-            // U+00D7 MULTIPLICATION SIGN
-            State::Danger => "\u{d7}",
+            // U+26A0 WARNING SIGN, bare and deliberately without U+FE0E
+            State::Warning => "\u{26a0}",
+            // U+2716 HEAVY MULTIPLICATION X
+            State::Danger => "\u{2716}",
         }
     }
 
@@ -1089,15 +1113,26 @@ fn title_line(dialog: &Dialog, width: usize, colour: &str) -> String {
     // `╭─` + segment + fill + `╮`, so the fill is what is left after three
     // frame characters and the segment itself.
     let room = width - 3;
+    // 🚨 **The segment's width is computed, never measured with `cells`.** The
+    // glyph is one `char` occupying two cells, so counting the composed string
+    // would report one cell too few and push the closing corner out. That is
+    // exactly the defect the earlier off-by-one produced, and it would have
+    // come back silently the moment the glyph set went wide.
+    let glyph_cells = State::GLYPH_CELLS;
     // The budget pays for the segment's own three spaces, the glyph, and **one
     // cell of fill**. Without that last cell a title long enough to use the
     // whole budget pushes the closing corner one cell past the frame.
-    let title = truncate(&dialog.title, room.saturating_sub(cells(glyph) + 4));
-    let segment = match title.is_empty() {
-        true => format!(" {} ", glyph),
-        false => format!(" {} {} ", glyph, title),
+    let title = truncate(&dialog.title, room.saturating_sub(glyph_cells + 4));
+    let (segment, segment_cells) = match title.is_empty() {
+        // ` ` + glyph + ` `
+        true => (format!(" {} ", glyph), glyph_cells + 2),
+        // ` ` + glyph + ` ` + title + ` `
+        false => (
+            format!(" {} {} ", glyph, title),
+            glyph_cells + cells(&title) + 3,
+        ),
     };
-    let fill = room.saturating_sub(cells(&segment)).max(1);
+    let fill = room.saturating_sub(segment_cells).max(1);
     format!("{colour}╭─{segment}{}╮{RESET}", "─".repeat(fill))
 }
 
@@ -1764,30 +1799,87 @@ mod tests {
         assert_eq!(cells(CANCEL_KEY), 3);
     }
 
+    /// The whole width rule, stated rather than enumerated.
+    ///
+    /// 🔑 **Four glyph sets were tried in one afternoon, and each failed a width
+    /// property nobody had checked before choosing it.** A test that asserts the
+    /// property means the next person finds out in seconds rather than three
+    /// rounds later. That is why this checks the rule against the real Unicode
+    /// data instead of pinning four literals, which would only re-state the
+    /// choice rather than test it.
+    ///
+    /// `unicode-width` is a dev-dependency, so no consumer of this crate ever
+    /// carries it.
     #[test]
-    fn every_glyph_is_one_character_and_carries_no_selector() {
-        // The frame's right border is aligned from this. A glyph that is two
-        // characters, or that a terminal draws double-width, would shift the
-        // title line against every other row.
+    fn every_glyph_is_one_narrow_unambiguous_codepoint() {
+        use unicode_width::UnicodeWidthChar;
+
         for state in [State::Info, State::Success, State::Warning, State::Danger] {
             let glyph = state.glyph();
-            assert_eq!(cells(glyph), 1, "{:?}'s glyph is not one cell", state);
             assert_eq!(
                 glyph.chars().count(),
                 1,
-                "{:?}'s glyph is more than one character",
+                "{:?}'s glyph is more than one codepoint",
                 state
             );
-            let point = glyph.chars().next().unwrap() as u32;
-            // Outside the BMP is emoji territory, and a variation selector is
-            // the tell that a character has an emoji presentation to suppress.
-            assert!(point <= 0xffff, "{:?}'s glyph is outside the BMP", state);
+            let point = glyph.chars().next().unwrap();
+
+            // 🚨 A variation selector is the second codepoint the rule above
+            // forbids, and the specific trigger for Terminal.app drawing a
+            // Neutral character two cells wide while advancing the cursor one.
             assert!(
-                !(0xfe00..=0xfe0f).contains(&point),
+                !(0xfe00..=0xfe0f).contains(&(point as u32)),
                 "{:?}'s glyph carries a variation selector",
                 state
             );
+
+            // Not Wide: an emoji costs two cells and misaligns one title
+            // against the other three.
+            assert_eq!(
+                point.width(),
+                Some(State::GLYPH_CELLS),
+                "{:?}'s glyph is not {} cell(s) wide",
+                state,
+                State::GLYPH_CELLS
+            );
+
+            // 🚨 Not Ambiguous, which is worse than either Neutral or Wide
+            // because the terminal decides the width from a setting rather than
+            // the character deciding it. `width` treats Ambiguous as narrow and
+            // `width_cjk` treats it as wide, so disagreement between the two is
+            // an exact test for it.
+            assert_eq!(
+                point.width(),
+                point.width_cjk(),
+                "{:?}'s glyph is East Asian Width Ambiguous, so a terminal \
+                 setting decides how wide it is",
+                state
+            );
         }
+    }
+
+    #[test]
+    fn the_characters_the_glyph_rule_rejects_really_would_fail_it() {
+        // The rule is only worth having if it discriminates. These are the
+        // three rejected candidates, one per trap.
+        use unicode_width::UnicodeWidthChar;
+
+        // U+26D4 NO ENTRY is Wide, so it would have been the only two-cell
+        // glyph in a set of four.
+        assert_eq!('\u{26d4}'.width(), Some(2));
+
+        // U+24D8, U+2299 and U+25B2 are Ambiguous.
+        for point in ['\u{24d8}', '\u{2299}', '\u{25b2}'] {
+            assert_ne!(
+                point.width(),
+                point.width_cjk(),
+                "U+{:04X} was expected to be Ambiguous",
+                point as u32
+            );
+        }
+
+        // And a selector makes a one-codepoint glyph two.
+        assert_eq!("\u{26a0}\u{fe0f}".chars().count(), 2);
     }
 
     #[test]

@@ -37,3 +37,7 @@ regress.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true
+
+# Test-only. See the workspace manifest for why this costs consumers nothing.
+[dev-dependencies]
+unicode-width.workspace = true

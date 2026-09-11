@@ -129,8 +129,12 @@ fn plain(text: &str) -> String {
 }
 
 /// Counts cells without reusing the module's own counter.
+///
+/// `unicode-width` rather than a re-implementation, so a layout assertion is
+/// checked against the real Unicode data. A dev-dependency, so no consumer of
+/// this crate carries it.
 fn width_of(line: &str) -> usize {
-    line.chars().count()
+    unicode_width::UnicodeWidthStr::width(line)
 }
 
 // ── The request the opener is handed ──────────────────────────────────────
