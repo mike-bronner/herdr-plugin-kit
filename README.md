@@ -99,10 +99,20 @@ test asserts that every one of them still does. They are deliberately plainer th
 shell counterparts — no progress display, no download-failure classification — because
 unverified code should be small.
 
-One Windows question is still open: whether a release asset's name carries `.exe`. It is
-decided in a single assignment, `$AssetNameExtension` in `templates/bin/common.ps1`,
-marked unverified where it sits. No shell template ever names a Windows asset, and three
-tests hold that claim up, so the release workflow settles it with a one-line change.
+One Windows question has an answer nobody has confirmed: whether a release asset's name
+carries `.exe`. **It does, and that is a recommendation rather than a measurement.** A
+file without that extension is not executable on Windows, and somebody downloading from
+the releases page should get something that runs.
+
+It is decided in exactly two assignments, and they are tested against each other:
+`WINDOWS_ASSET_EXTENSION` in `tools/plugin_gate.py` is what the release workflow
+publishes, and `$AssetNameExtension` in `templates/bin/common.ps1` is what the shim asks
+for. Reversing the recommendation is one line in each. No shell template names a Windows
+asset at all, and tests hold every part of that up, so a producer and a consumer cannot
+drift apart here without the suite saying so.
+
+Being wrong about it costs a 404 and a compile, never a wrong binary: the checksum gate
+below the fetch does not care what the file was called.
 
 That is stated here rather than filed as a deferral, because a caveat in a deferral
 disappears the moment the deferral is closed. Treat a Windows bug report as new
@@ -316,6 +326,76 @@ it, and the terminal spinner is one named implementation rather than the default
 dialog is coming for every path that can reach one — an install compile is measured to
 reach none, so the drawn path stays for that case permanently.
 
+## Continuous integration
+
+A crate cannot ship a workflow: Actions only runs files physically present in a repo's
+own `.github/workflows/`. So the kit holds two **reusable** workflows, and each plugin
+calls one of them. Bumping the pinned ref propagates to all three plugins, the same model
+as pinning the crate.
+
+### Conformance, on every push and every pull request
+
+```yaml
+# .github/workflows/ci.yml in the plugin
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  conformance:
+    uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-ci.yml@0.1.0
+```
+
+There are no required inputs. Every fact it needs is already stated in the plugin's own
+manifests, and an input repeating one of them is a second copy that can disagree with the
+first. The one optional input is `test_os`, for a plugin whose suite cannot run on Linux.
+
+It runs the suite, the formatting, clippy with warnings denied, a compile of all six
+targets, and two conformance checks that have no local equivalent:
+
+- **`bin/` still matches the kit.** Without it the kit is a suggestion, and drift becomes
+  a discovery rather than a failing build.
+- **The versions and the tag form agree.** `herdr-plugin.toml`, `Cargo.toml`, the binary
+  cargo builds, and the repository's release tags all have to say the same thing.
+
+> **Trigger on `push` as well as `pull_request`.** When a pull request cannot compute a
+> merge ref against `main`, Actions skips its `pull_request` workflows entirely — no run,
+> no error, and the checks simply never appear. The push trigger is what keeps a
+> conflicted branch covered.
+
+### Release, on a tag
+
+```yaml
+# .github/workflows/release.yml in the plugin
+name: Release
+on:
+  release:
+    types: [created]
+permissions:
+  contents: write
+jobs:
+  release:
+    uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-release.yml@0.1.0
+    permissions:
+      contents: write
+```
+
+> 🚨 **The caller must grant `contents: write`.** A called workflow runs on the caller's
+> permissions and cannot raise its own, so a caller that omits it fails before the run
+> starts. It is needed to create the release and attach the twelve files to it.
+
+It builds six targets on native runners and publishes a raw binary and a `.sha256` beside
+it for each, named exactly as `bin/build` asks for them:
+
+```
+https://github.com/<owner>/<repo>/releases/download/<version>/
+  <binary>-<platform>-<commit12>            and .sha256 beside each
+```
+
+Nothing is published unless all six arrive. Five platforms published and a sixth missing
+is not a partial success — it is one platform silently compiling on every install, and
+nothing would say so.
+
 ## Layout
 
 ```
@@ -323,6 +403,8 @@ crates/herdr-plugin-kit/        the runtime crate
 crates/herdr-plugin-kit-build/  the build-script stamp, a build-dependency only
 codegen/                        the four-stage pipeline and its tests
 templates/                      the shell shims every plugin's bin/ is synced from
+tools/                          the mutation harness and the plugin conformance gate
+.github/workflows/              the kit's own CI, and the two reusable workflows
 SCOPE.md                        the specification
 justfile                        task wrappers, all one line each
 ```
@@ -330,14 +412,19 @@ justfile                        task wrappers, all one line each
 ## Testing
 
 ```sh
-just test          # or: python3 codegen/test_codegen.py && \
-                   #     python3 templates/test_templates.py && cargo test
-just check         # formatting, lints, and all three suites
+just test          # or run the five entry points the recipe wraps, directly
+just check         # formatting, lints, and every suite
 ```
 
-The codegen guards and the shell templates have their own suites because an untested
-guard is a claim rather than a check. Neither needs a network, and neither needs anything
-beyond the standard library.
+Five suites, because an untested guard is a claim rather than a check: the codegen
+guards, the shell templates, the mutation harness's own tests, the plugin conformance
+gate, and the Rust suite. None needs a network, and none of the four Python ones needs
+anything beyond the standard library.
+
+The conformance gate's suite runs both sides of every agreement it asserts. It extracts
+the release workflow's own asset-naming line and executes it, then asks the real shim
+what it would download, and compares the two answers. A test that rebuilt the name in
+Python would agree with itself while both sides were wrong together.
 
 The transport suite stands up a scripted server on a real local socket, so the bytes are
 genuine even though the peer is not Herdr. That is also how the call timeout is checked:

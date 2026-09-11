@@ -67,11 +67,11 @@ information the caller already received. §7.2 is what the kit does about it.
 ## 2. Repository layout
 
 The target layout. Built so far: `codegen/`, the `api` module including `client.rs`,
-`env.rs`, `version.rs`, `dialog.rs`, the whole of `crates/herdr-plugin-kit-build/`, and
-`templates/`. Still to come: `.github/workflows/`. `report.rs` and `update.rs` are held
-by §13 rather than merely pending. ⚠️ **`dialog.rs` was held by the same bar and was
-released from it by a deliberate decision** — §13 records which half of that was
-evidence and which was a choice.
+`env.rs`, `version.rs`, `dialog.rs`, the whole of `crates/herdr-plugin-kit-build/`,
+`templates/`, and `.github/workflows/`. `report.rs` and `update.rs` are held by §13
+rather than merely pending. ⚠️ **`dialog.rs` was held by the same bar and was released
+from it by a deliberate decision** — §13 records which half of that was evidence and
+which was a choice.
 
 ```
 herdr-plugin-kit/
@@ -115,13 +115,16 @@ herdr-plugin-kit/
 ├── tools/
 │   ├── mutate.py                     # the mutation harness, JSON-classified
 │   ├── test_mutate.py                # its own tests, including two regressions
+│   ├── plugin_gate.py                # the target table and the version rules
+│   ├── test_plugin_gate.py           # both sides of every agreement, run
 │   └── mutations/
 │       ├── client.json               # the transport's 17 mutations
 │       └── dialog.json               # the dialogs' 25 mutations
 ├── .github/workflows/
 │   ├── plugin-ci.yml                 # reusable, workflow_call
 │   ├── plugin-release.yml            # reusable, workflow_call
-│   └── kit-ci.yml                    # the kit's own
+│   ├── kit-ci.yml                    # the kit's own, fast
+│   └── kit-mutation.yml              # the kit's own, slow — §11.8
 └── justfile
 ```
 
@@ -1159,15 +1162,28 @@ exercised.
 |---|---|---|
 | `aarch64-apple-darwin` | `macos-arm64` | ✅ |
 | `x86_64-apple-darwin` | `macos-x64` | ✅ |
-| `aarch64-unknown-linux-gnu` | `linux-arm64` | ✅ |
-| `x86_64-unknown-linux-gnu` | `linux-x64` | ✅ |
+| `aarch64-unknown-linux-musl` | `linux-arm64` | ✅ |
+| `x86_64-unknown-linux-musl` | `linux-x64` | ✅ |
 | `aarch64-pc-windows-msvc` | `windows-arm64` | ❌ never built, never fetched |
 | `x86_64-pc-windows-msvc` | `windows-x64` | ❌ never built, never fetched |
 
-⚠️ **The two Windows names are this document's extension of a four-name convention.**
-Nothing has produced or consumed them. The `.exe` suffix they raise is open (§14.2), and
-it belongs with the PowerShell shims (§10.1), where Windows is compile-verified and
-nothing more.
+📏 **Corrected 2026-09-11: the Linux triples are musl.** This table named the gnu ones,
+and project-finder already publishes musl. §11.6 carries the reason, and it is not a
+preference: a gnu binary carries the glibc floor of the runner that built it, so a user
+on an older distribution gets a download that passes its checksum and *then* refuses to
+start. **The platform names are unchanged, because they never named a libc.**
+
+⚠️ **The two Windows names are this document's extension of a four-name convention, and
+nothing has produced or consumed them yet.** ➕ **They carry `.exe`, recommended
+2026-09-11 and not confirmed** (§14.2): a file without that extension is not executable
+on Windows, and somebody downloading from the releases page should get something that
+runs. The sidecar is therefore `…-windows-x64-<commit12>.exe.sha256`.
+
+🔑 **Two assignments decide it, and a test runs both sides against each other.**
+`WINDOWS_ASSET_EXTENSION` in `tools/plugin_gate.py` is what the release publishes;
+`$AssetNameExtension` in `templates/bin/common.ps1` is what the shim asks for. Reversing
+the recommendation is one line in each. Windows stays compile-verified and nothing more
+(§10.1).
 
 ### 9.7 Security limit, stated plainly
 
@@ -1327,21 +1343,28 @@ bug there as new information, never as a regression.
 and no download-failure classification. Unverified code should be small, because every
 line of it is one nobody can test.
 
-#### The open `.exe` question lives in exactly one assignment
+#### The `.exe` question lives in one assignment per side
 
-⚠️ §14.2 is still open, and the launcher executes the path it builds, so a wrong answer
-spread across several string concatenations would break Windows silently.
+⚠️ The launcher executes the path it builds, so a wrong answer spread across several
+string concatenations would break Windows silently.
 
-✅ It is therefore decided in **one line**, `$AssetNameExtension` in `bin/common.ps1`, set
-to the empty string because that is §9.6's four-name convention read literally. It is
-marked unverified where it is assigned. **Stage 4 settles it by observation and corrects
-that one line.**
+✅ It is therefore decided in **one line on each side**: `$AssetNameExtension` in
+`bin/common.ps1` is what the shim asks for, and `WINDOWS_ASSET_EXTENSION` in
+`tools/plugin_gate.py` is what the release publishes. ➕ **Both were set to `.exe` on
+2026-09-11, recommended and not confirmed** (§14.2). Each is marked unverified where it
+is assigned, and reversing the recommendation is one line in each.
 
-🔑 **No shell template ever names a Windows asset**, which is what makes "one line" true
-rather than aspirational. `bin/common`'s `platform()` answers `macos` and `linux` and
-refuses everything else, because `sh` cannot run on Windows at all. Three tests hold the
-claim up: one counts the assignments across the whole repository, one greps every shell
-template for a Windows asset name, and one drives `platform()` under a stubbed `uname`.
+🔑 **A test runs both sides against each other**, which is what makes "one line per side"
+safe rather than two places to forget. It extracts the release workflow's own naming line
+and executes it, asks the real shim what it would download, and compares the two answers.
+A producer and a consumer disagreeing here is a 404 and a silent compile on every Windows
+install.
+
+🔑 **No shell template ever names a Windows asset.** `bin/common`'s `platform()` answers
+`macos` and `linux` and refuses everything else, because `sh` cannot run on Windows at
+all. Three tests hold that up: one counts the assignments across the whole repository,
+one greps every shell template for a Windows asset name, and one drives `platform()`
+under a stubbed `uname`.
 
 ⚠️ Note what is **not** open. Cargo always writes an `.exe` on Windows, so the local
 binary path is settled and always has been. The open question is only what a release
@@ -1350,7 +1373,13 @@ named.
 
 ---
 
-## 11. CI
+## 11. CI ✅ **built 2026-09-11**
+
+**Corrected 2026-09-11 against what shipped.** This section was written before any code
+existed. Four things changed in the building, and each is marked where it sits: the
+inputs are derived rather than passed (§11.3), Linux is musl rather than gnu (§11.6), the
+release strips nothing (§11.5), and the workflows are wrappers around a tested Python
+module rather than logic in YAML (§11.2.1).
 
 ### 11.1 Workflows cannot ship inside the crate
 
@@ -1364,11 +1393,51 @@ and nests up to ten levels. Each plugin repo gets a caller of roughly ten lines.
 the pinned ref propagates to all three, the same model as pinning the crate.
 
 ✅ `mike-bronner` is a GitHub **Organization**, so `secrets: inherit` is available.
+Neither shipped workflow needs a secret: both run on `GITHUB_TOKEN`.
+
+### 11.2.1 ➕ The workflows are wrappers. The logic is `tools/plugin_gate.py`
+
+🔑 **YAML cannot be run, so nothing that can be wrong lives in it.** Both reusable
+workflows need the same six targets and the same version rules. A copy in each would be
+two things to keep in step, and neither copy could be tested until a release was already
+going wrong.
+
+So one Python module holds the target table, the asset naming and the version rules, and
+`tools/test_plugin_gate.py` drives it. ✅ This is the arrangement the justfile already
+has with `codegen/` and `templates/`, applied to CI: **a recipe that grows logic of its
+own becomes a path nobody can test**.
+
+⚠️ **A called workflow gets the kit by checking it out at `github.job_workflow_sha`**,
+which is the commit of the workflow file itself. So the kit that checks a plugin is
+exactly the kit version that plugin pinned, with no second ref to keep in step. It fails
+closed: a `job_workflow_sha` that does not name a commit stops the job, because an empty
+ref would check out the default branch and quietly check the plugin against the wrong kit.
 
 ### 11.3 `plugin-ci.yml`
 
-Inputs: crate name, binary name, minimum Rust version.
-Jobs: fmt, clippy with warnings denied, test, build matrix, **version agreement**.
+⚠️ **Corrected: there are no required inputs.** This section named three — crate name,
+binary name, minimum Rust version — and building it showed each to be a hazard rather
+than a convenience. **Every one of them is already stated in the plugin's own manifests,
+and an input repeating a manifest fact is a second copy that can disagree with the
+first.** A `binary_name` input disagreeing with `Cargo.toml` publishes an asset under one
+name while every install requests the other, which is precisely the silent failure §11.4
+exists to catch. So the workflow reads them instead.
+
+✅ One optional input survives: `test_os`, defaulting to `ubuntu-latest`. recent-spaces'
+suite writes under `/private/tmp` and cannot run on Linux at all, which is a fact about
+that plugin rather than about this workflow.
+
+Jobs:
+
+| Job | What it settles |
+|---|---|
+| `conformance` | `bin/` still matches the kit (§10.0's `--check`), and the versions agree (§11.4) |
+| `gates` | the suite, formatting, and clippy with warnings denied |
+| `build` | all six targets compile and link, on native runners |
+
+⚠️ **`build` builds the debug profile, not `--release`.** It answers "does this compile
+and link here?", which is the whole of the Windows guarantee, and these plugins set no
+LTO, so the release profile compiles nothing this does not.
 
 ### 11.4 The version-agreement gate is load-bearing
 
@@ -1388,19 +1457,54 @@ class went wrong once already. ➕ **The gate also asserts the tag *form*, not o
 version.** §12 records why: a `v` on one side and none on the other 404s and then
 compiles, in silence.
 
+➕ **As built it makes four assertions, in this order.** Each one is silent in production.
+
+| # | Assertion | What its absence costs |
+|---|---|---|
+| 1 | `bin/common` and cargo name the same binary | The release publishes one name and every install requests another |
+| 2 | `herdr-plugin.toml` and `Cargo.toml` state the same version | The shim reads the first and cargo builds the second |
+| 3 | No `v`-prefixed tag names the declared version | The fetch 404s and compiles, in silence (§12.2) |
+| 4 | No release tag sorts above the declared version | An install at that release asks for a tag naming an older version |
+
+🔑 **Nothing in the gate parses TOML.** The shim's answers come from running the plugin's
+own synced `bin/common`, and cargo's come from `cargo metadata`. Those are the two
+readers that actually run, at install time and at build time, so the gate compares two
+live implementations rather than adding a third opinion about the files. ⚠️ This is
+§10.0's rule — *a second parser would agree with itself while disagreeing with the
+shell* — applied one directory over.
+
 ⚠️ One window the gate cannot close: between the version-bump commit landing on `main`
-and the tag being pushed, `main` advertises an unreleased version. Push the bump and the
+and the tag being pushed, `main` advertises an unreleased version. Assertion 4 permits it
+deliberately, because it is the ordinary state of a bumped tree. Push the bump and the
 tag together, or trigger the release from the bump commit.
 
 ### 11.5 `plugin-release.yml`
 
-Tag-triggered. Builds the matrix, strips, generates a `.sha256` beside each binary, and
-uploads both. Produces exactly what §9.6 consumes: raw binaries, keyed on the commit, and
-**no archive step**. It also asserts the tag form (§12.2), which is what stops the two
+Tag-triggered. Builds the matrix, generates a `.sha256` beside each binary, and uploads
+both. Produces exactly what §9.6 consumes: raw binaries, keyed on the commit, and **no
+archive step**. It also asserts the tag form (§12.2), which is what stops the two
 conventions crossing at the one place that publishes.
 
 Requires the **caller** to grant `contents: write`. A called workflow runs on the
-caller's permissions.
+caller's permissions. ✅ The requirement is stated in the workflow's own header and in the
+README's caller snippet, which are the two places a caller reads, and a caller who omits
+it gets a run that fails before it starts rather than a 403 halfway through a release.
+
+⚠️ **Corrected: it strips nothing.** This section said "strips", and the step was
+dropped after measuring what the plugins already do. All three set `strip = true` in
+`[profile.release]`, so cargo strips at link time, **before** macOS ad-hoc signs the
+Mach-O. A strip step after the fact would re-strip an already stripped binary and take a
+re-signing risk on arm64 for nothing.
+
+➕ **All six, or none.** The publish job needs the whole matrix, and it counts the files
+it collected against the size of the table before uploading any of them. Five platforms
+published and a sixth missing is not a partial success: it is one platform compiling on
+every install, forever, with nothing to say so.
+
+➕ **Both caller triggers work.** `release: types: [created]` is what project-finder uses
+today; a bare tag push works too, and the release is created if it does not exist.
+Anything else — a branch, a manual run on `main` — reaches the tag-form gate and is
+refused there.
 
 🚧 **Blocking for the kit's own 0.1.0.** Under download-by-default the first migrated
 plugin release must produce assets, so the release workflow has to be correct before that
@@ -1415,23 +1519,75 @@ nothing and macOS is the painful case.
 |---|---|
 | `aarch64-apple-darwin` | `macos-latest` |
 | `x86_64-apple-darwin` | `macos-latest` (Apple's own SDK handles it) |
-| `aarch64-unknown-linux-gnu` | `ubuntu-24.04-arm` |
-| `x86_64-unknown-linux-gnu` | `ubuntu-24.04` |
+| `aarch64-unknown-linux-musl` | `ubuntu-24.04-arm` |
+| `x86_64-unknown-linux-musl` | `ubuntu-24.04` |
 | `x86_64-pc-windows-msvc` | `windows-latest` |
 | `aarch64-pc-windows-msvc` | `windows-11-arm` |
+
+📏 **Corrected: Linux is musl, not gnu.** This table named the gnu triples. ✅
+project-finder 0.8.0 already publishes musl, and it is the right answer for a downloaded
+binary: **a gnu build carries the glibc floor of the runner that produced it.** A user on
+an older distribution would then get a download that passes its checksum and *then
+refuses to start* — which is worse than the 404 this whole design is built around,
+because the fetch succeeded and the fallback never fires. musl links its libc statically
+and has no floor. The runners install `musl-tools`; the platform names are unchanged,
+because they never named a libc.
+
+✅ **What project-finder needed zig and `cargo-zigbuild` for, native arm64 runners now
+do.** Its release workflow cross-compiles arm64 from an x86 runner. This one does not
+need to, and drops two third-party actions with it.
 
 **All six targets ship. Decided by Mike, closing an earlier question about dropping
 `aarch64-pc-windows-msvc`.** None of the six is optional. Shipping Windows release assets is
 what couples the shim question in section 10.1 to this one.
 
 ✅ arm64 runners went GA and free for public repos in August 2025, and reached private
-repos in January 2026. There is no `ubuntu-latest-arm` alias, only versioned labels.
+repos in January 2026. There is no `ubuntu-latest-arm` alias, only versioned labels. A
+test pins that: every arm64 row must carry a versioned label, because a job naming a
+label that does not exist never starts, and the release then publishes five assets.
 
 ### 11.7 Trigger on `push` as well as `pull_request`
 
 🪤 ✅ When a PR cannot compute a merge ref against `main`, Actions skips `pull_request`
 workflows entirely. No run, no error, and the checks simply never appear. A push trigger
 keeps a conflicted branch covered.
+
+### 11.8 ➕ The kit's own CI, and where the slow check lives
+
+`kit-ci.yml` runs on push and pull request: five suites on **both** Ubuntu and macOS,
+formatting, clippy with warnings denied, and a clippy pass over all six target triples.
+
+✅ **Cross-linting is the whole Windows guarantee, and it is enough for it.** clippy stops
+at analysis and never links, so no MSVC toolchain is needed to reach it. This is the
+README's documented command, run automatically instead of by hand.
+
+⚠️ **`--features dialog` is load-bearing in the lint.** `dialog` is off by default, so
+without it clippy never compiles `dialog.rs` and never lints a line of it. The justfile's
+own recipe was corrected to match, because a gate stricter than what a developer runs by
+hand surprises them in CI rather than at their desk.
+
+🚨 **The mutation runs are a separate workflow, and that placement is the decision.** The
+harness recompiles once per mutation and there are 42 of them. Two failures were weighed:
+
+- Folding it into the fast gate makes every pull request wait twenty minutes, and **a
+  check people wait twenty minutes for is a check people learn to route around.**
+- Leaving it to `just mutate` by hand is worse. **A check nobody runs on a schedule rots
+  into a claim**, which is the one thing a mutation harness cannot afford to be.
+
+So `kit-mutation.yml` runs on every push to `main` that touched the crate, the specs or
+the harness, and on demand. Landing on `main` is where this repository actually works
+today, so it is the tightest automatic trigger available, and it reports rather than
+gates. 🔑 **It is its own file because a `paths` filter applies to a workflow and never
+to one job inside it** — otherwise a documentation commit triggers twenty minutes of
+recompiling. The two specs run as two legs, so the wall clock is one spec rather than both.
+
+⚠️ **No minimum-toolchain job, and the reason is a live defect rather than an oversight.**
+`rust-version = "1.80"` does not hold against the committed `Cargo.lock`: `hashbrown
+0.17.1`, pulled in transitively through `toml`, requires the `edition2024` cargo feature,
+which 1.80 does not have. Measured 2026-09-11 with `cargo +1.80 check --all-targets
+--features dialog --locked`. The published floor is wrong, correcting it is a decision
+about a published claim rather than a CI file, and a job asserting it today would only
+paint the first run red.
 
 ---
 
@@ -1459,12 +1615,15 @@ That is the same failure §9.3 was told to answer by design rather than by delay
 
 Two requirements follow, and both are requirements rather than advice:
 
-- ➕ **Pin the expected asset URL in a test, whole, including the tag form.** ⚠️ A test
+- ➕ ✅ **Pin the expected asset URL in a test, whole, including the tag form.** ⚠️ A test
   that builds the URL the same way the shim builds it cannot catch a wrong tag form. It
-  has to state the expected string.
-- ➕ **The release workflow must reject one of the two forms** (§11.5). Tolerating both
+  has to state the expected string. **Done 2026-09-11**, in
+  `templates/test_templates.py`: `uname` is stubbed so that every part of the string is a
+  literal except the commit, which cannot be one.
+- ➕ ✅ **The release workflow must reject one of the two forms** (§11.5). Tolerating both
   `0.8.0` and `v0.8.0` is exactly how two conventions drift apart and then disagree
-  without saying so.
+  without saying so. **Done 2026-09-11**: `TAG_PREFIX` in `tools/plugin_gate.py` is one
+  named constant, and the gate refuses the other form by name rather than ignoring it.
 
 ⚠️ **Live instance to carry.** recent-spaces' own `bin/build` builds
 `releases/download/v$version/...`, and that repo still tags with a `v` (§13.1). The two
@@ -1580,8 +1739,19 @@ and nobody on this project has Windows hardware. §10.1 and the README both say 
 | # | Question | Note |
 |---|---|---|
 | 1 | Attestation signing later? | Needs `gh`, which is not on launchd's PATH. §9.7 states the limit checksums do and do not cover |
-| 2 | Does a Windows asset name carry `.exe`? | §9.6 extends a four-name convention to six. Nothing has produced or consumed the two Windows names, and the launcher execs the path it builds |
+| 2 | Does a Windows asset name carry `.exe`? | ➕ **Recommended `.exe` on 2026-09-11, not confirmed.** See below |
 | 3 | Is the socket reachable at `[[startup]]`? | ✅ **No longer a correctness question** (§8.3). Purely an optimisation now: measuring it could save a `plugin.list` call |
+
+⚠️ **Question 2 has an answer and still has no measurement, and the difference matters.**
+The reason is that a file without that extension is not executable on Windows, and
+somebody downloading from the releases page should get something that runs. Nobody on
+this project has Windows hardware, so nothing has produced or consumed one of these names
+and nothing about it is measured. **Reversing it is one line in each of two places**
+(§9.6), and being wrong costs a 404 and a compile, never a wrong binary.
+
+💰 **A live instance is the cheapest confirmation available.** The first plugin release
+through `plugin-release.yml` publishes two Windows assets. Downloading one and running it
+on any Windows machine settles this for good.
 
 ---
 
@@ -1673,4 +1843,32 @@ Related vault note:
 `insights/2026-09-11-plugin-pane-open-placement-decides-the-handle.md`, which carries the
 measured `[[build]]`-hook and event-hook environments that make the socket fallback an
 ordinary path rather than a rare branch.
+
+### 15.4 Extended 2026-09-11: CI, and §11 corrected against what shipped
+
+§11 moved from specified to built, and four of its statements did not survive contact
+with the code. Everything below was measured against a repository on disk, a live
+toolchain, or project-finder's own shipped workflow. None was relayed.
+
+| § | What changed | Kind |
+|---|---|---|
+| 11.3 | The three inputs are gone. Every one repeated a manifest fact, and an input that can disagree with the manifest publishes one asset name while every install requests another | 🔧 design |
+| 11.2.1 | The rules live in `tools/plugin_gate.py` with their own suite, and the workflows are wrappers. YAML cannot be run, so nothing that can be wrong is written in it | ➕ new |
+| 11.4 | The gate asks `bin/common` and `cargo metadata` rather than parsing TOML — §10.0's rule, one directory over — and makes four assertions rather than one | 🔧 design |
+| 11.5 | No strip step. All three plugins already set `strip = true`, so cargo strips before macOS ad-hoc signs the Mach-O, and a later strip is a re-signing risk for nothing | 📏 measurement |
+| 11.5 | Publishing is all six or none, counted against the table | ➕ new |
+| 11.6, 9.6 | Linux is **musl**, not gnu. A gnu binary carries the builder's glibc floor, and that failure survives the checksum gate and then refuses to start | 📏 corrected to what shipped |
+| 11.8 | The mutation runs are their own workflow, on `main` and on demand. A `paths` filter applies to a workflow and never to one job | 🔑 decision |
+| 9.6, 14.2 | Windows assets carry `.exe`. **Recommended, not confirmed** | ➕ recommendation |
+| 11.8 | `rust-version = "1.80"` does not hold against the committed lock: `hashbrown 0.17.1` needs `edition2024` | 🚨 live defect |
+| 12.2 | The whole asset URL is now pinned in a test as a literal string, which §12.2 required and nothing had done | ➕ new |
+
+⚠️ **One thing in §11 is unverifiable here and says so in every place it appears:** none
+of these workflows has run. They were written on a machine with no `just`, no
+`actionlint`, and no Windows, so the YAML is checked by a parser and the logic is checked
+by a suite, and the first real run is the first real evidence.
+
+✅ **Two claims in §11 were established by running them**, rather than reasoned about:
+all six triples clippy-clean from macOS, and the 1.80 floor failing. The second is why
+§11.8 has no minimum-toolchain job.
 
