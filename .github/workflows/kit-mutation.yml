@@ -1,0 +1,65 @@
+name: Mutation
+
+# Does the suite actually notice when a guarded behaviour breaks?
+#
+# 🚨 Separate from kit-ci.yml on purpose, and this is the decision rather than
+# a filing convenience. The harness recompiles the crate once per mutation and
+# there are forty-two of them, so a run costs minutes rather than seconds. Two
+# failures were weighed against each other:
+#
+#   - Folding it into the fast gate makes every pull request wait for it, and a
+#     check people wait twenty minutes for is a check people learn to route
+#     around.
+#   - Leaving it to be run by hand is worse. `just mutate` is documented, and a
+#     check nobody runs on a schedule is a check that rots into a claim.
+#
+# So it runs on every push to main that could have changed the answer, and on
+# demand. Landing on main is where this repository actually works today, so
+# that is the tightest automatic trigger available; it reports after the fact
+# rather than gating, which is the right trade for a twenty-minute check.
+#
+# 🔑 The paths filter is why this is its own file. A filter applies to a
+# workflow, never to one job inside it, so a documentation commit cannot
+# trigger twenty minutes of recompiling from inside kit-ci.yml.
+#
+# The two specs run as two legs rather than one loop: they are independent, and
+# in parallel the wall clock is one spec rather than both.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crates/**'
+      - 'tools/mutate.py'
+      - 'tools/mutations/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/kit-mutation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mutate:
+    name: ${{ matrix.spec }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      # A surviving mutation in one module says nothing about the other, and
+      # both answers are wanted in the same run.
+      fail-fast: false
+      matrix:
+        spec:
+          - tools/mutations/client.json
+          - tools/mutations/dialog.json
+    steps:
+      - uses: actions/checkout@v7
+
+      # Warm the build once, so the per-mutation cost is an incremental
+      # rebuild rather than a cold one forty-two times over.
+      - name: Build the unmutated tree first
+        run: cargo test --locked --features dialog --no-run
+
+      - name: Break one thing at a time
+        run: python3 tools/mutate.py ${{ matrix.spec }}

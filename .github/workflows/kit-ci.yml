@@ -1,0 +1,105 @@
+name: CI
+
+# The kit's own gate. Everything `just check` runs, on two operating systems,
+# plus the cross-compile check the README claims for the platform nobody here
+# can run.
+#
+# 🪤 It triggers on push as well as pull_request, and that is not redundancy.
+# When a pull request cannot compute a merge ref against main, Actions skips
+# its pull_request workflows entirely: no run, no error, and the checks simply
+# never appear. A push trigger is what keeps a conflicted branch covered.
+# SCOPE.md §11.7.
+#
+# ⚠️ Nothing here calls `just`. Every recipe in the justfile is a one-line
+# wrapper for exactly this reason — `just` is not installed on every machine
+# that has to run these, including the one this file was written on — so these
+# jobs call the same entry points the justfile calls.
+#
+# 🚨 The mutation runs are deliberately not here. They recompile once per
+# mutation, forty-two times, and a gate that makes every pull request wait
+# twenty minutes is a gate people route around. They live in kit-mutation.yml,
+# which runs on main and on demand. That file says why.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  suites:
+    name: Suites on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Both answers are wanted. A Linux-only failure in the shell templates is
+      # a real finding about files that ship to Linux users, and it should not
+      # take the macOS result down with it.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+
+      # Four Python suites and the Rust one. Each is its own step because a
+      # step is judged on its exit status and nothing else; a job that reads
+      # result lines manufactures confidence rather than earning it.
+      - name: The codegen guards
+        run: python3 codegen/test_codegen.py
+
+      - name: The shell templates
+        run: python3 templates/test_templates.py
+
+      - name: The mutation harness's own tests
+        run: python3 tools/test_mutate.py
+
+      - name: The plugin conformance gate
+        run: python3 tools/test_plugin_gate.py
+
+      - name: The Rust suite
+        run: cargo test --locked --features dialog
+
+  gates:
+    name: Formatting and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Take the linters
+        run: rustup component add clippy rustfmt
+
+      - name: Check the formatting
+        run: cargo fmt --all -- --check
+
+      # ⚠️ `--features dialog` is load-bearing. `dialog` is off by default, so
+      # without it clippy never compiles dialog.rs and never lints a line of
+      # it. The justfile's `lint` recipe carries the same flag, because a gate
+      # stricter than what a developer runs by hand surprises them in CI.
+      - name: Lint with warnings denied
+        run: cargo clippy --all-targets --features dialog --locked -- -D warnings
+
+  targets:
+    name: Six triples compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Take clippy
+        run: rustup component add clippy
+
+      # 🔑 This is the whole of the Windows guarantee, and the README says so
+      # in those words: CI proves the code compiles on Windows, and never that
+      # a plugin runs there. Cross-linting is enough because clippy stops at
+      # analysis and never links, so no MSVC toolchain is needed to reach it.
+      #
+      # The triples come from tools/plugin_gate.py, which is the same table the
+      # two reusable workflows build from. A second list here would drift.
+      - name: Lint every target the release publishes
+        run: |
+          for target in $(python3 tools/plugin_gate.py targets); do
+            echo "::group::$target"
+            rustup target add "$target"
+            cargo clippy --all-targets --features dialog --locked \
+              --target "$target" -- -D warnings
+            echo "::endgroup::"
+          done
