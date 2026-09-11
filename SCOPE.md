@@ -1,8 +1,9 @@
 # herdr-plugin-kit — Specification
 
-**Status:** partly built. `api`, `env`, and `version` have landed, which is the whole of
-what §13 ships. The transport, the shell templates, and CI have not.
-**Date:** 2026-09-10, corrected and extended 2026-09-11 (§15.1).
+**Status:** partly built. `api`, `env`, `version` and the shell templates have landed,
+plus `dialog` (§7.5), which §13 released from its one-consumer hold by a deliberate
+decision. The transport and CI have not.
+**Date:** 2026-09-10, corrected and extended 2026-09-11 (§15.1, §15.2).
 **Repo:** `mike-bronner/herdr-plugin-kit`, public, under the `mike-bronner` GitHub organization.
 
 **Verified against:** Herdr 0.9.0, API protocol 22, schema_version 1, `cargo-typify` 0.8.0, rustc 1.97.0, cargo 1.97.0.
@@ -68,7 +69,9 @@ information the caller already received. §7.2 is what the kit does about it.
 The target layout. Built so far: `codegen/`, the `api` module, `env.rs`, `version.rs`,
 `dialog.rs`, the whole of `crates/herdr-plugin-kit-build/`, and `templates/`. Still to
 come: `client.rs` and `.github/workflows/`. `report.rs` and `update.rs` are held by §13
-rather than merely pending.
+rather than merely pending. ⚠️ **`dialog.rs` was held by the same bar and was released
+from it by a deliberate decision** — §13 records which half of that was evidence and
+which was a choice.
 
 ```
 herdr-plugin-kit/
@@ -549,7 +552,8 @@ replaced. Each read as more careful than the original, because each was more spe
 
 ⚠️ **This failure mode is one-way.** A caveat makes a claim less useful, so every relay is
 under quiet pressure to drop one and under none to restore one. Full write-up:
-`insights/2026-09-10-caveat-decay-is-one-way.md`.
+`insights/2026-09-10-caveat-decay-is-one-way.md`,
+`insights/2026-09-11-plugin-pane-open-placement-decides-the-handle.md`.
 
 **The rule this document now follows, in every section it touches: separate measured
 behaviour from explanation, and mark the explanation as unverified where nobody has
@@ -621,6 +625,147 @@ matching `[[panes]]` entry, which a crate cannot supply.
 
 Feature-gated, because recent-spaces is a headless watcher and should not carry popup
 machinery.
+
+### 7.5 Module: `dialog` (feature-gated) — **built 2026-09-11**
+
+Styled dialogs in four states, in two variants. Promoted from
+agentic-panes-layout's `confirm.rs`. ⚠️ **Released from §13's hold by a deliberate
+decision, and §13 records which half of that was evidence and which was a choice.**
+
+- **Bare** (`notify`): informs, carries no buttons, dismisses on any key or click, and
+  **returns at once**. §7.4's rule, applied: a cosmetic warning must not make somebody
+  wait on a dialog to get their workspace.
+- **Actioned** (`ask`): a labelable primary button and a labelable cancel, and it returns
+  which one the user chose. This one necessarily waits, because the answer is the point.
+
+#### 7.5.1 The placement decides everything, and it was measured
+
+✅ 2026-09-11, isolated 0.9.0 server, rendering captured through a real client in a pty
+and machine-counted.
+
+| | `popup` | `overlay` |
+|---|---|---|
+| Looks like Herdr's own dialogs | ✅ floats, survives across a pane divider | ❌ covers the whole tab, zero rows survive |
+| `width` / `height` | ✅ percentages | ❌ `invalid_params` |
+| Returns a `pane_id` | ❌ | ✅ |
+| In `pane.list` | ❌ | ✅ |
+| More than one at once | ❌ `ui_busy` | ✅ stacks |
+
+🔑 **The handle and the dialog look are mutually exclusive, and the look wins.** A popup
+is not in the pane tree at all, so `{"type":"ok"}` carries no id because there is no id
+to carry. That is structural rather than an omission.
+
+🚨 **So the file channel and the pid marker are load-bearing, not defensive.** There is no
+handle to poll and no `pane.list` entry to find, and Herdr has no plugin-to-plugin
+channel. The answer travels through a file whose path rides in `plugin.pane.open`'s `env`
+map, and the popup writes its own pid before drawing anything — the only evidence a pane
+ever appeared, because `plugin.pane.open` answers `ok` either way.
+
+#### 7.5.2 Mouse first, keyboard in full
+
+**Decided by Mike: mouse first**, matching Herdr's own dialogs.
+
+✅ Measured 2026-09-10: a click inside a plugin pane reaches that pane's pty, SGR-encoded
+and **rebased to pane-local coordinates**; a click outside is not forwarded; keystrokes
+keep arriving throughout. Rebasing is what makes hit-testing a rectangle comparison with
+nothing to translate.
+
+⚠️ **That was measured on a plugin pane, not a popup specifically.** Treat click
+forwarding into a popup as very likely rather than settled, which is why every answer is
+reachable from the keyboard alone.
+
+Enter fires the primary button in **every** state, danger included, matching Herdr's own
+delete-worktree dialog. Only the left button activates, and a click on the body resolves
+nothing: a misclick must not fire a destructive primary.
+
+#### 7.5.3 `ui_busy` is an outcome, and the two variants differ
+
+🚨 ✅ **The single-popup limit is global, not per workspace.** So an unanswered dialog in
+one workspace blocks dialogs in **every** workspace, with nothing on screen to explain it,
+and the kit cannot say where the blocker is because a popup has no id and is absent from
+`pane.list`. `ui_busy` is a state a user can sit in indefinitely, not a rare race.
+
+- **Bare** falls back to `notification.show` with the same title and body. It needs
+  nothing from the user, so another route carries the same message.
+- **Actioned** does **not**. A notification cannot collect an answer, and silently turning
+  a question into a statement would lose it. `ask` returns `Unanswered::Busy`, and a
+  notification separately explains why nothing appeared.
+
+**Both halves are reported.** The `reason` is read rather than discarded, which is §7.2's
+rule and its reason: a fallback that fails silently removes the caller's last signal that
+anything went wrong. Four of `NotificationShowReason`'s five values mean the user saw
+nothing.
+
+#### 7.5.4 The visual design, approved by Mike
+
+Rounded frame in all four states. ⚠️ Varying the corner for danger was proposed and
+**rejected**: the glyph is already the non-colour channel, so a second one is redundant.
+
+Two blank rows inside the border at the top, three columns each side, a blank row
+separating the body from the buttons, and 🔑 **one** blank row beneath the button row
+because it is already visually heavy. The primary renders inverted in the state's colour;
+the cancel is plain text; the hovered one gains an underline.
+
+🔑 **The kit draws each button's key**, so `Buttons::new("close anyway", "keep")` renders
+`↵ close anyway` and `esc keep`. Labels stay the caller's. Callers typing their own glyph
+is how three plugins drift apart on the symbol, which is what this crate exists to end.
+
+**The glyph rule, which took four attempts:** one codepoint, no variation selector, East
+Asian Width `Neutral`. `U+229D`, `U+2713`, `U+26A0`, `U+2716`.
+
+| Rejected | Why |
+|---|---|
+| A selector (`U+26A0 U+FE0E`) | Two codepoints, and the exact trigger for Terminal.app drawing one cell and advancing another |
+| Emoji (`U+1F535`, `U+2705`) | East Asian Width `Wide`, so two cells |
+| ⚠️ `Ambiguous` (`U+24D8`, `U+2299`, `U+25B2`) | **Worse than either**: a terminal *setting* decides the width, and enabling it visibly breaks box drawing |
+| Private Use Area | Needs a patched font. This kit is public |
+
+The rule is a **test**, not four pinned literals, and `width() == width_cjk()` is an exact
+test for `Ambiguous` because the two functions differ only there.
+
+⚠️ **The palette is a proposal and was never measured.** The probe discarded SGR
+attributes, so borders were confirmed present and never confirmed coloured, and **nobody
+has established how Herdr colours its own dialogs**. Inversion is a terminal attribute
+rather than a claim about Herdr, so that part will render as intended.
+`cargo run --features dialog --example preview` draws all eight combinations locally.
+
+#### 7.5.5 Workspace scoping — ✅ delivered by the default
+
+**Mike's requirement:** a dialog must be visible only in the workspace that triggered it.
+
+✅ Measured 2026-09-11: with `workspace_id` unset, a popup does not appear when the user
+switches workspace, and is intact on return. 🚨 And **setting it is refused** —
+`invalid_params`, with the message that overlay and popup plugin panes target the active
+pane. A nonexistent workspace id gives the *identical* error, so the refusal is about the
+parameter being present rather than a lookup failing. Sending it would have meant no
+dialog at all.
+
+#### 7.5.6 The `Transport` seam
+
+⚠️ **`dialog` sends nothing itself.** It takes a `Transport`: `open_pane` and
+`show_notification`, the two socket calls it needs.
+
+Named for the requirement rather than the transport, because `Herdr` would overclaim two
+of a hundred and two methods, and a requirement-shaped name still fits when dialogs need a
+third call. **Not a workaround for §4.2 being unbuilt** — a sender taken as a trait is how
+this would be designed anyway, and it is what makes every path testable without a live
+server. When §4.2 lands it implements the trait and no caller changes.
+
+The answer file and the pid marker stay outside it. They are filesystem work.
+
+#### 7.5.7 Costs, recorded rather than discovered later
+
+⚠️ **`crossterm` fails the bar `toml` cleared in §5.** `toml` was accepted because all
+three donors already depended on it; `crossterm` is in agentic-panes-layout's graph only,
+so two of three consumers gain a dependency. Bought anyway: raw mode has no alternative
+under `#![forbid(unsafe_code)]`, and the feature gate keeps it out of recent-spaces. It
+buys input and terminal state only — every character of the frame is hand-written ANSI.
+
+`unicode-width` is a **dev-dependency**, so it is absent from any consumer's graph.
+Verified with `cargo tree -e normal`.
+
+Feature-gated for §7.4's reason: recent-spaces is a headless watcher and should carry no
+popup machinery.
 
 ---
 
@@ -1242,6 +1387,36 @@ tag form when recent-spaces migrates (§13).
 one real consumer has proven the boundaries. Designing abstractions with no consumer is
 how they come out wrong.
 
+#### The hold was overridden once, for `dialog`, on 2026-09-11
+
+🔑 **Decided by Mike, deliberately and for that module alone.** The rule above still
+stands and still holds `report` and `update`. This is an exception somebody made, not a
+bar that quietly stopped being enforced.
+
+⚠️ **Two different justifications are doing the work here, and a reader applying this bar
+to something else needs to tell them apart.**
+
+| Half | Basis | Does it satisfy the one-consumer bar? |
+|---|---|---|
+| **The mechanism** — popup placement, the file answer channel, the pid marker | agentic-panes-layout's `src/confirm.rs`, 668 lines solved once against a live server and shipping in production for months | ✅ **Yes.** This is exactly what the bar asks for: boundaries proven by a real consumer before promotion |
+| **The four styled states** — the states, the glyph set, the button row, hover | None. New design | ❌ **No.** Mike asked for these by name, and chose to build them without one |
+
+So the bar was **met** for the risky part and **waived** for the new part. That split is
+the whole reason the override was safe to make: the machinery nobody could design blind
+already had its consumer, and what had no consumer is a visual design Mike specified
+himself and can look at.
+
+⚠️ **`report` and `update` have neither half.** Nothing about this exception transfers to
+them, and §7.5's mechanism being proven says nothing about §7.2's fall-back policy or
+§8's updater.
+
+**Consequences accepted with the override:**
+
+- Two of three consumers gain a `crossterm` dependency (§7.5.7).
+- The palette ships unmeasured and is flagged as a proposal everywhere it appears (§7.5.4).
+- The module is feature-gated off by default, so a consumer that wants none of this
+  carries none of it.
+
 ### 13.1 Release state: the properties, never the numbers
 
 🚨 **This section used to carry a version column, and it is gone on purpose.** It held
@@ -1338,10 +1513,31 @@ about the conclusion and wrong about the cause. Each survived its first check, b
 the check was aimed at the conclusion rather than at the cause. §7.1 traces one of them
 end to end.
 
+### 15.2 Extended 2026-09-11: the `dialog` module
+
+Everything below was measured against an isolated 0.9.0 server, or against the Unicode
+database, in the session that built §7.5. None was relayed.
+
+| § | What changed | Kind |
+|---|---|---|
+| 7.5 | New module. Four states, two variants, popup placement | ➕ new |
+| 7.5.1 | `plugin.pane.open`'s response follows the **effective placement**. Only `popup` answers without a handle, because a popup is not in the pane tree | 📏 measurement |
+| 7.5.1 | The file channel and the pid marker are therefore load-bearing rather than defensive | 🔧 design |
+| 7.5.2 | A click into a plugin pane arrives rebased to pane-local coordinates, and keyboard keeps working alongside | 📏 measurement |
+| 7.5.3 | The single-popup limit is **global, not per workspace**, so `ui_busy` falls back to a notification | 📏 measurement + 🔧 design |
+| 7.5.4 | The glyph rule: one codepoint, no selector, East Asian Width `Neutral`. Four sets were tried | 📏 measurement |
+| 7.5.5 | Workspace scoping is delivered by the default, and `workspace_id` is **refused** for popup placement | 📏 measurement |
+| 13 | The one-consumer hold overridden for `dialog` alone, with the evidence and the decision recorded separately | 🔑 decision |
+
+⚠️ **One thing in §7.5 is still unmeasured and says so in every place it appears:** the
+colour palette. The probe discarded SGR attributes, so nobody has established how Herdr
+colours its own dialogs.
+
 Related vault notes: `decisions/2026-09-10-herdr-plugin-kit-shared-crate.md`,
 `decisions/2026-09-10-local-install-check-belongs-in-plugin-kit.md`,
 `decisions/2026-09-10-unprefixed-release-tags.md`,
 `insights/2026-09-10-typify-drops-discriminator-beside-sibling-property.md`,
 `insights/2026-09-10-herdr-build-never-runs-for-local-installs.md`,
-`insights/2026-09-10-caveat-decay-is-one-way.md`.
+`insights/2026-09-10-caveat-decay-is-one-way.md`,
+`insights/2026-09-11-plugin-pane-open-placement-decides-the-handle.md`.
 
