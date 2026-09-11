@@ -1,0 +1,20 @@
+[package]
+name = "herdr-plugin-kit-build"
+version = "0.1.0"
+description = "Build-script helper that stamps a Herdr plugin binary with the tree it was built from"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "herdr_plugin_kit_build"
+path = "src/lib.rs"
+
+# No dependencies, and that is the whole design.
+#
+# This crate exists separately from `herdr-plugin-kit` so that the stamp helper
+# stays a `[build-dependencies]` entry and never becomes a runtime dependency of
+# a plugin. Two crates rather than one buys exactly that, and it is only worth
+# buying while this list stays empty. See SCOPE.md section 2 and section 6.1.
+[dependencies]
