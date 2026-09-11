@@ -29,8 +29,8 @@ marketplace index, and the kit is not an installable plugin.
 
 ### 1.1 Measured duplication this replaces
 
-✅ Re-measured 2026-09-10, after project-finder shipped 0.8.0 and agentic-panes-layout
-shipped 0.4.0. Five figures moved since this table was first written.
+✅ Re-measured 2026-09-10, after two of the three cut a release. Five figures moved since
+this table was first written, which is the point of the table rather than a caveat on it.
 
 | Concern | project-finder | recent-spaces | agentic-panes-layout |
 |---|---|---|---|
@@ -979,10 +979,10 @@ It was originally justified by a stale-binary scare. Under download-by-default i
 guards the download path, because a manifest ahead of its latest tag means **every install
 404s and silently compiles**.
 
-✅ **The worked example has changed. The gate has not.** This section said that
-project-finder's manifest read `0.8.0` while its newest release was `v0.7.0`, and called
-it the live instance of exactly this failure. Re-measured 2026-09-10: both now read
-`0.8.0`, and that release carries eight assets (§13.1).
+✅ **The worked example has changed. The gate has not.** This section once named a live
+instance: a plugin whose manifest had been bumped while its newest tag was a release
+behind, which is this failure exactly. That instance is closed, and §13.1 records
+agreement as a yes-or-no property rather than the pair of numbers that produced it.
 
 **The gate stays, for two reasons.** A fixed instance is not a closed class, and this
 class went wrong once already. ➕ **The gate also asserts the tag *form*, not only the
@@ -1067,10 +1067,13 @@ Two requirements follow, and both are requirements rather than advice:
   `0.8.0` and `v0.8.0` is exactly how two conventions drift apart and then disagree
   without saying so.
 
-⚠️ **Live instance to carry.** recent-spaces' `bin/build` builds
-`releases/download/v$version/...`. It agrees with that repo's existing `v0.5.0` tag
-today, so nothing is broken yet. It breaks on the **first unprefixed tag that repo cuts**,
-and it breaks by compiling instead of fetching. Fix it when recent-spaces migrates (§13).
+⚠️ **Live instance to carry.** recent-spaces' own `bin/build` builds
+`releases/download/v$version/...`, and that repo still tags with a `v` (§13.1). The two
+agree, so nothing is broken there yet. It breaks on the **first unprefixed tag that repo
+cuts**, and it breaks by compiling instead of fetching. ✅ The shell template hardcodes
+neither form: it reads the tag out of the manifest version and prefixes nothing, so a
+migrated plugin inherits the unprefixed convention by construction. Fix the repo's own
+tag form when recent-spaces migrates (§13).
 
 ### 12.3 The rest
 
@@ -1085,40 +1088,49 @@ and it breaks by compiling instead of fetching. Fix it when recent-spaces migrat
 
 ## 13. Migration
 
-| Order | Plugin | Version | Why |
-|---|---|---|---|
-| 1️⃣ | recent-spaces | 0.5.0 | Smallest at 158 lines of `api.rs`, no TUI, donates the best `version.rs`, and carries the live `v`-prefix hazard (§12.2) |
-| 2️⃣ | agentic-panes-layout | 0.4.0 | Donates `issues.rs` |
-| 3️⃣ | project-finder | 0.8.0 | Only one with a real behaviour change (§7.3), and donates the shim (§9.4) |
+| Order | Plugin | Why |
+|---|---|---|
+| 1️⃣ | recent-spaces | Smallest at 158 lines of `api.rs`, no TUI, donates the best `version.rs`, and carries the live `v`-prefix hazard (§12.2) |
+| 2️⃣ | agentic-panes-layout | Donates `issues.rs` |
+| 3️⃣ | project-finder | Only one with a real behaviour change (§7.3), and donates the shim (§9.4) |
 
 **Ship the kit with `api`, `env`, and `version` only.** Hold `report` and `update` until
 one real consumer has proven the boundaries. Designing abstractions with no consumer is
 how they come out wrong.
 
-### 13.1 Release state, re-measured 2026-09-10
+### 13.1 Release state: the properties, never the numbers
 
-**Corrected.** This table said all three repos had releases and **none had any assets**,
-and it named project-finder's manifest-versus-release drift as a live failure. ✅ **Both
-halves have changed.** Re-measured against the GitHub releases:
+🚨 **This section used to carry a version column, and it is gone on purpose.** It held
+each plugin's manifest version and its latest release tag, freshly measured. One of those
+numbers was wrong the following day, which is what a table of current values in a
+document nobody re-measures on a schedule always becomes. **Being wrong in a
+specification is worse than being silent**, because a reader trusts it.
 
-| Repo | Manifest | Latest release | Tag form | Assets |
-|---|---|---|---|---|
-| project-finder | 0.8.0 | `0.8.0` ✅ agrees | ✅ unprefixed | **8** |
-| recent-spaces | 0.5.0 | `v0.5.0` ✅ agrees | ⚠️ still prefixed | 0 |
-| agentic-panes-layout | 0.4.0 | `v0.4.0` ✅ agrees | ⚠️ still prefixed | 0 |
+So this records only what the design turns on, and every cell is a yes or a no. Somebody
+re-measuring in three months changes an answer, never a number.
 
-- ✅ **The drift is fixed.** project-finder's manifest and its latest release both read
-  `0.8.0`. §11.4's worked example moves with it, and the gate itself does not.
-- ✅ **project-finder ships a working toolchain-free install**, eight assets keyed on
-  commit `6c55e13a5445` (§9.6). It is the first of the three to do so.
-- ⚠️ The other two still publish no assets, so their first migrated version must be a
-  **new** release cut through the new workflow. Nothing there can be retrofitted
-  meaningfully.
-- ⚠️ Two of the three tags still carry a `v`. §12 governs which form is right, and why
-  crossing the two is silent rather than loud.
+| Repo | Publishes assets | Tag form | Manifest agrees with its latest release |
+|---|---|---|---|
+| project-finder | ✅ yes | ✅ unprefixed | ✅ yes |
+| recent-spaces | ✅ yes | ⚠️ `v`-prefixed | ✅ yes |
+| agentic-panes-layout | ❌ no | ⚠️ `v`-prefixed | ✅ yes |
 
-✅ agentic-panes-layout's 19 uncommitted files are settled. Its tree is clean at `main`,
-so the caution this section carried about migrating it is discharged.
+Last measured 2026-09-11. **Re-measure rather than trust it.**
+
+- ✅ **Agreement is a property, not a number.** It is what §11.4's gate asserts, and the
+  gate is unchanged by any release either side of it cuts.
+- ⚠️ **A repo publishing no assets cannot be retrofitted.** Its first migrated version has
+  to be a new release cut through the new workflow, because there is nothing to attach
+  commit-keyed assets to retrospectively.
+- ⚠️ **Two of the three tags still carry a `v`.** §12 governs which form is right, and
+  §12.2 records why crossing the two fails silently rather than loudly.
+
+⚠️ **This rule does not reach the Herdr generation tag.** `GENERATED_FOR_HERDR_TAG`, the
+tag in every generated file's header, and the tag argument to `sync_api.py` are a
+deliberate **pin on an external dependency**, and §12 requires a human to review the diff
+every time it moves. That pin is load-bearing precisely because it does not track the
+latest. A plugin's own version number is an incidental snapshot of one of Mike's
+repositories, and the two are not the same kind of fact.
 
 ---
 
@@ -1171,7 +1183,7 @@ against the schema, a repository on disk, or a live server. None was relayed.**
 | 8.3, 9.4 | The local-install check moves to a manifest-declared context, because `[[build]]` never runs for a linked install | 🔧 design |
 | 9.6 | Assets are keyed on the commit, named for a platform, and are raw binaries | 📏 corrected to what shipped |
 | 12 | Mike's own tags drop the `v`. Herdr's keep it | ➕ new convention |
-| 11.4, 13, 13.1 | project-finder's drift is fixed and it ships eight assets. agentic-panes-layout is 0.4.0 and clean | 📏 re-measurement |
+| 11.4, 13, 13.1 | The manifest-versus-release drift is closed, and a second repo now publishes assets | 📏 re-measurement |
 
 ⚠️ **Two of these changed real design, not just wording:** §7.2 and §8.3.
 
