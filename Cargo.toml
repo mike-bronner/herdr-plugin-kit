@@ -20,6 +20,16 @@ repository = "https://github.com/mike-bronner/herdr-plugin-kit"
 # root that forbids unsafe. 0.29 is the version agentic-panes-layout already
 # pins. See crates/herdr-plugin-kit/src/dialog.rs.
 crossterm = "0.29"
+# ⚠️ It fails the bar `toml` cleared below, and harder than `crossterm` did:
+# **no** donor plugin depends on it, because all three reach for `std`'s
+# `UnixStream`. Bought anyway, and not as a convenience: `HERDR_SOCKET_PATH`
+# is a named pipe on Windows, so all three donor clients are Unix-only and
+# none of them can be promoted as written. This crate puts one API over both,
+# it is what Herdr itself depends on, and SCOPE.md §4.2 sanctions this exact
+# version. Its own floor is 1.75, under this workspace's 1.80, and at run time
+# it pulls in `libc` and nothing else.
+# See crates/herdr-plugin-kit/src/api/client.rs.
+interprocess = "2.4.4"
 regress = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -33,6 +33,7 @@ required-features = ["dialog"]
 # dependency of a plugin that consumes this crate. See SCOPE.md section 3.4.
 [dependencies]
 crossterm = { workspace = true, optional = true }
+interprocess.workspace = true
 regress.workspace = true
 serde.workspace = true
 serde_json.workspace = true
