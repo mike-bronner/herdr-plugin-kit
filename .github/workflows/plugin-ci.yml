@@ -1,0 +1,152 @@
+name: Plugin CI
+
+# Reusable. Every Herdr plugin calls this instead of keeping its own copy.
+#
+#     # .github/workflows/ci.yml in the plugin
+#     name: CI
+#     on:
+#       push:
+#       pull_request:
+#     jobs:
+#       conformance:
+#         uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-ci.yml@0.1.0
+#
+# 🔑 There are no required inputs, and that is deliberate. Every fact this
+# needs — the binary's name, the version, the minimum toolchain — is already
+# stated in the plugin's own manifests. An input repeating one of them is a
+# second copy that can disagree with the first, and disagreeing about the
+# binary's name is exactly the silent failure this workflow exists to catch.
+#
+# 🪤 Trigger on push as well as pull_request in the caller. When a pull request
+# cannot compute a merge ref against main, Actions skips its pull_request
+# workflows entirely: no run, no error, and the checks never appear. SCOPE.md
+# §11.7.
+#
+# Permissions: this one needs nothing beyond the default read. The release
+# workflow is the one that needs the caller to grant `contents: write`.
+
+on:
+  workflow_call:
+    inputs:
+      test_os:
+        description: >-
+          The runner the plugin's own suite runs on. Defaults to ubuntu-latest.
+          recent-spaces needs macos-latest, because its suite writes under
+          /private/tmp, which does not exist on Linux.
+        type: string
+        default: ubuntu-latest
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    name: Conformance
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.table.outputs.matrix }}
+    steps:
+      # ⚠️ Both repositories land in subdirectories, neither inside the other.
+      # A kit checkout nested under the plugin's root puts a second Cargo.toml
+      # under a package cargo is about to read.
+      - name: Take the plugin, with every tag
+        uses: actions/checkout@v7
+        with:
+          path: plugin
+          # The version gate reads the tag history, so a shallow clone would
+          # let it pass by seeing no releases at all.
+          fetch-depth: 0
+
+      # 🔑 github.job_workflow_sha is the commit of *this file*, so the kit
+      # that checks the plugin is the exact kit version the caller pinned. An
+      # input naming the ref again would be a second pin to keep in step.
+      - name: Establish which kit this is
+        id: kit
+        run: |
+          sha='${{ github.job_workflow_sha }}'
+          # Fails closed: an empty ref would check out the default branch and
+          # quietly check this plugin against the wrong kit.
+          case "$sha" in
+            [0-9a-f]*) [ ${#sha} -eq 40 ] || sha='' ;;
+            *) sha='' ;;
+          esac
+          if [ -z "$sha" ]; then
+            echo "job_workflow_sha did not name a commit, so the kit version" \
+                 "this plugin is checked against could not be established" >&2
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Take the kit the caller pinned
+        uses: actions/checkout@v7
+        with:
+          repository: mike-bronner/herdr-plugin-kit
+          ref: ${{ steps.kit.outputs.sha }}
+          path: kit
+
+      # 🚨 Without this the kit is a suggestion. Three hand-maintained copies
+      # of bin/ diverge in silence; one template diverges in a failing build.
+      # It writes nothing. SCOPE.md §10.0.
+      - name: The shims still match the kit
+        run: python3 kit/templates/sync_bin.py plugin --check
+
+      # 🚨 The load-bearing one. Under download-by-default a manifest that
+      # disagrees with its tag means every install requests an asset that does
+      # not exist and compiles instead, and the plugin still works, so nothing
+      # surfaces. SCOPE.md §11.4 and §12.2.
+      - name: The versions agree, and the tag form is the right one
+        run: python3 kit/tools/plugin_gate.py versions plugin
+
+      - name: The targets the release will publish
+        id: table
+        run: echo "matrix=$(python3 kit/tools/plugin_gate.py matrix)" >> "$GITHUB_OUTPUT"
+
+  gates:
+    name: Suite, formatting and lint
+    runs-on: ${{ inputs.test_os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Take the linters
+        run: rustup component add clippy rustfmt
+
+      - name: Run the suite
+        run: cargo test --locked
+
+      - name: Check the formatting
+        run: cargo fmt --all -- --check
+
+      - name: Lint with warnings denied
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+  build:
+    name: ${{ matrix.platform }}
+    needs: conformance
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      # Every platform's answer is wanted. One target failing to compile is a
+      # platform that would silently fall back to compiling on every install,
+      # and hiding the other five behind it helps nobody.
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.conformance.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # musl links its libc statically, so the published binary carries no
+      # glibc floor. The linker driver comes from the distribution.
+      - name: Take the musl toolchain
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Take the standard library for this target
+        run: rustup target add ${{ matrix.target }}
+
+      # ⚠️ Not --release. This job answers "does it compile and link here?",
+      # which is the entire Windows guarantee and is what a pull request needs
+      # to know. plugin-release.yml builds the release profile, and these
+      # plugins set no LTO, so there is nothing the release profile compiles
+      # that this does not.
+      - name: Compile for ${{ matrix.target }}
+        run: cargo build --locked --target ${{ matrix.target }}
