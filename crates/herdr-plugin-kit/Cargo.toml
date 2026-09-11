@@ -11,10 +11,18 @@ repository.workspace = true
 name = "herdr_plugin_kit"
 path = "src/lib.rs"
 
+# Nothing is on by default. 🔑 recent-spaces is a headless watcher, and the
+# whole point of gating the dialogs is that it never compiles popup machinery
+# or a terminal library. See SCOPE.md section 7.5.
+[features]
+default = []
+dialog = ["dep:crossterm"]
+
 # No [build-dependencies] and no build.rs, on purpose. The wire types are
 # generated ahead of time and committed, so `typify` never becomes a
 # dependency of a plugin that consumes this crate. See SCOPE.md section 3.4.
 [dependencies]
+crossterm = { workspace = true, optional = true }
 regress.workspace = true
 serde.workspace = true
 serde_json.workspace = true
