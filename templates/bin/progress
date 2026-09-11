@@ -1,0 +1,271 @@
+#!/bin/sh
+# The progress display, and the seam a Herdr popup will replace. Sourced by
+# bin/build, never run.
+#
+# ⚠️ SYNCED FROM herdr-plugin-kit. Edit templates/bin/progress in the kit,
+# never this copy.
+#
+# ── The seam ──────────────────────────────────────────────────────────────
+#
+# 🔑 Two calls carry every progress display these shims make:
+#
+#     progress_start "<what is happening>"
+#     progress_stop
+#
+# Nothing outside this file knows how that is drawn, and nothing outside this
+# file should learn. bin/build calls the pair and has no opinion about the
+# rest, which is the property this file exists to hold.
+#
+# 🔑 **There is more than one way to draw, and progress_backend() picks.** The
+# terminal spinner below is *one* implementation rather than the default
+# everything else falls back to. That distinction is the whole shape of this
+# file, and it exists because a measurement forced it.
+#
+# ── Why two, and not one ──────────────────────────────────────────────────
+#
+# **Decided by Mike: a Herdr dialog wherever a dialog can be reached** — shown
+# only while a build is actually running, removed when it finishes, no cancel
+# button.
+#
+# 🚨 **A [[build]] hook during `herdr plugin install` can never show one.**
+# Measured end to end against an isolated server, and blocked twice over
+# independently:
+#
+# 1. The build hook's environment carries **zero HERDR_* variables** — no
+#    socket path, no plugin id, no root, no bin path. It is an active strip and
+#    not inheritance loss: the same install run with HERDR_SOCKET_PATH set
+#    explicitly on the invoking CLI produced the same empty result, while
+#    unrelated variables passed through untouched.
+# 2. Even with a socket recovered by guessing its path from the config root,
+#    `plugin.list` returns an empty list and `plugin.pane.open` answers
+#    `plugin_not_found`. **Registration happens after the build hook
+#    completes**, now confirmed by measurement rather than by reading the
+#    documentation: the same call immediately after the install returns the
+#    plugin.
+#
+# 🚨 That path is the longest wait these plugins ever impose — sixty to ninety
+# seconds of compiling against about one second for a fetch — and it is the one
+# place a dialog is unreachable. So the terminal spinner stays, permanently and
+# on purpose, for that case. One extra code path, bought by a measured
+# constraint rather than a preference.
+#
+# ✅ The [[startup]] hook is the opposite: it is handed a complete environment
+# including the socket path, the plugin id, and a context JSON naming the
+# invocation source. Anything is reachable there.
+#
+# ⚠️ **The dialog is deliberately not written yet, and must not be designed
+# around.** Which placement it uses is open: a probe is establishing whether an
+# overlay floats like a dialog or tiles like a pane, and that answer decides
+# between several hundred lines of cross-process machinery and almost none.
+# Adding it means one arm in progress_backend() and one pair of functions
+# beside the terminal ones. Nothing outside this file changes.
+#
+# ── What is settled whatever draws ────────────────────────────────────────
+#
+# Every implementation asks bin/common's can_draw() before writing an escape
+# sequence. A Herdr [[startup]] command is handed no TERM and no terminal, so
+# one that did not ask would write bytes nobody can read into the server log.
+# That gate is the fix for a bug found once and then fixed three separate
+# times, and it lives in bin/common because it outlives whatever draws.
+
+PROGRESS_PID=''
+PROGRESS_MESSAGE=''
+PROGRESS_OWNER=''
+PROGRESS_BACKEND=''
+
+# Picks the implementation. **This is where the dialog arm lands.**
+#
+# The rule it will use is already known, even though the implementation is not:
+# a dialog needs a registered plugin and a socket to reach it through, so it is
+# selectable exactly where HERDR_SOCKET_PATH and HERDR_PLUGIN_ID are both
+# present. The install path has neither, by measurement, and falls to the
+# terminal. Nothing else in this file has to change to add it.
+progress_backend() {
+    if can_draw; then
+        printf 'terminal\n'
+        return 0
+    fi
+    printf 'silent\n'
+}
+
+# ── One implementation: the terminal ──────────────────────────────────────
+#
+# It is project-finder's, which is the only one of the three that was ever
+# measured against a real pane. It stays for the install compile even once a
+# dialog exists, because that is the one path where no dialog can be shown.
+
+PANE_SIZE=''
+SPIN_ROW=1
+SPIN_COL=1
+TEXT_TOP=1
+TEXT=''
+
+# ⚠️ stty and nothing else. A tput rung here would be unreachable: paint runs
+# only from the spinner loop, which sits behind can_draw, so stderr is always a
+# terminal there and stty always answers.
+#
+# 🔑 The hardcoded fallback is reachable all the same. A pty still sized 0 by 0,
+# before its first resize, answers stty *successfully* with the string "0 0".
+# The [1-9] guard rejects that successful but useless answer, and that is what
+# reaches the default. It does not defend against stty failing, which does not
+# happen here.
+pane_size() {
+    _size="$(stty size <&2 2>/dev/null || true)"
+    case "$_size" in
+        [1-9]*' '[1-9]*)
+            printf '%s\n' "$_size"
+            return 0
+            ;;
+    esac
+    printf '24 80\n'
+}
+
+wrap() {
+    _text="$1"
+    _width="$2"
+    _line=''
+    for _word in $_text; do
+        while [ "${#_word}" -gt "$_width" ]; do
+            [ -z "$_line" ] || {
+                printf '%s\n' "$_line"
+                _line=''
+            }
+            _head="$(printf "%.${_width}s" "$_word")"
+            printf '%s\n' "$_head"
+            _word="${_word#"$_head"}"
+        done
+        if [ -z "$_line" ]; then
+            _line="$_word"
+        elif [ "$((${#_line} + 1 + ${#_word}))" -le "$_width" ]; then
+            _line="$_line $_word"
+        else
+            printf '%s\n' "$_line"
+            _line="$_word"
+        fi
+    done
+    [ -z "$_line" ] || printf '%s\n' "$_line"
+}
+
+layout() {
+    _rows="${1%% *}"
+    _cols="${1##* }"
+    _width="$((_cols - 4))"
+    [ "$_width" -ge 1 ] || _width="$((_cols - 1))"
+    [ "$_width" -ge 1 ] || _width=1
+    _wrapped="$(wrap "$PROGRESS_MESSAGE" "$_width")"
+
+    _saved="$IFS"
+    IFS='
+'
+    _count=0
+    for _line in $_wrapped; do
+        _count="$((_count + 1))"
+    done
+
+    _gap=1
+    [ "$((_count + 2))" -le "$_rows" ] || _gap=0
+    _shown="$_count"
+    [ "$((_shown + _gap + 1))" -le "$_rows" ] || _shown="$((_rows - _gap - 1))"
+    [ "$_shown" -ge 1 ] || {
+        _shown=0
+        _gap=0
+    }
+
+    TEXT=''
+    _taken=0
+    for _line in $_wrapped; do
+        [ "$_taken" -lt "$_shown" ] || break
+        TEXT="$TEXT$_line
+"
+        _taken="$((_taken + 1))"
+    done
+    IFS="$_saved"
+
+    _total="$((1 + _gap + _shown))"
+    SPIN_ROW="$(((_rows - _total) / 2 + 1))"
+    [ "$SPIN_ROW" -ge 1 ] || SPIN_ROW=1
+    SPIN_COL="$(((_cols - 1) / 2 + 1))"
+    [ "$SPIN_COL" -ge 1 ] || SPIN_COL=1
+    TEXT_TOP="$((SPIN_ROW + 1 + _gap))"
+}
+
+paint() {
+    _size="$(pane_size)"
+    if [ "$_size" != "$PANE_SIZE" ]; then
+        PANE_SIZE="$_size"
+        layout "$_size"
+        printf '\033[2J' >&2
+    fi
+    printf '\033[%s;%sH%s' "$SPIN_ROW" "$SPIN_COL" "$1" >&2
+    [ -n "$TEXT" ] || return 0
+    _cols="${PANE_SIZE##* }"
+    _row="$TEXT_TOP"
+    _saved="$IFS"
+    IFS='
+'
+    for _line in $TEXT; do
+        _col="$(((_cols - ${#_line}) / 2 + 1))"
+        [ "$_col" -ge 1 ] || _col=1
+        printf '\033[%s;%sH%s' "$_row" "$_col" "$_line" >&2
+        _row="$((_row + 1))"
+    done
+    IFS="$_saved"
+}
+
+# Redraws until the process that started it goes away, so a killed build never
+# leaves a spinner turning over nothing.
+spin() {
+    printf '\033[?25l' >&2
+    while kill -0 "$PROGRESS_OWNER" 2>/dev/null; do
+        for _frame in '|' '/' '-' '\'; do
+            paint "$_frame"
+            sleep 0.1
+        done
+    done
+}
+
+terminal_start() {
+    PANE_SIZE=''
+    PROGRESS_OWNER=$$
+    spin &
+    PROGRESS_PID=$!
+}
+
+terminal_stop() {
+    [ -n "$PROGRESS_PID" ] || return 0
+    kill "$PROGRESS_PID" 2>/dev/null || true
+    wait "$PROGRESS_PID" 2>/dev/null || true
+    PROGRESS_PID=''
+    printf '\033[2J\033[H\033[?25h' >&2
+}
+
+# ── One implementation: no display at all ─────────────────────────────────
+#
+# 🔑 Not a failure mode. A Herdr [[startup]] command runs at every server start
+# with nothing watching, and one plain line in the server log is the whole
+# right answer there.
+
+silent_start() { note "$PROGRESS_MESSAGE"; }
+silent_stop() { return 0; }
+
+# ── The seam itself ───────────────────────────────────────────────────────
+
+# Says what is happening, through whichever implementation is reachable.
+progress_start() {
+    PROGRESS_MESSAGE="$1"
+    PROGRESS_BACKEND="$(progress_backend)"
+    case "$PROGRESS_BACKEND" in
+        terminal) terminal_start ;;
+        *) silent_start ;;
+    esac
+}
+
+# Takes it away. Safe to call when nothing was started, because the caller's
+# EXIT trap calls it on every path including the ones that never drew.
+progress_stop() {
+    case "${PROGRESS_BACKEND:-}" in
+        terminal) terminal_stop ;;
+        *) silent_stop ;;
+    esac
+    PROGRESS_BACKEND=''
+}

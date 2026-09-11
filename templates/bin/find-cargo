@@ -1,0 +1,48 @@
+#!/bin/sh
+# Prints the path to a usable cargo, or exits 1 when there is none.
+#
+# ⚠️ SYNCED FROM herdr-plugin-kit. Edit templates/bin/find-cargo in the kit,
+# never this copy.
+#
+# 🔑 Herdr runs as a launchd agent with PATH=/usr/bin:/bin:/usr/sbin:/sbin.
+# That is the entire reason this file exists. Nothing in /opt/homebrew or
+# ~/.cargo/bin is reachable by bare name, so cargo has to be looked for by
+# absolute path.
+#
+# Finding it by absolute path alone is not enough, which is why the caller also
+# puts this directory on the PATH it builds under: cargo is a rustup shim that
+# execs rustc out of its own directory, and neither is on launchd's PATH. A
+# cold build otherwise dies with `could not execute process rustc -vV`.
+#
+# The search order was measured, and the PATH comes first so that a toolchain
+# somebody chose beats one that is merely installed.
+#
+# 🔑 It is a file of its own rather than a function inside bin/common so that a
+# test can replace it with one that finds nothing. Every interesting thing
+# these shims do for a machine with no toolchain hangs off that answer, and a
+# candidate list holding four absolute paths cannot be made to fail on a
+# machine that has a toolchain. That is not hypothetical: the machine this was
+# written on carries /opt/homebrew/opt/rustup/bin/cargo, so the no-toolchain
+# path is untestable any other way.
+set -eu
+
+if command -v cargo >/dev/null 2>&1; then
+    command -v cargo
+    exit 0
+fi
+
+for candidate in \
+    "${CARGO:-}" \
+    "${CARGO_HOME:-$HOME/.cargo}/bin/cargo" \
+    "$HOME/.cargo/bin/cargo" \
+    /opt/homebrew/opt/rustup/bin/cargo \
+    /opt/homebrew/bin/cargo \
+    /usr/local/opt/rustup/bin/cargo \
+    /usr/local/bin/cargo; do
+    [ -n "$candidate" ] && [ -x "$candidate" ] && {
+        printf '%s\n' "$candidate"
+        exit 0
+    }
+done
+
+exit 1

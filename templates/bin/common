@@ -1,0 +1,339 @@
+#!/bin/sh
+# Shared by bin/build and bin/launcher. Sourced, never run.
+#
+# ⚠️ SYNCED FROM herdr-plugin-kit. Editing this file inside a plugin is
+# pointless: the next `sync-bin` overwrites it, silently and without a
+# conflict. Change templates/bin/common in the kit, then sync every plugin.
+#
+# 🔑 Byte-identical in every plugin, on purpose. Nothing here is substituted at
+# sync time, so a `diff` across two plugins' bin/ directories shows drift and
+# nothing else. That is the whole reason these files live in the kit: three
+# hand-maintained copies diverge silently, one template diverges in a diff
+# somebody has to read.
+#
+# Every plugin-specific fact is therefore read from the plugin's own files at
+# run time. There are exactly two: the binary's name, from Cargo.toml's
+# [[bin]] section, and the plugin's own name, from herdr-plugin.toml's
+# top-level id.
+#
+# Sourced as `. "$(dirname -- "$0")/common"`, which is the only contract a
+# caller has to keep. $0 inside a sourced file is the caller's own path, so
+# PLUGIN_ROOT resolves the same whether Herdr ran `sh bin/build` from the
+# plugin root or the launcher ran it by absolute path.
+
+# ── Where we are ──────────────────────────────────────────────────────────
+
+# HERDR_PLUGIN_ROOT is authoritative because Herdr sets it. The walk is the
+# fallback for a shim run by hand.
+PLUGIN_ROOT="${HERDR_PLUGIN_ROOT:-$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)}"
+
+MANIFEST="$PLUGIN_ROOT/herdr-plugin.toml"
+CARGO_MANIFEST="$PLUGIN_ROOT/Cargo.toml"
+
+# Appended to the binary's path to find the note the fetch path writes. It has
+# to agree with herdr_plugin_kit::version::PROVENANCE_SUFFIX, because that is
+# what reads the file this writes.
+PROVENANCE_SUFFIX='.download'
+
+# The developer override, checked for in the plugin root.
+#
+# ⚠️ It is a file and not an environment variable, and that is not a style
+# choice. Herdr runs as a launchd agent, so a developer's shell export never
+# reaches a script Herdr launches. A file works whoever launched the process,
+# and somebody who has never read this script can still find it by looking at
+# the directory listing.
+OVERRIDE_FILE='BUILD_FROM_SOURCE'
+
+# ── Reading the plugin's own files ────────────────────────────────────────
+
+# Reads one key from a TOML file's *top-level* table.
+#
+# 🚨 Stopping at the first section header is the entire point, not a tidiness
+# measure. herdr-plugin.toml carries further `id` keys further down, in
+# [[panes]] and [[actions]] entries: project-finder declares id = "picker" and
+# agentic-panes-layout declares id = "apply". A line-anchored grep for an id
+# returns the wrong one in two of the three plugins, silently, and a log
+# prefix reading `picker` looks entirely plausible.
+#
+# Reading `version` the same way also retires a hazard the donor shims carried
+# in a comment: herdr-plugin.toml holds min_herdr_version too, and an
+# unanchored match reads the Herdr floor as the plugin version and then looks
+# for a release nobody ever cut. A top-level-table read cannot make that
+# mistake, because the two are different keys.
+toml_top_level() {
+    awk -v want="$2" '
+        /^[ \t]*\[/ { exit }
+        {
+            line = $0
+            sub(/^[ \t]+/, "", line)
+            eq = index(line, "=")
+            if (eq == 0) next
+            key = substr(line, 1, eq - 1)
+            sub(/[ \t]+$/, "", key)
+            if (key != want) next
+            value = substr(line, eq + 1)
+            if (match(value, /"[^"]*"/)) print substr(value, RSTART + 1, RLENGTH - 2)
+            exit
+        }
+    ' "$1" 2>/dev/null
+}
+
+# The name of the binary these shims build, fetch and exec.
+#
+# Cargo.toml's [[bin]] name, not [package] name. The two agree in two of the
+# three plugins and differ in the third: recent-spaces packages `recent-spaces`
+# and builds `watch`. target/release holds the binary name, so that is the one
+# that answers.
+#
+# 🔑 Exactly one [[bin]] is required, and zero or several fails. Guessing which
+# of two binaries the shims are for would fetch one asset and exec another.
+binary_name() {
+    awk '
+        /^[ \t]*\[\[bin\]\][ \t]*$/ { inside = 1; next }
+        /^[ \t]*\[/ { inside = 0 }
+        inside {
+            line = $0
+            sub(/^[ \t]+/, "", line)
+            eq = index(line, "=")
+            if (eq == 0) next
+            key = substr(line, 1, eq - 1)
+            sub(/[ \t]+$/, "", key)
+            if (key != "name") next
+            value = substr(line, eq + 1)
+            if (match(value, /"[^"]*"/)) {
+                found++
+                answer = substr(value, RSTART + 1, RLENGTH - 2)
+            }
+        }
+        END { if (found == 1) print answer; else exit 1 }
+    ' "$1" 2>/dev/null
+}
+
+# The plugin's own name, for anything it prints.
+#
+# Herdr plugin ids are `<namespace>.<slug>`, so the slug is everything after
+# the last dot. It names the *plugin*, which is what a log line should say:
+# agentic-panes-layout rather than agent-layout, which is only its binary.
+plugin_slug() {
+    _id="$(toml_top_level "$MANIFEST" id)"
+    [ -n "$_id" ] || return 1
+    printf '%s\n' "${_id##*.}"
+}
+
+manifest_version() { toml_top_level "$MANIFEST" version; }
+
+# The plugin's full Herdr id, which `plugin list` needs to be asked about it.
+plugin_id() { toml_top_level "$MANIFEST" id; }
+
+# ── Saying things ─────────────────────────────────────────────────────────
+
+# A slug that cannot be read degrades to a word rather than failing. This
+# names log lines and nothing else, so a broken manifest should still be able
+# to tell somebody that it is broken.
+SLUG="$(plugin_slug || true)"
+[ -n "$SLUG" ] || SLUG='herdr-plugin'
+
+note() { printf '%s: %s\n' "$SLUG" "$*" >&2; }
+die() { note "$*"; exit 1; }
+
+# The $TERM fix, and the one place it lives.
+#
+# 🚨 A Herdr [[startup]] command is handed no TERM at all, and its stderr is a
+# pipe rather than a terminal. Measured 2026-09-10: `stty size <&2` answers
+# empty, `tput` refuses to run rather than answering wrongly, and an escape
+# sequence written there lands in the server log as bytes nobody can read.
+#
+# This was found once and then fixed three separate times, once per plugin,
+# each fix a different shape. Every caller that wants to draw asks here
+# instead. One answer, one place to correct it, and that is what this file is
+# for.
+#
+# It asks two questions because they fail differently. `[ -t 2 ]` is false on
+# the startup path, where stderr is a pipe. TERM catches the other case: a real
+# terminal with no terminfo behind it, which accepts escape sequences and then
+# draws them as themselves.
+can_draw() {
+    [ -t 2 ] || return 1
+    case "${TERM:-}" in
+        '' | dumb | unknown) return 1 ;;
+    esac
+    return 0
+}
+
+# ── What the compiler reads ───────────────────────────────────────────────
+
+# Everything the compiler reads, and the only list of it.
+#
+# 🔑 Three questions ask this list: is the binary behind the source, is this
+# checkout releasable, and — in the kit's build stamp — was this binary built
+# from committed source? SCOPE.md section 9.4.1: letting them differ makes the
+# stamp and the fetch disagree about the same tree.
+#
+# ⚠️ `rust-toolchain` and `rust-toolchain.toml` are both here and neither is
+# redundant. Git pathspecs match whole path components, so `rust-toolchain`
+# does not match `rust-toolchain.toml`, and dropping either leaves a file the
+# compiler reads unwatched.
+#
+# An edited README cannot change the binary, and must not force a compile. The
+# question is what was compiled, not what `git status` says about the tree.
+COMPILER_INPUTS='src Cargo.toml Cargo.lock build.rs .cargo rust-toolchain rust-toolchain.toml'
+
+compiler_input_newer_than() {
+    for _path in $COMPILER_INPUTS; do
+        [ -e "$PLUGIN_ROOT/$_path" ] || continue
+        if [ -n "$(find "$PLUGIN_ROOT/$_path" -newer "$1" -print -quit 2>/dev/null)" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# ── The binary, and whether it is current ─────────────────────────────────
+
+BINARY="$(binary_name "$CARGO_MANIFEST" || true)"
+[ -n "$BINARY" ] || die "Cargo.toml declares no single [[bin]] name, so there is no binary to build or fetch"
+
+BIN="$PLUGIN_ROOT/target/release/$BINARY"
+MARK="$BIN$PROVENANCE_SUFFIX"
+
+note_value() { sed -n "s/^$1=//p" "$MARK" 2>/dev/null | head -1; }
+
+# A downloaded binary and a compiled one go stale for different reasons, and
+# asking the wrong question about either one breaks somebody.
+#
+# A compiled binary belongs to the source beside it, so mtimes answer: anything
+# the compiler reads that is newer than the binary means the binary is behind.
+# That is the developer loop.
+#
+# 🔑 A downloaded binary belongs to a *release*, not to the source beside it.
+# On any commit after a release the source is permanently newer, so mtimes
+# would say "rebuild" forever — on the one machine that has no toolchain to
+# rebuild with. The honest question is which version it was downloaded for,
+# against the version the manifest declares now. Those differ only when a
+# release has been cut, which is exactly when a new binary exists to fetch.
+#
+# An unreadable version fails closed and builds. Running an unknown binary
+# quietly is worse than a build that may warn.
+needs_build() {
+    [ -x "$BIN" ] || return 0
+    if [ -f "$MARK" ]; then
+        _declared="$(manifest_version)"
+        [ -n "$_declared" ] || return 0
+        [ "$_declared" != "$(note_value version)" ]
+    else
+        compiler_input_newer_than "$BIN"
+    fi
+}
+
+# ── Naming the published asset ────────────────────────────────────────────
+
+# Maps this host to a platform name (SCOPE.md section 9.6).
+#
+# ⚠️ macOS and Linux only, and an unrecognised host gets no name and a
+# non-zero exit rather than a guess: a wrong name would download a binary
+# built for another platform and then run it.
+#
+# 🔑 Windows is deliberately absent, and its absence is load-bearing. `sh`
+# cannot run there at all, so bin/build.ps1 is the Windows path and
+# bin/common.ps1 is the *only* file in this repository that names a Windows
+# asset. SCOPE.md section 14.2 leaves open whether those names carry `.exe`,
+# and keeping them to one file is what makes that a one-line correction.
+# templates/test_templates.py asserts it stays that way.
+platform() {
+    case "$(uname -s 2>/dev/null || true)" in
+        Darwin) _os='macos' ;;
+        Linux) _os='linux' ;;
+        *) return 1 ;;
+    esac
+    case "$(uname -m 2>/dev/null || true)" in
+        arm64 | aarch64) _arch='arm64' ;;
+        x86_64 | amd64) _arch='x64' ;;
+        *) return 1 ;;
+    esac
+    printf '%s-%s\n' "$_os" "$_arch"
+}
+
+# The owner/repo this checkout came from, or nothing.
+repo_slug() {
+    _url="$(git -C "$PLUGIN_ROOT" remote get-url origin 2>/dev/null)" || return 1
+    case "$_url" in
+        *github.com/* | *github.com:*) ;;
+        *) return 1 ;;
+    esac
+    _slug="${_url##*github.com}"
+    _slug="${_slug#:}"
+    _slug="${_slug#/}"
+    _slug="${_slug%.git}"
+    case "$_slug" in
+        */*/* | */ | *[!0-9A-Za-z._/-]*) return 1 ;;
+        */*) printf '%s\n' "$_slug" ;;
+        *) return 1 ;;
+    esac
+}
+
+# The first twelve characters of HEAD, but only when this checkout could have
+# produced a published binary.
+#
+# Three refusals, and each one means "no asset can match this tree":
+# a directory that is not its own repository root, a dirty compiler-read path,
+# and a HEAD that is not a hex commit.
+released_commit() {
+    _top="$(git -C "$PLUGIN_ROOT" rev-parse --show-toplevel 2>/dev/null)" || return 1
+    _here="$(CDPATH='' cd -P -- "$PLUGIN_ROOT" 2>/dev/null && pwd)" || return 1
+    [ "$_top" = "$_here" ] || return 1
+    # Unquoted on purpose: COMPILER_INPUTS is a pathspec list and has to split.
+    # shellcheck disable=SC2086
+    _dirty="$(git -C "$PLUGIN_ROOT" status --porcelain -- $COMPILER_INPUTS 2>/dev/null)" || return 1
+    [ -z "$_dirty" ] || return 1
+    _commit="$(git -C "$PLUGIN_ROOT" rev-parse HEAD 2>/dev/null)" || return 1
+    case "$_commit" in
+        *[!0-9a-f]*) return 1 ;;
+        ????????????*) ;;
+        *) return 1 ;;
+    esac
+    printf '%s\n' "$_commit" | cut -c1-12
+}
+
+# 🔑 The URL itself asserts that the binary was built from the source in this
+# folder. A checkout one commit past the tag asks for a file that does not
+# exist, gets a 404, and compiles — the correct outcome, reached with no
+# comparison logic and, crucially, with no network call to resolve a tag.
+#
+# The tag stays version-keyed, because that is the name a human recognises.
+# The asset name is keyed on the commit, because two different trees can both
+# call themselves 0.8.0.
+#
+# 🔑 Every refusal names itself in ASSET_REASON rather than leaving the caller
+# to work it out. The caller would have to re-ask the same four questions in
+# the same order to do that, and a second copy of this list is a second thing
+# to keep in step with it.
+#
+# ⚠️ It sets ASSET_URL rather than printing it, and that is not a style choice.
+# A caller writing `URL="$(asset_url)"` runs this in a subshell, so every
+# assignment to ASSET_REASON dies with it and the refusal reaches the user as
+# an empty string. Returning two values out of a shell function means setting
+# two variables; there is no other way.
+ASSET_REASON=''
+ASSET_URL=''
+asset_url() {
+    ASSET_REASON=''
+    ASSET_URL=''
+    if ! _platform="$(platform)"; then
+        ASSET_REASON="no binary is published for $(uname -s 2>/dev/null || true) $(uname -m 2>/dev/null || true)"
+        return 1
+    fi
+    _version="$(manifest_version)"
+    if [ -z "$_version" ]; then
+        ASSET_REASON='herdr-plugin.toml declares no version, so no release could be named'
+        return 1
+    fi
+    if ! _slug="$(repo_slug)"; then
+        ASSET_REASON='this checkout has no GitHub origin, so no release could be found'
+        return 1
+    fi
+    if ! _short="$(released_commit)"; then
+        ASSET_REASON='this is not a clean checkout at a commit, so no published asset can match it'
+        return 1
+    fi
+    ASSET_URL="https://github.com/$_slug/releases/download/$_version/$BINARY-$_platform-$_short"
+}

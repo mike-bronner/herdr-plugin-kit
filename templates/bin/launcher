@@ -1,0 +1,47 @@
+#!/bin/sh
+# Runs this plugin's binary, building it first when it is behind.
+#
+# ⚠️ SYNCED FROM herdr-plugin-kit. Edit templates/bin/launcher in the kit,
+# never this copy. It is byte-identical in every plugin, and a `diff` between
+# two plugins' copies is drift and nothing else.
+#
+# This is what a manifest entry points at — a pane, a key command, an event
+# hook — rather than the binary itself:
+#
+#     [[panes]]
+#     command = ["sh", "bin/launcher"]
+#
+# 🔑 Herdr runs [[build]] only on `herdr plugin install`, so a linked checkout
+# would otherwise never rebuild after a `git pull`. The staleness check here is
+# what makes a developer's edit take effect.
+set -eu
+
+. "$(dirname -- "$0")/common"
+
+# 🔑 Deliberately before the staleness check, and it must stay there.
+# `--version` exists to diagnose a binary that disagrees with its manifest, and
+# a rebuild running first would replace that binary with a current one. The
+# command would then report agreement every time, and could never show the
+# state it was written to show.
+case "${1:-}" in
+    --version)
+        [ -x "$BIN" ] || die "no $BINARY binary at $BIN"
+        HERDR_PLUGIN_ROOT="$PLUGIN_ROOT" exec "$BIN" --version
+        ;;
+esac
+
+if needs_build; then
+    if HERDR_PLUGIN_ROOT="$PLUGIN_ROOT" sh "$PLUGIN_ROOT/bin/build"; then
+        :
+    elif [ -x "$BIN" ]; then
+        # A stale binary that runs beats no binary at all, and saying so is the
+        # only way somebody finds out why their edit did nothing.
+        note "the build failed; running the $BINARY already built, which may be stale"
+    else
+        die "no $BINARY binary at $BIN and it could not be built"
+    fi
+fi
+
+[ -x "$BIN" ] || die "no $BINARY binary at $BIN"
+
+exec "$BIN" "$@"

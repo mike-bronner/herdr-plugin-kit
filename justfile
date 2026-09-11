@@ -18,9 +18,29 @@ default:
 sync-api tag:
     python3 codegen/sync_api.py {{tag}}
 
-# Run every test: the codegen guards first, then the Rust suite.
+# Copy the shell templates into a plugin's bin/ directory.
+#
+# Nothing is substituted: the files land byte-identical in every plugin, and
+# each shim reads that plugin's own name and binary from its own files at run
+# time. So a `diff` between two plugins' bin/ directories is drift and nothing
+# else, which is the whole reason these live here.
+#
+# Without `just`, run `python3 templates/sync_bin.py <checkout>`, which is the
+# same entry point. A human reviews the diff in that repository before it lands.
+sync-bin plugin:
+    python3 templates/sync_bin.py {{plugin}}
+
+# Ask whether a plugin's bin/ still matches the kit. Writes nothing.
+#
+# This is what a plugin's own CI runs, and it is what turns shell drift into a
+# failing build instead of a discovery.
+check-bin plugin:
+    python3 templates/sync_bin.py {{plugin}} --check
+
+# Run every test: the codegen guards, the shell templates, then the Rust suite.
 test:
     python3 codegen/test_codegen.py
+    python3 templates/test_templates.py
     cargo test
 
 # Format every Rust file.
