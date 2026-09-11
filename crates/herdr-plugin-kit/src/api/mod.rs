@@ -26,6 +26,7 @@
 //! );
 //! ```
 
+pub mod client;
 mod envelope;
 
 // `large_enum_variant` fires twice inside the generated types, and its fix is

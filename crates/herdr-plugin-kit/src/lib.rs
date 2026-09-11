@@ -5,9 +5,10 @@
 //! duplication, and turns a Herdr release into an ingestion step rather than a
 //! manual patch across three repositories.
 //!
-//! Today the kit carries the wire types, the launch-contract reader, version
-//! reporting, and the styled dialogs. The transport, report, and update modules
-//! land in later stages, in the order SCOPE.md section 13 sets out.
+//! Today the kit carries the wire types, the socket transport, the
+//! launch-contract reader, version reporting, and the styled dialogs. The
+//! report and update modules land in later stages, in the order SCOPE.md
+//! section 13 sets out.
 //!
 //! # Features
 //!
@@ -20,9 +21,11 @@
 //! 🔑 Gated because recent-spaces is a headless watcher, and should carry
 //! neither popup machinery nor a terminal library.
 //!
-//! ⚠️ [`dialog`] does not send anything itself. It takes a
-//! [`dialog::Transport`], the two socket calls it needs, because the kit's own
-//! client is a later stage.
+//! ⚠️ [`dialog`] still does not send anything itself. It takes a
+//! [`dialog::Transport`], the two socket calls it needs, which is how every
+//! path through it stays testable without a live server. ✅
+//! [`api::client::Client`] implements that trait, so a consumer supplies
+//! nothing.
 //!
 //! # Regenerating
 //!
