@@ -802,6 +802,26 @@ the cancel is plain text; the hovered one gains an underline.
 `↵ close anyway` and `esc keep`. Labels stay the caller's. Callers typing their own glyph
 is how three plugins drift apart on the symbol, which is what this crate exists to end.
 
+➕ **Amended 2026-09-11: the buttons stack when a single row cannot hold both labels
+whole**, one per row, each centred, at the cost of one row of height. **Decided by Mike
+after the preview showed what the alternative rendered**: at the 24-cell floor the labels
+were cut to `↵ reb` and `esc kee`, so "rebuild anyway" and "keep them" both arrived as
+fragments. Truncating rather than pushing the row through the right border was right; cut
+to three characters was not the point of it.
+
+Two alternatives were rejected. Drawing the keys alone loses the words entirely, and
+raising the 24-cell floor means a narrow pane gets no dialog at all rather than a usable
+one.
+
+⚠️ **The threshold is measured from the drawn widths, never a constant.** The kit draws
+the key affordances and the labels are the caller's, so the question is whether *these
+two* buttons and the gap between them fit *this* frame. A width alone cannot answer it:
+at 30 cells `Go`/`Stop` share a row and `rebuild anyway`/`keep them` do not.
+
+⚠️ **Truncation survives as the last resort**, for a single label too wide for a row of
+its own, which no layout can rescue. At the floor the primary still shortens — but to
+`rebuild anyw` rather than `reb`, with the cancel whole.
+
 **The glyph rule, which took four attempts:** one codepoint, no variation selector, East
 Asian Width `Neutral`. `U+229D`, `U+2713`, `U+26A0`, `U+2716`.
 
@@ -820,6 +840,18 @@ attributes, so borders were confirmed present and never confirmed coloured, and 
 has established how Herdr colours its own dialogs**. Inversion is a terminal attribute
 rather than a claim about Herdr, so that part will render as intended.
 `cargo run --features dialog --example preview` draws all eight combinations locally.
+
+➕ **Amended 2026-09-11, after Mike saw it rendered for the first time: info is SGR 94,
+the bright blue, rather than 34.** 94 is the bright form of the same basic colour, so it
+stays inside the eight-plus-eight ANSI set and keeps the property the palette was chosen
+for — a themed terminal maps it to whatever blue the user already picked, rather than to
+a fixed RGB value.
+
+⚠️ **Info is bright and the other three are not, and that asymmetry is recorded rather
+than resolved.** Success, warning and danger stay at 32, 33 and 31. Mike asked for info
+alone, and widening the change to match would have been a palette decision nobody made.
+Whether the set now reads consistently is open, and it is a question for the person
+looking at it rather than one this document can settle.
 
 #### 7.5.5 Workspace scoping — ✅ delivered by the default
 

@@ -63,8 +63,16 @@ fn main() {
         println!("{}\n", layout(&dialog, Some(&buttons), width, hot).text);
     }
 
-    // The floor, where both labels truncate rather than break the frame.
+    // The two narrow shapes, which are the reason this example earns its keep.
+    let narrow = Dialog::new(State::Danger, "Narrow", "At the floor.");
+
+    // Stacked: one button per row, both labels whole, one row of height paid
+    // for them. This is what a frame too narrow for a single row now draws.
+    println!("── stacked, 30 cells ──\n");
+    println!("{}\n", layout(&narrow, Some(&buttons), 30, Hot::None).text);
+
+    // The floor, where stacking is not enough on its own and the primary label
+    // is shortened as well. Truncation is the last resort, not the first.
     println!("── the 24-cell floor ──\n");
-    let dialog = Dialog::new(State::Danger, "Narrow", "At the floor.");
-    println!("{}\n", layout(&dialog, Some(&buttons), 24, Hot::None).text);
+    println!("{}\n", layout(&narrow, Some(&buttons), 24, Hot::None).text);
 }

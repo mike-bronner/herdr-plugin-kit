@@ -921,15 +921,22 @@ fn labels_too_long_for_the_frame_are_shortened_rather_than_breaking_it() {
     }
 
     // Both survive as something readable rather than one being erased.
+    //
+    // ⚠️ Not on one row. Labels this long cannot share a row at any of these
+    // widths, so they stack, and each is then shortened only because it will
+    // not fit a row by itself. Truncation is the last resort here, not the
+    // first: a_frame_that_cannot_hold_both_buttons_stacks_them_and_keeps_the_labels_whole
+    // pins the case stacking alone rescues.
     let drawn = plain(&render(&dialog(), Some(&long), 40));
-    let row = drawn
-        .lines()
-        .find(|line| line.contains("Rebuild"))
-        .expect("the primary label was erased");
     assert!(
-        row.contains("Leave"),
+        drawn.lines().any(|line| line.contains("Rebuild")),
+        "the primary label was erased: {:?}",
+        drawn
+    );
+    assert!(
+        drawn.lines().any(|line| line.contains("Leave")),
         "the cancel label was erased: {:?}",
-        row
+        drawn
     );
 
     // A pair that already fits is left exactly as the caller wrote it.
@@ -937,6 +944,79 @@ fn labels_too_long_for_the_frame_are_shortened_rather_than_breaking_it() {
     let fits = plain(&render(&dialog(), Some(&short), 40));
     assert!(fits.contains(" Go "), "a fitting label was truncated");
     assert!(fits.contains("Stop"), "a fitting label was truncated");
+}
+
+#[test]
+fn a_frame_that_cannot_hold_both_buttons_stacks_them_and_keeps_the_labels_whole() {
+    // 🪤 The defect the preview exposed on 2026-09-11. The old layout kept the
+    // border and cut the words instead: at the floor it drew `↵ reb` and
+    // `esc kee`, so "rebuild anyway" and "keep them" both arrived as
+    // fragments. Stacking costs one row of height and keeps both labels.
+    //
+    // 🔑 Whole is the assertion. The border holding is checked below as well,
+    // but a frame whose borders line up around nonsense was the state this
+    // came from, so the border alone cannot be what this test asks.
+    let buttons = Buttons::new("rebuild anyway", "keep them");
+    let frame = layout(&dialog(), Some(&buttons), 30, Hot::None);
+    let drawn = plain(&frame.text);
+    let lines: Vec<&str> = drawn.lines().collect();
+
+    let primary = frame.primary.expect("no primary rectangle");
+    let cancel = frame.cancel.expect("no cancel rectangle");
+    assert_eq!(
+        primary.row + 1,
+        cancel.row,
+        "the buttons did not stack: {:?}",
+        drawn
+    );
+
+    assert!(
+        lines[primary.row as usize].contains("rebuild anyway"),
+        "the primary label did not survive whole: {:?}",
+        lines[primary.row as usize]
+    );
+    assert!(
+        lines[cancel.row as usize].contains("keep them"),
+        "the cancel label did not survive whole: {:?}",
+        lines[cancel.row as usize]
+    );
+
+    for line in drawn.lines() {
+        assert_eq!(width_of(line), 30, "the border moved: {:?}", line);
+    }
+}
+
+#[test]
+fn whether_the_buttons_share_a_row_is_decided_by_what_fits_rather_than_by_a_width() {
+    // 🔑 The kit draws the key affordances itself and the labels are the
+    // caller's, so one width stacks one pair and not another. A threshold
+    // constant could not answer this, and that is the whole reason the
+    // condition is measured against the drawn widths.
+    let rows = |buttons: &Buttons, width: usize| {
+        let frame = layout(&dialog(), Some(buttons), width, Hot::None);
+        (
+            frame.primary.expect("no primary rectangle").row,
+            frame.cancel.expect("no cancel rectangle").row,
+        )
+    };
+
+    // The same frame, two pairs of labels, two different answers.
+    let short = Buttons::new("Go", "Stop");
+    let long = Buttons::new("rebuild anyway", "keep them");
+    let (primary, cancel) = rows(&short, 30);
+    assert_eq!(
+        primary, cancel,
+        "a pair that fits its row was stacked anyway"
+    );
+    let (primary, cancel) = rows(&long, 30);
+    assert_ne!(primary, cancel, "a pair too wide for its row shared one");
+
+    // The same pair, one cell either side of where it stops fitting. Found by
+    // measuring the drawn widths, not asserted from a constant.
+    let (primary, cancel) = rows(&long, 40);
+    assert_ne!(primary, cancel, "still too wide at 40, and it shared a row");
+    let (primary, cancel) = rows(&long, 41);
+    assert_eq!(primary, cancel, "one more cell fits, and it stacked anyway");
 }
 
 // ── The mouse ─────────────────────────────────────────────────────────────
@@ -953,11 +1033,15 @@ fn the_buttons_report_where_they_were_actually_drawn() {
         let primary = frame.primary.expect("no primary rectangle");
         let cancel = frame.cancel.expect("no cancel rectangle");
 
-        assert_eq!(primary.row, cancel.row, "the buttons are on different rows");
-        let row: Vec<char> = lines[primary.row as usize].chars().collect();
+        // ⚠️ Each rectangle is read from the row *it* reports, never from one
+        // row assumed to hold both. A frame too narrow for a single row stacks
+        // the buttons, and 24 is such a frame, so a reader that assumed one row
+        // would check the cancel rectangle against the primary's characters.
         let span = |r: Rect| -> String {
-            row[r.column as usize..(r.column + r.width) as usize]
-                .iter()
+            lines[r.row as usize]
+                .chars()
+                .skip(r.column as usize)
+                .take(r.width as usize)
                 .collect()
         };
 
@@ -974,12 +1058,15 @@ fn the_buttons_report_where_they_were_actually_drawn() {
             width
         );
         // The rectangles must not overlap, or one button would swallow clicks
-        // meant for the other.
-        assert!(
-            primary.column + primary.width <= cancel.column,
-            "the rectangles overlap at width {}",
-            width
-        );
+        // meant for the other. Stacked, they are free to share columns —
+        // being on different rows is what separates them there.
+        if primary.row == cancel.row {
+            assert!(
+                primary.column + primary.width <= cancel.column,
+                "the rectangles overlap at width {}",
+                width
+            );
+        }
     }
 
     // Exactly, where the frame is wide enough for both labels in full.
@@ -1207,4 +1294,43 @@ fn an_empty_body_still_draws_a_complete_frame() {
     for line in &lines {
         assert_eq!(width_of(line), 24, "{:?}", line);
     }
+}
+
+#[test]
+fn a_click_lands_on_the_right_button_when_the_two_are_stacked() {
+    // 🚨 The rectangles move to different rows when a frame is too narrow for
+    // one, and `Frame::hit` is what the mouse path asks. A hit test written
+    // against a single shared row answers `Hot::None` for one of the two and
+    // loses every click on it, in silence.
+    let buttons = Buttons::new("rebuild anyway", "keep them");
+    let frame = layout(&dialog(), Some(&buttons), 30, Hot::None);
+    let primary = frame.primary.expect("no primary rectangle");
+    let cancel = frame.cancel.expect("no cancel rectangle");
+    assert_ne!(primary.row, cancel.row, "the buttons did not stack");
+
+    // Both edges of each, because a rectangle that is off by one at either end
+    // still answers correctly in the middle.
+    assert_eq!(Hot::Primary, frame.hit(primary.column, primary.row));
+    assert_eq!(
+        Hot::Primary,
+        frame.hit(primary.column + primary.width - 1, primary.row)
+    );
+    assert_eq!(Hot::Cancel, frame.hit(cancel.column, cancel.row));
+    assert_eq!(
+        Hot::Cancel,
+        frame.hit(cancel.column + cancel.width - 1, cancel.row)
+    );
+
+    // 🚨 A position on neither button answers neither. An actioned dialog
+    // treats that as no answer, and its primary may be destructive.
+    assert_eq!(
+        Hot::None,
+        frame.hit(primary.column + primary.width, primary.row),
+        "a cell past the primary's right edge answered it"
+    );
+    assert_eq!(
+        Hot::None,
+        frame.hit(primary.column, primary.row - 1),
+        "the blank row above the buttons answered one"
+    );
 }

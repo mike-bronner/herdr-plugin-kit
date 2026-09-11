@@ -390,12 +390,19 @@ impl State {
     /// because the capture library discards SGR attributes. Nobody knows how
     /// Herdr colours its own dialogs. See the module documentation.
     ///
-    /// These are the eight basic colours rather than 256-colour or truecolour
-    /// values, so a themed terminal maps each one to the palette the user
-    /// already chose.
+    /// These are the eight basic colours and their bright variants rather than
+    /// 256-colour or truecolour values, so a themed terminal maps each one to
+    /// the palette the user already chose.
+    ///
+    /// ⚠️ **Info is the bright variant and the other three are not, and that
+    /// asymmetry is deliberate rather than an oversight.** Mike saw the palette
+    /// rendered on 2026-09-11 and asked for light blue on info alone; 94 is the
+    /// bright form of the same basic blue, so it stays inside the eight-plus-
+    /// eight set and keeps the property the whole palette was chosen for. The
+    /// other three were not part of that instruction and were left as they are.
     pub fn colour(self) -> u8 {
         match self {
-            State::Info => 34,
+            State::Info => 94,
             State::Success => 32,
             State::Warning => 33,
             State::Danger => 31,
@@ -1136,6 +1143,24 @@ impl Frame {
 ///
 /// A bare dialog has neither the button row nor its separator.
 ///
+/// 🔑 **The buttons stack when a single row cannot hold both labels whole**,
+/// one per row, each centred on its own:
+///
+/// ```text
+/// ╭─ ⚠ Title ──────────╮
+/// │                    │
+/// │                    │
+/// │   Body text.       │
+/// │                    │
+/// │  [ ↵ rebuild ]     │
+/// │   esc keep them    │
+/// │                    │
+/// ╰────────────────────╯
+/// ```
+///
+/// So a dialog's height depends on its width, and [`button_rows`] decides
+/// which shape it takes from the drawn widths rather than from a threshold.
+///
 /// ⚠️ **The button row is centred, and that choice is not from the approved
 /// design.** Mike specified how the buttons look, not where they sit. Centred
 /// follows TUI convention, and where Herdr puts its own was never measured.
@@ -1165,12 +1190,14 @@ pub fn layout(dialog: &Dialog, buttons: Option<&Buttons>, width: usize, hot: Hot
     let mut cancel = None;
     if let Some(buttons) = buttons {
         lines.push(blank_line(inner, &colour));
-        let (drawn, spans) = button_line(buttons, text_width, &colour, hot);
-        // The row the buttons land on is simply the row this line is pushed to.
-        let row = lines.len() as u16;
-        primary = Some(spans.0.at(row));
-        cancel = Some(spans.1.at(row));
-        lines.push(drawn);
+        let (drawn, spans) = button_rows(buttons, text_width, &colour, hot);
+        // The row the buttons start on is simply the row the first is pushed
+        // to. Each span carries its own offset from there, which is zero for
+        // both when they share a row and zero and one when they are stacked.
+        let first = lines.len() as u16;
+        primary = Some(spans.0.at(first));
+        cancel = Some(spans.1.at(first));
+        lines.extend(drawn);
     }
 
     // Two rows below, except under a button row, where one is enough.
@@ -1198,17 +1225,22 @@ pub fn render(dialog: &Dialog, buttons: Option<&Buttons>, width: usize) -> Strin
     layout(dialog, buttons, width, Hot::None).text
 }
 
-/// A button's horizontal extent, before the row it lands on is known.
+/// A button's extent, before the frame knows which row the buttons start on.
+///
+/// `row` counts from the first button row rather than from the top of the
+/// dialog, because a stacked layout puts the two buttons on different rows and
+/// the frame is the only thing that knows where those rows begin.
 #[derive(Debug, Clone, Copy)]
 struct Span {
     column: u16,
     width: u16,
+    row: u16,
 }
 
 impl Span {
-    fn at(self, row: u16) -> Rect {
+    fn at(self, first: u16) -> Rect {
         Rect {
-            row,
+            row: first + self.row,
             column: self.column,
             width: self.width,
         }
@@ -1257,7 +1289,58 @@ fn body_line(text: &str, text_width: usize, colour: &str) -> String {
     format!("{colour}│{RESET}{pad}{text}{fill}{pad}{colour}│{RESET}")
 }
 
-/// The button row, and where the two buttons landed across it.
+/// The button rows, and where the two buttons landed across them.
+///
+/// 🔑 **Both buttons share a row only while both fit it whole. Otherwise they
+/// stack, one per row.** Decided by Mike on 2026-09-11, after the preview
+/// showed what the alternative actually rendered: at the 24-cell floor the
+/// labels were being cut to `↵ reb` and `esc kee`, so "rebuild anyway" and
+/// "keep them" both became fragments. Truncating rather than pushing the row
+/// through the right border was the right instinct, but three characters of a
+/// label is not a label.
+///
+/// Two alternatives were considered and rejected: drawing the keys alone loses
+/// the words entirely, and raising [`MIN_WIDTH`] means a narrow pane gets no
+/// dialog at all rather than a usable one. Stacking costs one row of height,
+/// which is the cheapest thing here to spend.
+///
+/// ⚠️ **The threshold is measured, not a number.** The kit draws the key
+/// affordances itself and the labels are the caller's, so the question is
+/// whether these two drawn buttons and the gap between them fit *this* frame —
+/// never whether the frame is narrower than some constant.
+fn button_rows(
+    buttons: &Buttons,
+    text_width: usize,
+    colour: &str,
+    hot: Hot,
+) -> (Vec<String>, (Span, Span)) {
+    let primary = drawn_button(PRIMARY_KEY, &buttons.primary, true, text_width);
+    let cancel = drawn_button(CANCEL_KEY, &buttons.cancel, false, text_width);
+
+    if cells(&primary) + BUTTON_GAP + cells(&cancel) <= text_width {
+        let (line, spans) = buttons_row(
+            &[
+                (primary, true, hot == Hot::Primary),
+                (cancel, false, hot == Hot::Cancel),
+            ],
+            text_width,
+            colour,
+        );
+        return (vec![line], (spans[0], spans[1]));
+    }
+
+    // Stacked. The primary goes first, because it names the action the dialog
+    // is asking about and reading order should reach it first.
+    let (top, above) = buttons_row(&[(primary, true, hot == Hot::Primary)], text_width, colour);
+    let (below, under) = buttons_row(&[(cancel, false, hot == Hot::Cancel)], text_width, colour);
+    (vec![top, below], (above[0], Span { row: 1, ..under[0] }))
+}
+
+/// One row of buttons, centred as a group, and where each one landed on it.
+///
+/// Takes a slice rather than a pair so that the side-by-side row and each
+/// stacked row are the same code. The gap only ever appears *between* items, so
+/// a row holding one button is centred on that button alone.
 ///
 /// 🔑 **Inversion rather than an explicit background colour.** Reverse video
 /// swaps foreground and background, so setting the foreground to the state's
@@ -1272,48 +1355,73 @@ fn body_line(text: &str, text_width: usize, colour: &str) -> String {
 /// buttons look alike exactly when the user is about to click one. An underline
 /// is unambiguous, universally supported, and occupies no cells, so the frame's
 /// geometry cannot move when the pointer does.
-fn button_line(
-    buttons: &Buttons,
+fn buttons_row(
+    items: &[(String, bool, bool)],
     text_width: usize,
     colour: &str,
-    hot: Hot,
-) -> (String, (Span, Span)) {
-    let (primary, cancel) = fit_labels(&buttons.primary, &buttons.cancel, text_width);
-    // The kit draws each key, so a button is wider than the label it was given.
-    let primary = format!(" {} ", keyed(PRIMARY_KEY, &primary));
-    let cancel = keyed(CANCEL_KEY, &cancel);
-    let visible = cells(&primary) + BUTTON_GAP + cells(&cancel);
+) -> (String, Vec<Span>) {
+    let visible = items.iter().map(|(text, ..)| cells(text)).sum::<usize>()
+        + BUTTON_GAP * items.len().saturating_sub(1);
     let left = text_width.saturating_sub(visible) / 2;
     let right = text_width.saturating_sub(left + visible);
     let pad = " ".repeat(SIDE_PADDING);
-    let mark = |this: Hot| match hot == this {
-        true => UNDERLINE,
-        false => "",
-    };
 
-    let drawn = format!(
-        "{colour}│{RESET}{pad}{}{colour}{INVERSE}{}{primary}{RESET}{}{}{cancel}{RESET}{}{pad}{colour}│{RESET}",
-        " ".repeat(left),
-        mark(Hot::Primary),
-        " ".repeat(BUTTON_GAP),
-        mark(Hot::Cancel),
-        " ".repeat(right),
-    );
-
+    let mut middle = String::new();
+    let mut spans = Vec::with_capacity(items.len());
     // The border and the side padding sit left of the text column, so a
     // button's pane-local column starts there.
-    let origin = 1 + SIDE_PADDING + left;
-    let spans = (
-        Span {
-            column: origin as u16,
-            width: cells(&primary) as u16,
-        },
-        Span {
-            column: (origin + cells(&primary) + BUTTON_GAP) as u16,
-            width: cells(&cancel) as u16,
-        },
+    let mut column = 1 + SIDE_PADDING + left;
+    for (index, (text, inverted, hot)) in items.iter().enumerate() {
+        if index > 0 {
+            middle.push_str(&" ".repeat(BUTTON_GAP));
+            column += BUTTON_GAP;
+        }
+        if *inverted {
+            middle.push_str(colour);
+            middle.push_str(INVERSE);
+        }
+        if *hot {
+            middle.push_str(UNDERLINE);
+        }
+        middle.push_str(text);
+        middle.push_str(RESET);
+        spans.push(Span {
+            column: column as u16,
+            width: cells(text) as u16,
+            row: 0,
+        });
+        column += cells(text);
+    }
+
+    let drawn = format!(
+        "{colour}│{RESET}{pad}{}{middle}{}{pad}{colour}│{RESET}",
+        " ".repeat(left),
+        " ".repeat(right),
     );
     (drawn, spans)
+}
+
+/// One button, drawn, with its label shortened only if it alone overflows.
+///
+/// ⚠️ **Truncation is the last resort rather than the first.** Stacking handles
+/// two labels that will not share a row; this handles one label that will not
+/// fit a row by itself, which no layout can rescue. Pushing it through the
+/// right border instead would break every row's alignment at once.
+///
+/// The key affordance and the primary's own padding are never shortened,
+/// because a button cut to nothing still has to be clickable and still has to
+/// say which key answers it.
+fn drawn_button(key: &str, label: &str, padded: bool, text_width: usize) -> String {
+    let draw = |label: &str| match padded {
+        true => format!(" {} ", keyed(key, label)),
+        false => keyed(key, label),
+    };
+    let full = draw(label);
+    if cells(&full) <= text_width {
+        return full;
+    }
+    let fixed = cells(&full) - cells(label);
+    draw(&truncate(label, text_width.saturating_sub(fixed)))
 }
 
 /// Joins a key affordance to its label, or stands alone when there is no label.
@@ -1326,34 +1434,6 @@ fn keyed(key: &str, label: &str) -> String {
         true => key.to_string(),
         false => format!("{} {}", key, label),
     }
-}
-
-/// Shortens two labels until the pair fits the frame.
-///
-/// ⚠️ **Labels are the caller's, so no frame width makes them safe.** A caller
-/// naming a long action in a narrow terminal would otherwise push the button
-/// row through the right border, which breaks every row's alignment at once.
-///
-/// ⚠️ **The budget pays for the keys too.** The kit draws `↵` and `esc` and the
-/// space after each, so the drawn button is wider than the label it was handed,
-/// and a fit computed on labels alone would overflow by five cells.
-///
-/// When they do not fit, the room left after the keys, the primary button's own
-/// padding, and the gap is split evenly, and **the odd cell goes to the
-/// primary**, because it names the action the dialog is asking about.
-fn fit_labels(primary: &str, cancel: &str, text_width: usize) -> (String, String) {
-    // Per button: its key, the space after it. Plus the primary's two padding
-    // cells, which the inversion covers, and the gap between the pair.
-    let fixed = cells(PRIMARY_KEY) + 1 + 2 + BUTTON_GAP + cells(CANCEL_KEY) + 1;
-    if cells(primary) + fixed + cells(cancel) <= text_width {
-        return (primary.to_string(), cancel.to_string());
-    }
-    let room = text_width.saturating_sub(fixed);
-    let for_cancel = room / 2;
-    (
-        truncate(primary, room - for_cancel),
-        truncate(cancel, for_cancel),
-    )
 }
 
 /// How many terminal cells a string occupies.

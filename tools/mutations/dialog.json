@@ -51,14 +51,14 @@
       "replace": "let width = width;"
     },
     {
-      "name": "labels are fitted before drawing",
-      "find": "if cells(primary) + fixed + cells(cancel) <= text_width {",
+      "name": "the buttons stack when they do not both fit a row",
+      "find": "if cells(&primary) + BUTTON_GAP + cells(&cancel) <= text_width {",
       "replace": "if true {"
     },
     {
-      "name": "the label budget pays for the keys",
-      "find": "let fixed = cells(PRIMARY_KEY) + 1 + 2 + BUTTON_GAP + cells(CANCEL_KEY) + 1;",
-      "replace": "let fixed = 2 + BUTTON_GAP;"
+      "name": "a label too wide for a row of its own is shortened",
+      "find": "if cells(&full) <= text_width {",
+      "replace": "if true {"
     },
     {
       "name": "a key with no label drops its separator",
@@ -67,8 +67,8 @@
     },
     {
       "name": "the hovered button is marked",
-      "find": "true => UNDERLINE,",
-      "replace": "true => \"\","
+      "find": "if *hot {\n            middle.push_str(UNDERLINE);",
+      "replace": "if false {\n            middle.push_str(UNDERLINE);"
     },
     {
       "name": "channels are unique per call",
