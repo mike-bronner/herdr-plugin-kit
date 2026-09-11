@@ -100,19 +100,25 @@ def copy(target: Path) -> None:
         shutil.copy2(TEMPLATE_DIR / name, destination / name)
 
 
-def inferred_identity(target: Path) -> Tuple[str, str]:
-    """Asks the *synced* ``bin/common`` what it works out about this plugin.
+def ask_common(target: Path, *expressions: str) -> List[str]:
+    """Asks the *synced* ``bin/common`` to evaluate shell expressions, in order.
 
-    🔑 It runs the real shell rather than reading the TOML here. The two facts
-    the templates infer — the binary's name and the plugin's own slug — have
-    exactly one implementation, and this is a check of that implementation
-    against this plugin's actual files, not a second opinion about them.
+    🔑 It runs the real shell rather than reading the TOML here. Every fact the
+    templates infer has exactly one implementation, and asking it is a check of
+    that implementation against this plugin's actual files, never a second
+    opinion about them. A second parser on this side would agree with itself
+    while disagreeing with the shell, which is the failure it exists to catch.
 
-    A wrong answer here is the failure this design is most exposed to, and it
-    is silent at run time: a plugin that infers the wrong binary name fetches
-    one asset and executes another.
+    Each expression is evaluated inside double quotes, so ``$BINARY`` reads a
+    variable and ``$(manifest_version)`` calls a function. One line comes back
+    per expression, empty ones included, and the caller decides which emptiness
+    is a defect.
     """
-    script = '. "$1/bin/common"; printf "%s\\n%s\\n" "$BINARY" "$SLUG"'
+    for expression in expressions:
+        if '"' in expression:
+            raise SyncError(f"a double quote cannot survive this quoting: {expression}")
+    fields = " ".join(f'"{expression}"' for expression in expressions)
+    script = f'. "$1/bin/common"; printf "%s\\n" {fields}'
     finished = subprocess.run(
         ["sh", "-c", script, "sh", str(target)],
         capture_output=True,
@@ -124,13 +130,30 @@ def inferred_identity(target: Path) -> Tuple[str, str]:
             "the synced bin/common cannot read this plugin's own files:\n"
             f"{finished.stderr.strip()}"
         )
-    lines = finished.stdout.splitlines()
-    if len(lines) != 2 or not lines[0] or not lines[1]:
+    answers = finished.stdout.splitlines()
+    if len(answers) != len(expressions):
+        raise SyncError(
+            f"the synced bin/common answered {len(answers)} lines to "
+            f"{len(expressions)} questions, so one of them did not run or an "
+            "answer carried a newline"
+        )
+    return answers
+
+
+def inferred_identity(target: Path) -> Tuple[str, str]:
+    """The two facts the templates infer: the binary's name, and the slug.
+
+    A wrong answer here is the failure this design is most exposed to, and it
+    is silent at run time: a plugin that infers the wrong binary name fetches
+    one asset and executes another.
+    """
+    binary, slug = ask_common(target, "$BINARY", "$SLUG")
+    if not binary or not slug:
         raise SyncError(
             "the synced bin/common answered nothing for the binary name or the "
             "plugin slug, so the shims would not know what to build"
         )
-    return lines[0], lines[1]
+    return binary, slug
 
 
 def sync(target: Path, check_only: bool) -> int:
