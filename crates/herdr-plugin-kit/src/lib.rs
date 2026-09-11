@@ -21,7 +21,8 @@
 //! neither popup machinery nor a terminal library.
 //!
 //! ⚠️ [`dialog`] does not send anything itself. It takes a
-//! [`dialog::PaneOpener`], because the kit's own transport is a later stage.
+//! [`dialog::Transport`], the two socket calls it needs, because the kit's own
+//! client is a later stage.
 //!
 //! # Regenerating
 //!

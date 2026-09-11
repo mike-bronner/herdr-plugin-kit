@@ -135,7 +135,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use crate::api::generated::{
-    PluginPaneOpenParams, PluginPanePlacement, PopupSize, PopupSizeString,
+    NotificationShowParams, NotificationShowReason, PluginPaneOpenParams, PluginPanePlacement,
+    PopupSize, PopupSizeString,
 };
 use crate::env::Environment;
 
@@ -203,6 +204,15 @@ pub const CANCEL_KEY: &str = "esc";
 /// ```text
 /// {"code":"ui_busy","message":"a popup pane is already open"}
 /// ```
+///
+/// 🚨 **The single-popup limit is global, not per workspace.** Measured
+/// 2026-09-11. So an unanswered dialog in one workspace blocks dialogs in
+/// **every** workspace, with nothing on screen to explain it, and the kit
+/// cannot even say where the blocker is: a popup has no pane id and is absent
+/// from `pane.list`. `ui_busy` is therefore not a rare race to guard against
+/// defensively, it is a state a user can sit in indefinitely without knowing.
+/// That is what makes the notification fallback worth an extra socket call
+/// rather than a nicety.
 ///
 /// ⚠️ **The schema enumerates no error code anywhere** (SCOPE.md §3.5), so
 /// nothing here is generatable and nothing here is checkable against the
@@ -484,7 +494,7 @@ pub enum OpenError {
 impl OpenError {
     /// Classifies a Herdr error body into [`Busy`](OpenError::Busy) or not.
     ///
-    /// Implementors of [`PaneOpener`] call this rather than matching the string
+    /// Implementors of [`Transport`] call this rather than matching the string
     /// themselves, so the one hand-maintained error code in this module lives
     /// in one place with its measurement beside it.
     pub fn from_error(code: &str, message: &str) -> OpenError {
@@ -495,37 +505,87 @@ impl OpenError {
     }
 }
 
-/// Sends `plugin.pane.open` to Herdr, and says whether a popup opened.
+/// The two socket calls a dialog needs, and deliberately no more.
 ///
-/// 🔑 **Deliberately the whole of the socket's job, and no more.** The answer
-/// file and the process-id marker are filesystem work and stay on this side of
-/// the trait, because they are not things a transport owns.
+/// 🔑 **Named for what this module requires, not for the transport behind
+/// it.** Calling it `Herdr` would overclaim: it holds two of the protocol's
+/// hundred and two methods, and a consumer reading `impl Herdr for MyClient`
+/// would reasonably expect far more. A name describing the requirement also
+/// survives dialogs needing a third call later, where `Herdr` would have been
+/// wrong the whole time and never said so.
+///
+/// The answer file and the process-id marker stay outside this trait. They are
+/// filesystem work, and not something a transport owns.
 ///
 /// This shape is not a workaround for the kit's transport being unbuilt. A
 /// module that takes its sender as a trait is how this would be designed even
 /// with `client.rs` in place, because it is what makes every path here testable
 /// without a live server. When SCOPE.md §4.2 lands, the kit's own client
 /// implements this trait and no caller changes.
-pub trait PaneOpener {
-    /// Sends the request. `Ok(())` means Herdr accepted it.
+pub trait Transport {
+    /// Sends `plugin.pane.open`. `Ok(())` means Herdr accepted the request.
     ///
     /// ⚠️ **An `Ok` is not evidence that a pane appeared.** `plugin.pane.open`
     /// answers `{"type":"ok"}` for a popup whether or not the process starts,
     /// and carries no handle to ask with. The started marker is what decides
     /// that, and [`ask`] is what reads it.
-    fn open(&mut self, params: PluginPaneOpenParams) -> Result<(), OpenError>;
+    fn open_pane(&mut self, params: PluginPaneOpenParams) -> Result<(), OpenError>;
+
+    /// Sends `notification.show`, and answers **what Herdr said about
+    /// delivery** rather than a bare success.
+    ///
+    /// 🚨 **Returning the reason is the contract, not a convenience.** SCOPE.md
+    /// §7.2 exists because both plugins that send a toast today discard the
+    /// whole response, so a dropped message and a delivered one are
+    /// indistinguishable from information the caller already received. An
+    /// implementation that throws the reason away and answers `Shown`
+    /// reintroduces exactly that defect inside the module that fixes it.
+    ///
+    /// `Err` is for a notification that could not be sent at all, which is a
+    /// different fact from one Herdr accepted and chose not to display.
+    fn show_notification(
+        &mut self,
+        params: NotificationShowParams,
+    ) -> Result<NotificationShowReason, String>;
+}
+
+/// What became of a notification sent because a popup was unavailable.
+///
+/// Two cases, because they are different facts. Herdr accepting a notification
+/// and declining to display it is not the same as a notification that never
+/// reached Herdr.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Explained {
+    /// Herdr accepted it, and answered with this delivery reason.
+    ///
+    /// ⚠️ **Not necessarily seen.** [`NotificationShowReason::Disabled`],
+    /// `RateLimited`, `NoForegroundClient` and `Busy` all mean the user was
+    /// told nothing. The reason is handed back rather than judged, exactly as
+    /// SCOPE.md §7.2 requires.
+    Reason(NotificationShowReason),
+    /// It could not be sent, so the user was told nothing and nothing knows why.
+    Unreachable(String),
 }
 
 /// What became of a bare dialog.
 ///
-/// Three outcomes and no answer, because [`notify`] waits for nothing.
+/// 🔑 **Four states, because four things genuinely differ**: the popup opened,
+/// it was busy and the user was told another way, it was busy and the user was
+/// told nothing, or the request failed outright.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Shown {
     /// Herdr accepted the request.
     Opened,
-    /// ✅ A popup was already open, so this one was never shown.
-    Busy,
-    /// The request failed, and this is what the sender said about it.
+    /// ✅ A popup was already open, so the message went to a notification
+    /// instead, and Herdr answered with this delivery reason.
+    ///
+    /// ⚠️ Read the reason. Only [`NotificationShowReason::Shown`] means the
+    /// user saw anything.
+    Notified(NotificationShowReason),
+    /// A popup was already open **and** the notification could not be sent, so
+    /// nothing reached the user by either route.
+    Unreachable(String),
+    /// The request failed for some reason other than a busy popup.
     Failed(String),
 }
 
@@ -533,7 +593,12 @@ pub enum Shown {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Unanswered {
     /// ✅ A popup was already open, so the question was never asked.
-    Busy,
+    ///
+    /// 🔑 **A notification cannot stand in for a question**, so this is still
+    /// an unanswered dialog and the caller still learns it got no answer. The
+    /// notification only explains *why* nothing appeared, and what it carries
+    /// is whether that explanation reached the user.
+    Busy(Explained),
     /// The popup could not be opened, or its channel could not be made.
     Failed(String),
     /// The popup process died without answering, which is what closing it does.
@@ -583,17 +648,26 @@ impl Answer {
 /// cosmetic warning must not make somebody wait on a dialog to get their
 /// workspace. So there is no channel here, no marker, and nothing to poll.
 ///
-/// The dialog carries no buttons and dismisses on any key.
+/// The dialog carries no buttons and dismisses on any key or any click.
 ///
-/// ⚠️ **The return says only what Herdr answered.** An [`Shown::Opened`] is not
+/// **A busy popup falls back to a notification**, carrying the same title and
+/// body. The user sees the message rather than nothing. See [`BUSY_CODE`] for
+/// why that fallback is worth an extra socket call.
+///
+/// ⚠️ **The return says only what Herdr answered.** A [`Shown::Opened`] is not
 /// evidence the user saw anything, because a popup hands back no handle to ask
-/// with. [`Shown::Busy`] is the honest and useful case: it says this message
-/// lost the race and was never drawn.
-pub fn notify(opener: &mut impl PaneOpener, plugin_id: &str, dialog: &Dialog) -> Shown {
-    match opener.open(open_params(plugin_id, dialog, None, None)) {
+/// with, and a [`Shown::Notified`] carries a reason that may well mean the
+/// notification was dropped too.
+pub fn notify(transport: &mut impl Transport, plugin_id: &str, dialog: &Dialog) -> Shown {
+    match transport.open_pane(open_params(plugin_id, dialog, None, None)) {
         Ok(()) => Shown::Opened,
-        Err(OpenError::Busy) => Shown::Busy,
         Err(OpenError::Failed(why)) => Shown::Failed(why),
+        // A dialog that only informs can say the same thing through a
+        // notification, because it needs nothing back from the user.
+        Err(OpenError::Busy) => match explain(transport, &dialog.title, &dialog.body) {
+            Explained::Reason(reason) => Shown::Notified(reason),
+            Explained::Unreachable(why) => Shown::Unreachable(why),
+        },
     }
 }
 
@@ -602,10 +676,17 @@ pub fn notify(opener: &mut impl PaneOpener, plugin_id: &str, dialog: &Dialog) ->
 /// This variant necessarily waits, because its answer is the thing the caller
 /// asked for. [`notify`] is the variant that must not.
 ///
+/// 🚨 **A busy popup does not become a notification here.** A notification
+/// cannot collect an answer, so silently turning a question into a statement
+/// would lose the answer and tell the caller nothing about it. Instead the
+/// caller still gets [`Unanswered::Busy`], and a notification separately
+/// explains to the user why no dialog appeared. Both halves are reported: the
+/// caller learns it has no answer, and it learns whether the explanation landed.
+///
 /// Every way of not being answered is reported rather than swallowed, and none
 /// of them answers [`Answer::Primary`]. Use [`Answer::chose_primary`].
 pub fn ask(
-    opener: &mut impl PaneOpener,
+    transport: &mut impl Transport,
     plugin_id: &str,
     dialog: &Dialog,
     buttons: &Buttons,
@@ -620,15 +701,40 @@ pub fn ask(
         }
     };
 
-    match opener.open(open_params(
+    match transport.open_pane(open_params(
         plugin_id,
         dialog,
         Some(buttons),
         Some(&channel),
     )) {
         Ok(()) => decide(channel.watch()),
-        Err(OpenError::Busy) => Answer::Unanswered(Unanswered::Busy),
         Err(OpenError::Failed(why)) => Answer::Unanswered(Unanswered::Failed(why)),
+        Err(OpenError::Busy) => {
+            let body = format!(
+                "{} This question could not be asked, because another dialog is \
+                 already open.",
+                dialog.body
+            );
+            Answer::Unanswered(Unanswered::Busy(explain(transport, &dialog.title, &body)))
+        }
+    }
+}
+
+/// Tells the user something through a notification, and reports what happened.
+///
+/// 🚨 **Reads the reason rather than discarding it**, which is the whole of
+/// SCOPE.md §7.2. A fallback that silently fails is worse than no fallback,
+/// because it removes the caller's last signal that anything went wrong.
+fn explain(transport: &mut impl Transport, title: &str, body: &str) -> Explained {
+    let params = NotificationShowParams {
+        body: Some(body.to_string()),
+        position: None,
+        sound: None,
+        title: title.to_string(),
+    };
+    match transport.show_notification(params) {
+        Ok(reason) => Explained::Reason(reason),
+        Err(why) => Explained::Unreachable(why),
     }
 }
 

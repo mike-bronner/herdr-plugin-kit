@@ -13,12 +13,14 @@
 
 use std::time::{Duration, Instant};
 
-use herdr_plugin_kit::api::generated::{PluginPaneOpenParams, PluginPanePlacement};
+use herdr_plugin_kit::api::generated::{
+    NotificationShowParams, NotificationShowReason, PluginPaneOpenParams, PluginPanePlacement,
+};
 use herdr_plugin_kit::dialog::{
-    ask, layout, notify, render, Answer, Buttons, Dialog, Hot, OpenError, PaneOpener, Popup, Rect,
-    Shown, State, Unanswered, ANSWER_FILE_VAR, BODY_VAR, BUSY_CODE, CANCEL_KEY, CANCEL_VAR,
-    CANCEL_WORD, DEFAULT_CANCEL, ENTRYPOINT, HEIGHT, PRIMARY_KEY, PRIMARY_VAR, PRIMARY_WORD,
-    STARTED_FILE_VAR, STATE_VAR, TITLE_VAR, WIDTH,
+    ask, layout, notify, render, Answer, Buttons, Dialog, Explained, Hot, OpenError, Popup, Rect,
+    Shown, State, Transport, Unanswered, ANSWER_FILE_VAR, BODY_VAR, BUSY_CODE, CANCEL_KEY,
+    CANCEL_VAR, CANCEL_WORD, DEFAULT_CANCEL, ENTRYPOINT, HEIGHT, PRIMARY_KEY, PRIMARY_VAR,
+    PRIMARY_WORD, STARTED_FILE_VAR, STATE_VAR, TITLE_VAR, WIDTH,
 };
 use herdr_plugin_kit::env::Environment;
 
@@ -32,29 +34,46 @@ const BUSY_MESSAGE: &str = "a popup pane is already open";
 /// An opener that records what it was handed and answers what it was told to.
 struct Fake {
     answer: Result<(), OpenError>,
+    /// What `notification.show` answers, or `None` to make it unreachable.
+    notification: Option<NotificationShowReason>,
     seen: Vec<PluginPaneOpenParams>,
+    notified: Vec<NotificationShowParams>,
 }
 
 impl Fake {
-    fn ok() -> Fake {
+    fn new(answer: Result<(), OpenError>) -> Fake {
         Fake {
-            answer: Ok(()),
+            answer,
+            notification: Some(NotificationShowReason::Shown),
             seen: Vec::new(),
+            notified: Vec::new(),
         }
+    }
+
+    fn ok() -> Fake {
+        Fake::new(Ok(()))
     }
 
     fn busy() -> Fake {
-        Fake {
-            answer: Err(OpenError::from_error(BUSY_CODE, BUSY_MESSAGE)),
-            seen: Vec::new(),
-        }
+        Fake::new(Err(OpenError::from_error(BUSY_CODE, BUSY_MESSAGE)))
     }
 
     fn failing() -> Fake {
-        Fake {
-            answer: Err(OpenError::Failed("socket is gone".to_string())),
-            seen: Vec::new(),
-        }
+        Fake::new(Err(OpenError::Failed("socket is gone".to_string())))
+    }
+
+    /// A busy popup whose notification answers `reason`.
+    fn busy_notifying(reason: NotificationShowReason) -> Fake {
+        let mut fake = Fake::busy();
+        fake.notification = Some(reason);
+        fake
+    }
+
+    /// A busy popup whose notification cannot be sent at all.
+    fn busy_unreachable() -> Fake {
+        let mut fake = Fake::busy();
+        fake.notification = None;
+        fake
     }
 
     fn only(&self) -> &PluginPaneOpenParams {
@@ -63,10 +82,19 @@ impl Fake {
     }
 }
 
-impl PaneOpener for Fake {
-    fn open(&mut self, params: PluginPaneOpenParams) -> Result<(), OpenError> {
+impl Transport for Fake {
+    fn open_pane(&mut self, params: PluginPaneOpenParams) -> Result<(), OpenError> {
         self.seen.push(params);
         self.answer.clone()
+    }
+
+    fn show_notification(
+        &mut self,
+        params: NotificationShowParams,
+    ) -> Result<NotificationShowReason, String> {
+        self.notified.push(params);
+        self.notification
+            .ok_or_else(|| "the socket is gone".to_string())
     }
 }
 
@@ -78,8 +106,8 @@ struct Answering {
     delay: Duration,
 }
 
-impl PaneOpener for Answering {
-    fn open(&mut self, params: PluginPaneOpenParams) -> Result<(), OpenError> {
+impl Transport for Answering {
+    fn open_pane(&mut self, params: PluginPaneOpenParams) -> Result<(), OpenError> {
         let started = params.env.get(STARTED_FILE_VAR).cloned();
         let answer = params
             .env
@@ -98,6 +126,13 @@ impl PaneOpener for Answering {
             std::fs::write(answer, word).unwrap();
         });
         Ok(())
+    }
+
+    fn show_notification(
+        &mut self,
+        _params: NotificationShowParams,
+    ) -> Result<NotificationShowReason, String> {
+        panic!("a popup that opened must never fall back to a notification");
     }
 }
 
@@ -296,27 +331,157 @@ fn a_failed_open_keeps_what_herdr_said_about_it() {
 }
 
 #[test]
-fn a_bare_dialog_that_lost_the_race_says_so_rather_than_showing_nothing() {
-    // 🔑 The defect SCOPE.md §7.2 was written to fix, in its dialog form: a
-    // dropped message and a delivered one must not be indistinguishable to the
-    // caller, from information the caller already received.
-    assert_eq!(notify(&mut Fake::busy(), PLUGIN, &dialog()), Shown::Busy);
-    assert_eq!(notify(&mut Fake::ok(), PLUGIN, &dialog()), Shown::Opened);
+fn a_bare_dialog_that_lost_the_race_falls_back_to_a_notification() {
+    // 🔑 A dialog that only informs needs nothing back from the user, so the
+    // same message can go by another route. 🚨 That matters more than it looks:
+    // the single-popup limit is global rather than per workspace, so a user can
+    // sit behind one unanswered dialog indefinitely with nothing on screen to
+    // explain it.
+    let mut opener = Fake::busy();
     assert_eq!(
-        notify(&mut Fake::failing(), PLUGIN, &dialog()),
-        Shown::Failed("socket is gone".to_string())
+        notify(&mut opener, PLUGIN, &dialog()),
+        Shown::Notified(NotificationShowReason::Shown)
+    );
+    assert_eq!(opener.notified.len(), 1, "no notification was sent");
+    // The same message, not a summary of it.
+    assert_eq!(opener.notified[0].title, dialog().title);
+    assert_eq!(
+        opener.notified[0].body.as_deref(),
+        Some(dialog().body.as_str())
     );
 }
 
 #[test]
+fn a_bare_dialog_reports_the_notification_reason_rather_than_assuming_it_landed() {
+    // 🚨 SCOPE.md §7.2 in its dialog form. A fallback that silently fails is
+    // worse than no fallback, because it removes the caller's last signal that
+    // anything went wrong. Four of the five reasons mean the user saw nothing.
+    for reason in [
+        NotificationShowReason::Shown,
+        NotificationShowReason::Disabled,
+        NotificationShowReason::RateLimited,
+        NotificationShowReason::NoForegroundClient,
+        NotificationShowReason::Busy,
+    ] {
+        assert_eq!(
+            notify(&mut Fake::busy_notifying(reason), PLUGIN, &dialog()),
+            Shown::Notified(reason),
+            "{:?} was not reported back",
+            reason
+        );
+    }
+}
+
+#[test]
+fn a_bare_dialog_says_so_when_neither_route_reached_the_user() {
+    let shown = notify(&mut Fake::busy_unreachable(), PLUGIN, &dialog());
+    let Shown::Unreachable(why) = shown else {
+        panic!("a failed notification was not reported: {:?}", shown);
+    };
+    assert!(!why.is_empty(), "the failure carries no reason");
+    // Distinct from a notification that was accepted, because nothing reached
+    // the user at all.
+    assert_ne!(
+        notify(&mut Fake::busy(), PLUGIN, &dialog()),
+        notify(&mut Fake::busy_unreachable(), PLUGIN, &dialog())
+    );
+}
+
+#[test]
+fn a_bare_dialog_that_opened_or_failed_sends_no_notification() {
+    // The fallback is for a busy popup and nothing else. A notification beside
+    // a dialog that opened would say everything twice.
+    let mut opened = Fake::ok();
+    assert_eq!(notify(&mut opened, PLUGIN, &dialog()), Shown::Opened);
+    assert!(opened.notified.is_empty(), "a shown dialog also notified");
+
+    let mut failed = Fake::failing();
+    assert_eq!(
+        notify(&mut failed, PLUGIN, &dialog()),
+        Shown::Failed("socket is gone".to_string())
+    );
+    assert!(failed.notified.is_empty(), "a failed open also notified");
+}
+#[test]
 fn a_question_that_lost_the_race_is_reported_as_busy_and_not_as_a_refusal() {
     let answer = ask(&mut Fake::busy(), PLUGIN, &dialog(), &buttons());
-    assert_eq!(answer, Answer::Unanswered(Unanswered::Busy));
+    assert_eq!(
+        answer,
+        Answer::Unanswered(Unanswered::Busy(Explained::Reason(
+            NotificationShowReason::Shown
+        )))
+    );
     // The distinction that matters: busy is not the user cancelling.
     assert_ne!(answer, Answer::Cancel);
     assert!(!answer.chose_primary());
 }
 
+#[test]
+fn a_busy_question_explains_itself_without_becoming_a_statement() {
+    // 🚨 A notification cannot collect an answer, so turning the question into
+    // one would lose the answer and tell the caller nothing about it. The
+    // notification only explains why nothing appeared.
+    let mut opener = Fake::busy();
+    let answer = ask(&mut opener, PLUGIN, &dialog(), &buttons());
+
+    assert!(
+        matches!(answer, Answer::Unanswered(Unanswered::Busy(_))),
+        "the caller was not told the question went unasked"
+    );
+    assert_eq!(opener.notified.len(), 1, "the user was told nothing");
+    let body = opener.notified[0].body.clone().unwrap();
+    assert!(
+        body.contains("could not be asked"),
+        "the notification does not say the question went unasked: {:?}",
+        body
+    );
+    assert!(
+        body.contains("already open"),
+        "the notification does not say why: {:?}",
+        body
+    );
+    // Neither button label appears, because there is nothing to press.
+    assert!(!body.contains("Rebuild"), "a button leaked into a toast");
+    assert!(!body.contains("Leave it"), "a button leaked into a toast");
+}
+
+#[test]
+fn a_busy_question_reports_whether_its_explanation_reached_anyone() {
+    // The caller still learns it has no answer either way. What changes is
+    // whether it can tell the user was left wondering.
+    for reason in [
+        NotificationShowReason::Shown,
+        NotificationShowReason::Disabled,
+        NotificationShowReason::NoForegroundClient,
+    ] {
+        let answer = ask(
+            &mut Fake::busy_notifying(reason),
+            PLUGIN,
+            &dialog(),
+            &buttons(),
+        );
+        assert_eq!(
+            answer,
+            Answer::Unanswered(Unanswered::Busy(Explained::Reason(reason)))
+        );
+        assert!(!answer.chose_primary());
+    }
+
+    let answer = ask(&mut Fake::busy_unreachable(), PLUGIN, &dialog(), &buttons());
+    let Answer::Unanswered(Unanswered::Busy(Explained::Unreachable(why))) = answer else {
+        panic!("an unsendable explanation was not reported");
+    };
+    assert!(!why.is_empty());
+}
+
+#[test]
+fn a_question_that_failed_to_open_sends_no_notification() {
+    // Only a busy popup earns an explanation. A broken socket could not send
+    // one anyway, and claiming otherwise would invent a second failure.
+    let mut opener = Fake::failing();
+    ask(&mut opener, PLUGIN, &dialog(), &buttons());
+    assert!(opener.notified.is_empty(), "a failed open also notified");
+}
 #[test]
 fn a_busy_dialog_is_never_confused_with_one_that_failed_to_open() {
     assert_ne!(
@@ -419,7 +584,8 @@ fn only_an_explicit_primary_answer_ever_chooses_the_primary_button() {
     assert!(!ask(&mut Fake::failing(), PLUGIN, &dialog(), &buttons()).chose_primary());
     assert!(!Answer::Cancel.chose_primary());
     for why in [
-        Unanswered::Busy,
+        Unanswered::Busy(Explained::Reason(NotificationShowReason::Shown)),
+        Unanswered::Busy(Explained::Unreachable("gone".to_string())),
         Unanswered::Failed("x".to_string()),
         Unanswered::Dismissed,
         Unanswered::NeverShown,
