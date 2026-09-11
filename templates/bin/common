@@ -178,10 +178,33 @@ can_draw() {
 # question is what was compiled, not what `git status` says about the tree.
 COMPILER_INPUTS='src Cargo.toml Cargo.lock build.rs .cargo rust-toolchain rust-toolchain.toml'
 
-compiler_input_newer_than() {
+# Whether anything the compiler reads is newer than the binary — or exactly
+# as old as it.
+#
+# 🪤 **The "exactly as old" half is not pedantry, and it was invisible for two
+# stages.** Linux caches the wall clock per timer tick, so two files written in
+# the same tick get a byte-identical mtime *to the nanosecond*. Measured
+# 2026-09-11 on an Ubuntu container: a binary and a source edited straight
+# after it both read `1789159317.075108009`. `find -newer` is **strictly**
+# newer, so that source read as "not newer", and the shim ran a stale binary
+# and said nothing. macOS never showed it — APFS gave the same pair of writes
+# timestamps 2.2ms apart, so the tie essentially cannot happen there.
+#
+# 🔑 Equality means the filesystem cannot say which came first. That is not the
+# same as "the binary is current", and it fails closed like every other
+# unanswerable question here: a build that may warn beats running a binary
+# nobody can vouch for. It is also what `ninja` does, and the opposite of
+# `make`, whose tie behaviour is a long-standing wart.
+#
+# ⚠️ `test ! BIN -nt FILE` is the whole rule, and it replaces both halves: the
+# binary has to be **strictly newer** than every compiler input. It costs one
+# process per file rather than one per input root — measured at 8.4ms against
+# 3.2ms over an eleven-file `src/`, on a path whose alternative is a
+# sixty-second compile or a network fetch.
+compiler_input_not_older_than() {
     for _path in $COMPILER_INPUTS; do
         [ -e "$PLUGIN_ROOT/$_path" ] || continue
-        if [ -n "$(find "$PLUGIN_ROOT/$_path" -newer "$1" -print -quit 2>/dev/null)" ]; then
+        if [ -n "$(find "$PLUGIN_ROOT/$_path" -exec test ! "$1" -nt {} \; -print -quit 2>/dev/null)" ]; then
             return 0
         fi
     done
@@ -202,8 +225,9 @@ note_value() { sed -n "s/^$1=//p" "$MARK" 2>/dev/null | head -1; }
 # asking the wrong question about either one breaks somebody.
 #
 # A compiled binary belongs to the source beside it, so mtimes answer: anything
-# the compiler reads that is newer than the binary means the binary is behind.
-# That is the developer loop.
+# the compiler reads that is newer than the binary — or exactly as old as it —
+# means the binary is behind. That is the developer loop, and the second half
+# of that rule is measured rather than defensive: see above.
 #
 # 🔑 A downloaded binary belongs to a *release*, not to the source beside it.
 # On any commit after a release the source is permanently newer, so mtimes
@@ -221,7 +245,7 @@ needs_build() {
         [ -n "$_declared" ] || return 0
         [ "$_declared" != "$(note_value version)" ]
     else
-        compiler_input_newer_than "$BIN"
+        compiler_input_not_older_than "$BIN"
     fi
 }
 

@@ -168,7 +168,22 @@ $CompilerInputs = @(
     '.cargo', 'rust-toolchain', 'rust-toolchain.toml'
 )
 
-function Test-CompilerInputNewerThan {
+# Whether anything the compiler reads is newer than the binary — or exactly as
+# old as it.
+#
+# 🪤 The second half is a real defect its shell counterpart shipped with for two
+# stages, found on Linux 2026-09-11 and fixed on both sides together. Two files
+# written in the same clock tick can carry an identical timestamp, and a
+# strictly-newer comparison then reads an edited source as current and runs a
+# stale binary in silence.
+#
+# Equality means the filesystem cannot say which came first, which is not the
+# same as "the binary is current". It fails closed, like every other
+# unanswerable question here.
+#
+# ⚠️ This side is unrun like the rest of this file. It is -ge rather than -gt
+# because the rule is the rule, not because anybody has seen NTFS tie.
+function Test-CompilerInputNotOlderThan {
     param([string] $Path)
 
     if (-not (Test-Path -LiteralPath $Path)) { return $true }
@@ -177,11 +192,11 @@ function Test-CompilerInputNewerThan {
         $candidate = Join-Path $PluginRoot $input
         if (-not (Test-Path -LiteralPath $candidate)) { continue }
         $newer = Get-ChildItem -LiteralPath $candidate -Recurse -File -ErrorAction SilentlyContinue |
-            Where-Object { $_.LastWriteTimeUtc -gt $stamp } |
+            Where-Object { $_.LastWriteTimeUtc -ge $stamp } |
             Select-Object -First 1
         if ($newer) { return $true }
         $itself = Get-Item -LiteralPath $candidate
-        if (-not $itself.PSIsContainer -and $itself.LastWriteTimeUtc -gt $stamp) { return $true }
+        if (-not $itself.PSIsContainer -and $itself.LastWriteTimeUtc -ge $stamp) { return $true }
     }
     return $false
 }
@@ -226,7 +241,7 @@ function Test-NeedsBuild {
         if (-not $declared) { return $true }
         return $declared -ne (Get-NoteValue 'version')
     }
-    return Test-CompilerInputNewerThan $Binary
+    return Test-CompilerInputNotOlderThan $Binary
 }
 
 # ---- Naming the published asset ------------------------------------------

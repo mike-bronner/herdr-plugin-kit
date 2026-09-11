@@ -31,6 +31,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -116,6 +117,33 @@ class Plugin:
         # asks the real cargo what it builds, and cannot ask an invalid one.
         text += '[package.metadata.decoy]\nname = "not-a-binary"\n'
         (self.root / "Cargo.toml").write_text(text)
+
+    def put_binary(self, body="#!/bin/sh\necho hi\n"):
+        """Writes the binary and ages the tree so the result is deterministic.
+
+        🪤 Aged rather than raced for. Two files written in the same kernel
+        clock tick share an mtime to the nanosecond on Linux, and a binary
+        that merely *ties* with its sources is stale by the shim's rule —
+        correctly, because nothing can say which came first. A real compile
+        takes sixty seconds, so everything else is aged by a minute. That is
+        the state cargo actually leaves behind, and it answers the same on
+        APFS and on ext4.
+
+        ⚠️ **The binary keeps the mtime the kernel gave it, and that is not an
+        omission.** ``time.time()`` reads the fine-grained clock while a file
+        timestamp comes from a coarse one that lags it, so stamping the binary
+        from Python puts it slightly *ahead* of anything a later
+        ``os.utime(path, None)`` can produce — and every "touch a source, now
+        it is stale" test then silently inverts. The binary has to stay on the
+        same clock as the files it is compared against.
+        """
+        self.bin_path.parent.mkdir(parents=True, exist_ok=True)
+        self.bin_path.write_text(body)
+        self.bin_path.chmod(0o755)
+        older = time.time() - 60
+        for path in self.root.rglob("*"):
+            if path != self.bin_path:
+                os.utime(path, (older, older))
 
     def stub(self, name, body, mode=0o755):
         path = self.stubs / name
@@ -370,10 +398,7 @@ class Staleness(Fixture):
         return plugin.evaluate('needs_build && printf yes || printf no').stdout
 
     def build_a_binary(self, plugin=None):
-        plugin = plugin or self.plugin
-        plugin.bin_path.parent.mkdir(parents=True, exist_ok=True)
-        plugin.bin_path.write_text("#!/bin/sh\necho hi\n")
-        plugin.bin_path.chmod(0o755)
+        (plugin or self.plugin).put_binary()
 
     def test_no_binary_means_build(self):
         self.assertEqual("yes", self.ask())
@@ -386,6 +411,46 @@ class Staleness(Fixture):
         self.build_a_binary()
         os.utime(self.plugin.root / "src" / "main.rs", None)
         self.assertEqual("yes", self.ask())
+
+    def test_a_source_exactly_as_old_as_the_binary_is_stale(self):
+        # 🪤 The defect this class missed for two stages, and the reason the
+        # rule reads "not older" rather than "newer". Linux caches the wall
+        # clock per timer tick, so a binary and a source written in the same
+        # tick get a byte-identical mtime — measured 2026-09-11 as
+        # 1789159317.075108009 for both. A strictly-newer comparison reads
+        # that as current and runs a stale binary, saying nothing.
+        #
+        # macOS gave the same pair of writes timestamps 2.2ms apart, which is
+        # why every test here passed on this machine for two stages. The tie
+        # is therefore *set* rather than raced for, so this discriminates on
+        # APFS as well as on ext4.
+        self.build_a_binary()
+        # ⚠️ Nanoseconds, not st_mtime. A Unix timestamp at nanosecond
+        # resolution needs more significant digits than a float carries, so
+        # reading and writing it as one quietly lands a few nanoseconds *under*
+        # the binary and tests the wrong state. That is the same precision trap
+        # this whole defect is about, one layer up.
+        stamp = os.stat(self.plugin.bin_path).st_mtime_ns
+        os.utime(self.plugin.root / "src" / "main.rs", ns=(stamp, stamp))
+        self.assertEqual("yes", self.ask())
+
+    def test_a_cargo_manifest_exactly_as_old_as_the_binary_is_stale(self):
+        # The same rule against the other shape of input. A plain file and a
+        # directory are separate walks, and an enumeration with no fixture
+        # pinning each member degrades one member at a time.
+        self.build_a_binary()
+        stamp = os.stat(self.plugin.bin_path).st_mtime_ns
+        os.utime(self.plugin.root / "Cargo.toml", ns=(stamp, stamp))
+        self.assertEqual("yes", self.ask())
+
+    def test_a_source_a_moment_older_than_the_binary_is_current(self):
+        # The other side of the rule, so "not older" cannot be satisfied by
+        # answering stale to everything. One second, because the margin the
+        # rule needs is any margin at all.
+        self.build_a_binary()
+        stamp = os.stat(self.plugin.bin_path).st_mtime_ns - 1_000_000_000
+        os.utime(self.plugin.root / "src" / "main.rs", ns=(stamp, stamp))
+        self.assertEqual("no", self.ask())
 
     def test_a_touched_rust_toolchain_toml_makes_it_stale(self):
         # ⚠️ rust-toolchain and rust-toolchain.toml are both in the list and
@@ -760,9 +825,7 @@ class TheLauncher(Fixture):
         self.plugin.fake_cargo()
 
     def install_a_binary(self, body="#!/bin/sh\necho ran \"$@\"\n"):
-        self.plugin.bin_path.parent.mkdir(parents=True, exist_ok=True)
-        self.plugin.bin_path.write_text(body)
-        self.plugin.bin_path.chmod(0o755)
+        self.plugin.put_binary(body)
 
     def test_it_execs_the_binary_and_forwards_arguments(self):
         self.install_a_binary()
@@ -898,7 +961,7 @@ class ShellAndPowerShellAgree(unittest.TestCase):
         "note": "Write-Note",
         "die": "Stop-WithNote",
         "can_draw": "Test-CanDraw",
-        "compiler_input_newer_than": "Test-CompilerInputNewerThan",
+        "compiler_input_not_older_than": "Test-CompilerInputNotOlderThan",
         "note_value": "Get-NoteValue",
         "needs_build": "Test-NeedsBuild",
         "platform": "Get-Platform",
