@@ -36,10 +36,29 @@ Generated against **Herdr `v0.9.0`**, protocol 22, schema version 1.
 
 ## Requirements
 
-Rust **1.80** or newer. That is a raise from the 1.75 the three plugins declare today,
-and it is not a preference: `cargo-typify` emits `std::sync::LazyLock` for every
-pattern-constrained string in Herdr's schema, and that landed in 1.80. The generated
-file is never hand-edited, so the floor moves with it.
+**This crate declares no `rust-version`, on purpose.** Plugins built with it ship as
+compiled binaries and a user installs one without a toolchain, which is the whole point
+of download-by-default. A floor would document a requirement for people who will never
+compile, and the number it carried would be whatever the dependency tree currently
+demanded rather than anything this project chose.
+
+Two things are worth knowing rather than asserting. The generated types use
+`std::sync::LazyLock`, which `cargo-typify` emits for every pattern-constrained string in
+Herdr's schema and which landed in **1.80**, so nothing older than that can compile this
+crate whatever any manifest says. And the committed `Cargo.lock` currently demands more
+than 1.80 anyway: `hashbrown 0.17.1` arrives through `toml` → `toml_edit` → `indexmap`
+and needs the `edition2024` cargo feature, which 1.80's cargo does not have. `SCOPE.md`
+§11.8 records the measurement.
+
+⚠️ **One path does still compile**, and it is the reason the number above is written down
+at all: `bin/build` falls back to compiling from source when a fetch fails, so a user on
+that path with an old toolchain gets a compile error. It is loud and it names itself,
+which is why it does not justify a claim that was measurably false.
+
+The crate depends on `serde`, `serde_json`, `regress`, `toml`, and `interprocess`, and it
+carries no build script, no build dependencies, and no proc macro of its own. `regress`
+arrives with the generated types. `toml` is used only to parse `herdr-plugin.toml`, and
+all three donor plugins already depend on it directly, so it costs them nothing new.
 
 The crate depends on `serde`, `serde_json`, `regress`, `toml`, and `interprocess`, and it
 carries no build script, no build dependencies, and no proc macro of its own. `regress`
@@ -51,8 +70,8 @@ its own floor of 1.66 sits well under this crate's.
 donor plugin has it today. It is bought for portability rather than convenience:
 `HERDR_SOCKET_PATH` is a Unix socket on Unix and a **named pipe** on Windows, so all
 three donors' `UnixStream` clients are Unix-only and none of them could be promoted as
-written. It is the same crate Herdr itself depends on, its floor of 1.75 sits under this
-crate's, and at run time it pulls in `libc` and nothing else.
+written. It is the same crate Herdr itself depends on, and at run time it pulls in `libc`
+and nothing else.
 
 `crossterm` reaches a consumer only through the `dialog` feature, which is off by
 default.

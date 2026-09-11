@@ -4,11 +4,17 @@ resolver = "2"
 
 [workspace.package]
 edition = "2021"
-# 1.80, not the 1.75 the three plugins declare today. cargo-typify emits
-# `std::sync::LazyLock` for every pattern-constrained string in Herdr's schema,
-# and that landed in 1.80. Raising it is not optional while the types are
-# generated, because the generated file is never hand-edited.
-rust-version = "1.80"
+# 🔑 No `rust-version`, decided by Mike 2026-09-11. These plugins ship as
+# compiled binaries, so a consumer needs no toolchain at all — that is the
+# whole point of download-by-default. A floor documents a requirement for
+# people who will never compile, and the number it would carry is whatever the
+# dependency tree currently demands rather than anything this project chose.
+#
+# ⚠️ One case is not useless, and it is recorded rather than argued with: the
+# shim's fallback path does compile from source when a fetch fails, so a user
+# on that path with an old toolchain gets a compile error. That failure is
+# loud and names itself, which is why it does not justify keeping a claim that
+# was measurably false. SCOPE.md §11.8 records what the tree demands today.
 license = "MIT"
 repository = "https://github.com/mike-bronner/herdr-plugin-kit"
 
@@ -26,8 +32,8 @@ crossterm = "0.29"
 # is a named pipe on Windows, so all three donor clients are Unix-only and
 # none of them can be promoted as written. This crate puts one API over both,
 # it is what Herdr itself depends on, and SCOPE.md §4.2 sanctions this exact
-# version. Its own floor is 1.75, under this workspace's 1.80, and at run time
-# it pulls in `libc` and nothing else.
+# version. Its own declared floor is 1.75, and at run time it pulls in `libc`
+# and nothing else.
 # See crates/herdr-plugin-kit/src/api/client.rs.
 interprocess = "2.4.4"
 regress = "0.10"

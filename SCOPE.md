@@ -272,8 +272,8 @@ never threatens it.
 
 `api/client.rs`. One connection per call, newline-delimited JSON, which is the wire
 protocol as measured and as all three donors use it. `interprocess` costs the graph
-`libc` and nothing else at run time, and its own floor of 1.75 sits under this
-workspace's 1.80.
+`libc` and nothing else at run time, and its own declared floor of 1.75 is well under
+anything else in the tree (§11.8).
 
 ⚠️ **It fails the bar `toml` cleared in §5, and harder than `crossterm` did in §7.5.7:
 no donor depends on it, so all three consumers gain a dependency.** Bought anyway, and
@@ -1416,12 +1416,16 @@ ref would check out the default branch and quietly check the plugin against the 
 ### 11.3 `plugin-ci.yml`
 
 ⚠️ **Corrected: there are no required inputs.** This section named three — crate name,
-binary name, minimum Rust version — and building it showed each to be a hazard rather
-than a convenience. **Every one of them is already stated in the plugin's own manifests,
-and an input repeating a manifest fact is a second copy that can disagree with the
-first.** A `binary_name` input disagreeing with `Cargo.toml` publishes an asset under one
-name while every install requests the other, which is precisely the silent failure §11.4
-exists to catch. So the workflow reads them instead.
+binary name, minimum Rust version — and building it retired each for its own reason.
+
+- **Crate name and binary name are hazards rather than conveniences.** Both are already
+  stated in the plugin's own manifests, and **an input repeating a manifest fact is a
+  second copy that can disagree with the first.** A `binary_name` input disagreeing with
+  `Cargo.toml` publishes an asset under one name while every install requests the other,
+  which is precisely the silent failure §11.4 exists to catch. The workflow reads them.
+- **Minimum Rust version has nothing left to name.** §11.8.1 dropped the concept: a
+  plugin ships as a compiled binary, so a floor documents a requirement for people who
+  will never compile. The jobs take the runner's own toolchain.
 
 ✅ One optional input survives: `test_os`, defaulting to `ubuntu-latest`. recent-spaces'
 suite writes under `/private/tmp` and cannot run on Linux at all, which is a fact about
@@ -1581,13 +1585,54 @@ gates. 🔑 **It is its own file because a `paths` filter applies to a workflow 
 to one job inside it** — otherwise a documentation commit triggers twenty minutes of
 recompiling. The two specs run as two legs, so the wall clock is one spec rather than both.
 
-⚠️ **No minimum-toolchain job, and the reason is a live defect rather than an oversight.**
-`rust-version = "1.80"` does not hold against the committed `Cargo.lock`: `hashbrown
-0.17.1`, pulled in transitively through `toml`, requires the `edition2024` cargo feature,
-which 1.80 does not have. Measured 2026-09-11 with `cargo +1.80 check --all-targets
---features dialog --locked`. The published floor is wrong, correcting it is a decision
-about a published claim rather than a CI file, and a job asserting it today would only
-paint the first run red.
+### 11.8.1 🔑 No minimum-toolchain job, because there is no minimum to assert
+
+**Decided by Mike 2026-09-11: this workspace declares no `rust-version` at all.** The
+reasoning is better than either alternative that was put to him. **Plugins built with the
+kit ship as compiled binaries, so a consumer needs no toolchain — that is the whole point
+of download-by-default (§9.2, §9.3).** A floor documents a requirement for people who will
+never compile, and the number it would carry is whatever the dependency tree currently
+demands rather than anything this project chose.
+
+⚠️ **One case is recorded rather than argued with**, because it is the single one where
+the field was not useless: `bin/build`'s fallback path *does* compile from source when a
+fetch fails (§9.4), so a user on that path with an old toolchain gets a compile error.
+That failure is loud and names itself. It does not justify keeping a claim that was
+measurably false, and **removing a false claim beats keeping it in either direction**.
+
+#### 📏 What the tree demands today, measured 2026-09-11
+
+This is a fact about the dependency graph rather than a promise, and it will be worth
+re-measuring the next time somebody asks what toolchain this needs.
+
+```sh
+cargo +1.80 check --all-targets --features dialog --locked
+```
+
+⚠️ **fails**, and not on this crate's own source:
+
+```
+error: failed to parse manifest at `…/hashbrown-0.17.1/Cargo.toml`
+  feature `edition2024` is required
+```
+
+`hashbrown 0.17.1` reaches the tree through `toml` → `toml_edit` → `indexmap`, traced
+with `cargo tree -i`. It needs the `edition2024` cargo feature, which 1.80's cargo does
+not have. ✅ Independently reproduced before the decision was taken.
+
+➕ **A second floor sits underneath that one and moves for a different reason.** The
+generated types use `std::sync::LazyLock`, which `cargo-typify` emits for every
+pattern-constrained string in Herdr's schema (§3) and which landed in **1.80**. That one
+is a property of the generated file rather than of the lock, so re-resolving the tree
+never lowers it and `just sync-api` can raise it.
+
+✅ **Dropping the field changed no dependency resolution.** Cargo's MSRV-aware resolver
+consults `rust-version`, so this was checked rather than assumed: `Cargo.lock` is
+byte-identical after a full re-resolution, and `cargo metadata --locked` still passes.
+🔑 It could not have changed, for a reason the lockfile already showed: this workspace is
+`resolver = "2"`, and MSRV-aware resolution needs `resolver = "3"` or an explicit
+`resolver.incompatible-rust-versions` setting. The field was present while the lock
+resolved `hashbrown 0.17.1`, which is itself proof it was never steering anything.
 
 ---
 
@@ -1860,7 +1905,8 @@ toolchain, or project-finder's own shipped workflow. None was relayed.
 | 11.6, 9.6 | Linux is **musl**, not gnu. A gnu binary carries the builder's glibc floor, and that failure survives the checksum gate and then refuses to start | 📏 corrected to what shipped |
 | 11.8 | The mutation runs are their own workflow, on `main` and on demand. A `paths` filter applies to a workflow and never to one job | 🔑 decision |
 | 9.6, 14.2 | Windows assets carry `.exe`. **Recommended, not confirmed** | ➕ recommendation |
-| 11.8 | `rust-version = "1.80"` does not hold against the committed lock: `hashbrown 0.17.1` needs `edition2024` | 🚨 live defect |
+| 11.8.1 | `rust-version` is dropped entirely. A binary that ships compiled needs no toolchain, so the field documented a requirement for people who will never compile | 🔑 decision |
+| 11.8.1 | What the tree demands: `hashbrown 0.17.1`, through `toml` → `toml_edit` → `indexmap`, needs `edition2024`, which 1.80's cargo lacks. The declared 1.80 was already false | 📏 measurement |
 | 12.2 | The whole asset URL is now pinned in a test as a literal string, which §12.2 required and nothing had done | ➕ new |
 
 ⚠️ **One thing in §11 is unverifiable here and says so in every place it appears:** none
@@ -1868,7 +1914,9 @@ of these workflows has run. They were written on a machine with no `just`, no
 `actionlint`, and no Windows, so the YAML is checked by a parser and the logic is checked
 by a suite, and the first real run is the first real evidence.
 
-✅ **Two claims in §11 were established by running them**, rather than reasoned about:
-all six triples clippy-clean from macOS, and the 1.80 floor failing. The second is why
-§11.8 has no minimum-toolchain job.
+✅ **Three claims in §11 were established by running them**, rather than reasoned about:
+all six triples clippy-clean from macOS, 1.80 failing on `hashbrown`, and the lockfile
+staying byte-identical when `rust-version` was dropped. The second is what §11.8.1
+records; the third is why dropping the field is a documentation change and not a
+resolution change.
 

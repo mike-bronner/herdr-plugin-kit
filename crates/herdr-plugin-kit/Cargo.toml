@@ -3,7 +3,6 @@ name = "herdr-plugin-kit"
 version = "0.1.0"
 description = "Shared building blocks for Herdr plugins, generated from Herdr's own API schema"
 edition.workspace = true
-rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 

@@ -12,10 +12,15 @@ name: Plugin CI
 #         uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-ci.yml@0.1.0
 #
 # 🔑 There are no required inputs, and that is deliberate. Every fact this
-# needs — the binary's name, the version, the minimum toolchain — is already
-# stated in the plugin's own manifests. An input repeating one of them is a
-# second copy that can disagree with the first, and disagreeing about the
-# binary's name is exactly the silent failure this workflow exists to catch.
+# needs — the binary's name, the version — is already stated in the plugin's
+# own manifests. An input repeating one of them is a second copy that can
+# disagree with the first, and disagreeing about the binary's name is exactly
+# the silent failure this workflow exists to catch.
+#
+# No toolchain input either, and nothing here asserts a floor. A plugin ships
+# as a compiled binary, so a user installs one with no toolchain at all and a
+# minimum version documents a requirement for people who will never compile.
+# Every job takes the runner's own toolchain. SCOPE.md §11.8.1.
 #
 # 🪤 Trigger on push as well as pull_request in the caller. When a pull request
 # cannot compute a merge ref against main, Actions skips its pull_request
