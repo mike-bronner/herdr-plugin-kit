@@ -1,0 +1,99 @@
+{
+  "file": "crates/herdr-plugin-kit/src/api/client.rs",
+  "command": [
+    "cargo",
+    "test",
+    "--features",
+    "dialog",
+    "--lib",
+    "--test",
+    "client"
+  ],
+  "mutations": [
+    {
+      "name": "a receive timeout is told apart from a connection failure",
+      "find": "ErrorKind::WouldBlock | ErrorKind::TimedOut => CallError::Timeout {",
+      "replace": "ErrorKind::TimedOut => CallError::Timeout {"
+    },
+    {
+      "name": "the answer's id is checked against the request's",
+      "find": "if answer.id != id {",
+      "replace": "if false {"
+    },
+    {
+      "name": "an empty variable is not a socket path",
+      "find": "match env.get(SOCKET_PATH_VAR).filter(|value| !value.is_empty()) {",
+      "replace": "match env.get(SOCKET_PATH_VAR).filter(|_| true) {"
+    },
+    {
+      "name": "a named socket records that the variable named it",
+      "find": "origin: Origin::Variable,",
+      "replace": "origin: Origin::Default,"
+    },
+    {
+      "name": "a platform with no documented default resolves to nothing",
+      "find": "None => Err(NoSocket),",
+      "replace": "None => Ok(Socket::at(env.home())),"
+    },
+    {
+      "name": "a protocol mismatch is detected at all",
+      "find": "match self.protocol == GENERATED_PROTOCOL {",
+      "replace": "match true {"
+    },
+    {
+      "name": "the mismatch carries the server's number, not the kit's",
+      "find": "server: self.protocol,",
+      "replace": "server: GENERATED_PROTOCOL,"
+    },
+    {
+      "name": "an answer carrying both an error and a result fails closed",
+      "find": "            (Some(error), _) => Err(CallError::Server(error)),\n            (None, Some(result)) => Ok(result),",
+      "replace": "            (Some(_), Some(result)) => Ok(result),\n            (Some(error), None) => Err(CallError::Server(error)),\n            (None, Some(result)) => Ok(result),"
+    },
+    {
+      "name": "a connection closed without an answer says so",
+      "find": "if line.trim().is_empty() {",
+      "replace": "if false {"
+    },
+    {
+      "name": "every request id carries the plugin id",
+      "find": "            self.plugin_id,\n            NEXT_ID.fetch_add(1, Ordering::Relaxed)",
+      "replace": "            \"\",\n            NEXT_ID.fetch_add(1, Ordering::Relaxed)"
+    },
+    {
+      "name": "the request counter advances",
+      "find": "NEXT_ID.fetch_add(1, Ordering::Relaxed)",
+      "replace": "NEXT_ID.load(Ordering::Relaxed)"
+    },
+    {
+      "name": "an unreachable socket names the path it tried",
+      "find": "write!(f, \"cannot reach {}: {}\", socket, reason)",
+      "replace": "write!(f, \"cannot reach the socket: {}\", reason)"
+    },
+    {
+      "name": "a fallen-back socket names the variable that would override it",
+      "find": "\"{} (the default, because {} was not set)\",",
+      "replace": "\"{} (the default){}\","
+    },
+    {
+      "name": "resolving to nothing names the variable that fixes it",
+      "find": "            \"{} is not set, and this platform has no documented default\",\n            SOCKET_PATH_VAR",
+      "replace": "            \"no socket was named{}\",\n            \"\""
+    },
+    {
+      "name": "the default call timeout is five seconds",
+      "find": "pub const CALL_TIMEOUT: Duration = Duration::from_secs(5);",
+      "replace": "pub const CALL_TIMEOUT: Duration = Duration::from_secs(4);"
+    },
+    {
+      "name": "ui_busy reaches the dialog module as busy, not as a failure",
+      "find": "Err(CallError::Server(body)) => Err(OpenError::from_error(&body.code, &body.message)),",
+      "replace": "Err(CallError::Server(body)) => Err(OpenError::Failed(body.message)),"
+    },
+    {
+      "name": "the notification's own delivery reason is handed back",
+      "find": "Ok(ResponseResult::NotificationShow { reason, .. }) => Ok(reason),",
+      "replace": "Ok(ResponseResult::NotificationShow { .. }) => Ok(NotificationShowReason::Shown),"
+    }
+  ]
+}
