@@ -85,18 +85,30 @@
 //! settled**. Every answer is therefore reachable from the keyboard alone, and
 //! a dialog whose clicks never arrive is fully usable rather than unusable.
 //!
-//! # ❓ Open: which workspace a dialog appears in
+//! # Which workspace a dialog appears in
 //!
 //! **Mike's requirement: a dialog must only be visible in the workspace that
 //! triggered it**, rather than sitting there after the user switches away.
+//!
+//! ✅ **Delivered by the default, measured 2026-09-11.** With `workspace_id`
+//! unset, a popup opened in one workspace does not appear when the user
+//! switches away, and is intact when they return. It persists invisibly, which
+//! is exactly the behaviour asked for.
+//!
+//! 🚨 **Setting `workspace_id` is not merely unnecessary, it is refused.** The
+//! same measurement: `plugin.pane.open` with `workspace_id` and `popup`
+//! placement answers `invalid_params`, with the message that overlay and popup
+//! plugin panes target the active pane. A nonexistent workspace id produces the
+//! **identical** error, so the refusal fires on the parameter being present
+//! rather than on any lookup failing.
+//!
+//! So sending it would have meant no dialog at all. [`open_params`] leaves it
+//! unset, and now does so on a measurement rather than on caution.
+//!
 //! Confinement to the triggering *pane* was explicitly not chosen, and is
 //! contradicted by measurement anyway: a popup floats centred over the whole
 //! tab and was captured across a pane divider, and there is no position
 //! parameter at all.
-//!
-//! 🚨 **This is not settled, and [`open_params`] deliberately does not guess.**
-//! See its documentation for what was searched and why omitting `workspace_id`
-//! is the lower-risk of two unmeasured options.
 //!
 //! # ⚠️ Colour is a proposal, and was never measured
 //!
@@ -745,33 +757,22 @@ fn explain(transport: &mut impl Transport, title: &str, body: &str) -> Explained
 /// ✅ an overlay covers the entire tab with zero rows of any underlying pane
 /// surviving, so it is not a dialog. See the module documentation.
 ///
-/// # 🚨 `workspace_id` is left unset, and that is an open question
+/// # `workspace_id` is left unset, and that is measured rather than cautious
 ///
-/// Mike requires a dialog to be visible only in the workspace that triggered
-/// it. **Nobody has established what omitting `workspace_id` does**, and this
-/// function deliberately does not guess in either direction.
+/// ✅ **Measured 2026-09-11.** Sending it is refused: `plugin.pane.open` with
+/// `workspace_id` and `popup` placement answers `invalid_params`, with the
+/// message that overlay and popup plugin panes target the active pane. A
+/// nonexistent workspace id gives the identical error, so the refusal is about
+/// the parameter being present, not about the lookup.
 ///
-/// What was searched, and found to say nothing:
+/// ✅ And it is unnecessary: with the parameter unset, a popup is visible only
+/// in the workspace that opened it. It does not follow the user to another
+/// workspace, and it is intact on return.
 ///
-/// - The published schema declares `workspace_id` as an optional string with
-///   **no description at all**, defaulting to `None`. It cannot answer this.
-/// - agentic-panes-layout's `confirm.rs` has opened popups in production for
-///   months and **never sets it**. That proves a popup appears, not which
-///   workspace it belongs to, because nobody switched workspaces to look.
-/// - No note in the vault or in the donor's measured behaviour covers it.
+/// That is the same shape as `width` and `height`, which are accepted only for
+/// `popup` and refused everywhere else. Herdr validates parameters against the
+/// effective placement in both directions.
 ///
-/// ⚠️ **Setting it is a guess, and the riskier of the two.** Herdr has a
-/// demonstrated habit of rejecting parameters that do not belong to the
-/// effective placement: ✅ `width` and `height` answer `invalid_params` with
-/// "only supported when placement is popup". `workspace_id` may well be the
-/// mirror of that, belonging to `tab` placement, in which case sending it with
-/// `popup` would be refused and **no dialog would appear at all**. Omitting it
-/// preserves the behaviour already shipping.
-///
-/// The opener can supply one when the answer arrives: a pane-hosted process is
-/// handed `HERDR_WORKSPACE_ID`, confirmed 2026-09-09 alongside `HERDR_PANE_ID`
-/// and `HERDR_TAB_ID`. So this is waiting on a measurement rather than on
-/// information the module cannot reach.
 fn open_params(
     plugin_id: &str,
     dialog: &Dialog,
