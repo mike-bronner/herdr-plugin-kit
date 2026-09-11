@@ -1,0 +1,139 @@
+{
+  "file": "crates/herdr-plugin-kit/src/dialog.rs",
+  "command": [
+    "cargo",
+    "test",
+    "--features",
+    "dialog",
+    "--lib",
+    "--test",
+    "dialog"
+  ],
+  "mutations": [
+    {
+      "name": "the busy code is matched exactly",
+      "find": "BUSY_CODE => OpenError::Busy,",
+      "replace": "\"ui_bus\" => OpenError::Busy,"
+    },
+    {
+      "name": "only the exact primary word acts",
+      "find": "PRIMARY_WORD => Answer::Primary,",
+      "replace": "\"prim\" => Answer::Primary,"
+    },
+    {
+      "name": "an unrecognised state warns rather than informs",
+      "find": "Some(_) => State::Warning,",
+      "replace": "Some(_) => State::Info,"
+    },
+    {
+      "name": "the placement is popup",
+      "find": "placement: Some(PluginPanePlacement::Popup),",
+      "replace": "placement: Some(PluginPanePlacement::Overlay),"
+    },
+    {
+      "name": "the popup takes focus",
+      "find": "focus: true,",
+      "replace": "focus: false,"
+    },
+    {
+      "name": "liveness distinguishes a dead process",
+      "find": "Ok(status) => status.success(),",
+      "replace": "Ok(_) => true,"
+    },
+    {
+      "name": "the title budget leaves a cell of fill",
+      "find": "room.saturating_sub(glyph_cells + 4)",
+      "replace": "room.saturating_sub(glyph_cells + 3)"
+    },
+    {
+      "name": "a narrow width is raised to the floor",
+      "find": "let width = width.max(MIN_WIDTH);",
+      "replace": "let width = width;"
+    },
+    {
+      "name": "labels are fitted before drawing",
+      "find": "if cells(primary) + fixed + cells(cancel) <= text_width {",
+      "replace": "if true {"
+    },
+    {
+      "name": "the label budget pays for the keys",
+      "find": "let fixed = cells(PRIMARY_KEY) + 1 + 2 + BUTTON_GAP + cells(CANCEL_KEY) + 1;",
+      "replace": "let fixed = 2 + BUTTON_GAP;"
+    },
+    {
+      "name": "a key with no label drops its separator",
+      "find": "true => key.to_string(),",
+      "replace": "true => format!(\"{} \", key),"
+    },
+    {
+      "name": "the hovered button is marked",
+      "find": "true => UNDERLINE,",
+      "replace": "true => \"\","
+    },
+    {
+      "name": "channels are unique per call",
+      "find": "let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);",
+      "replace": "let n = 0;"
+    },
+    {
+      "name": "a popup that never started is not a dismissal",
+      "find": "None => Ended::NeverShown,",
+      "replace": "None => Ended::Dismissed,"
+    },
+    {
+      "name": "a click must land on the button",
+      "find": "column >= self.column && column < self.column + self.width",
+      "replace": "column >= self.column"
+    },
+    {
+      "name": "a click must land on the button's row",
+      "find": "row == self.row &&",
+      "replace": "true &&"
+    },
+    {
+      "name": "one blank row sits below the buttons",
+      "find": "true => 1,\n        false => VERTICAL_PADDING,",
+      "replace": "true => VERTICAL_PADDING,\n        false => VERTICAL_PADDING,"
+    },
+    {
+      "name": "a busy bare dialog falls back",
+      "find": "Err(OpenError::Busy) => match explain(transport, &dialog.title, &dialog.body) {",
+      "replace": "Err(OpenError::Busy) => match Explained::Reason(NotificationShowReason::Shown) {"
+    },
+    {
+      "name": "the notification reason is reported",
+      "find": "Ok(reason) => Explained::Reason(reason),",
+      "replace": "Ok(_) => Explained::Reason(NotificationShowReason::Shown),"
+    },
+    {
+      "name": "an unsendable notification is reported",
+      "find": "Err(why) => Explained::Unreachable(why),",
+      "replace": "Err(_) => Explained::Reason(NotificationShowReason::Shown),"
+    },
+    {
+      "name": "a busy question stays unanswered",
+      "find": "Answer::Unanswered(Unanswered::Busy(explain(transport, &dialog.title, &body)))",
+      "replace": "{ let _ = explain(transport, &dialog.title, &body); Answer::Cancel }"
+    },
+    {
+      "name": "the notification carries a body",
+      "find": "body: Some(body.to_string()),",
+      "replace": "body: None,"
+    },
+    {
+      "name": "the notification carries a title",
+      "find": "title: title.to_string(),",
+      "replace": "title: String::new(),"
+    },
+    {
+      "name": "the danger glyph is its own",
+      "find": "State::Danger => \"\\u{2716}\",",
+      "replace": "State::Danger => \"\\u{2713}\","
+    },
+    {
+      "name": "the info glyph is its own",
+      "find": "State::Info => \"\\u{229d}\",",
+      "replace": "State::Info => \"\\u{2713}\","
+    }
+  ]
+}

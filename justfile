@@ -37,11 +37,24 @@ sync-bin plugin:
 check-bin plugin:
     python3 templates/sync_bin.py {{plugin}} --check
 
-# Run every test: the codegen guards, the shell templates, then the Rust suite.
+# Run every test: the codegen guards, the shell templates, the mutation
+# harness's own tests, then the Rust suite.
 test:
     python3 codegen/test_codegen.py
     python3 templates/test_templates.py
-    cargo test
+    python3 tools/test_mutate.py
+    cargo test --features dialog
+
+# Check the tests actually test: break one thing at a time and confirm the
+# suite reddens.
+#
+# Not part of `check`, because it recompiles once per mutation and takes
+# minutes rather than seconds. Run it when adding or changing a guard.
+#
+# Without `just`, run `python3 tools/mutate.py <spec>`, which is the same
+# entry point.
+mutate spec="tools/mutations/dialog.json":
+    python3 tools/mutate.py {{spec}}
 
 # Format every Rust file.
 fmt:

@@ -108,6 +108,11 @@ herdr-plugin-kit/
 │   │   └── launcher         launcher.ps1
 │   ├── sync_bin.py                   # the sync task, and `--check`
 │   └── test_templates.py             # the shims' own tests, no network
+├── tools/
+│   ├── mutate.py                     # the mutation harness, JSON-classified
+│   ├── test_mutate.py                # its own tests, including two regressions
+│   └── mutations/
+│       └── dialog.json               # the dialogs' 25 mutations
 ├── .github/workflows/
 │   ├── plugin-ci.yml                 # reusable, workflow_call
 │   ├── plugin-release.yml            # reusable, workflow_call
