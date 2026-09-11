@@ -66,9 +66,9 @@ information the caller already received. §7.2 is what the kit does about it.
 ## 2. Repository layout
 
 The target layout. Built so far: `codegen/`, the `api` module, `env.rs`, `version.rs`,
-the whole of `crates/herdr-plugin-kit-build/`, and `templates/`. Still to come:
-`client.rs` and `.github/workflows/`. `report.rs` and `update.rs` are held by §13 rather
-than merely pending.
+`dialog.rs`, the whole of `crates/herdr-plugin-kit-build/`, and `templates/`. Still to
+come: `client.rs` and `.github/workflows/`. `report.rs` and `update.rs` are held by §13
+rather than merely pending.
 
 ```
 herdr-plugin-kit/
@@ -84,9 +84,13 @@ herdr-plugin-kit/
 │   │   │   │   └── client.rs         # transport
 │   │   │   ├── env.rs
 │   │   │   ├── version.rs
+│   │   │   ├── dialog.rs             # feature: "dialog"
 │   │   │   ├── report.rs             # feature: "report"
 │   │   │   └── update.rs             # feature: "update"
+│   │   ├── examples/
+│   │   │   └── preview.rs            # draws every dialog locally, in real colour
 │   │   └── tests/
+│   │       ├── dialog.rs             # the dialogs, against a fake opener
 │   │       └── method_sweep.rs       # generated, the 102-discriminator sweep
 │   └── herdr-plugin-kit-build/       # build-dependency crate only
 ├── codegen/
