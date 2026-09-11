@@ -1164,10 +1164,18 @@ calls `bin/build` makes, and `progress_backend()` picks the implementation. ⚠�
 terminal is one named implementation, not the default everything falls back to** — that
 distinction is what makes the dialog one new arm rather than a rewrite.
 
-⚠️ **The dialog is deliberately unwritten, and must not be designed around.** Which
-placement it uses is open: a probe is establishing whether an overlay floats like a
-dialog or tiles like a pane, and that answer decides between several hundred lines of
-cross-process machinery and almost none.
+✅ **The placement question is answered, and the dialog itself is built** (§7.5). A popup
+floats like a dialog, an overlay covers the whole tab, and popup hands back no pane id.
+
+⚠️ **The arm in `bin/progress` is still empty, deliberately.** Filling it needs a
+newline-delimited JSON socket client **in POSIX shell**: `bin/common` has no socket
+helper, and the shim cannot call the Rust module, because a build spinner runs *while the
+binary is being compiled* and there is no binary to call. §4.2's transport stage may make
+that unnecessary, so writing one now risks writing it twice.
+
+🚨 **The longest wait can never use a dialog whatever gets built**, per the measurement
+above. So a dialog arm would only ever serve the startup and pane-hosted paths, which
+already have full environments and are the fast ones.
 
 ### 10.1 Windows doubles every template
 

@@ -53,12 +53,37 @@
 # including the socket path, the plugin id, and a context JSON naming the
 # invocation source. Anything is reachable there.
 #
-# ⚠️ **The dialog is deliberately not written yet, and must not be designed
-# around.** Which placement it uses is open: a probe is establishing whether an
-# overlay floats like a dialog or tiles like a pane, and that answer decides
-# between several hundred lines of cross-process machinery and almost none.
-# Adding it means one arm in progress_backend() and one pair of functions
-# beside the terminal ones. Nothing outside this file changes.
+# ── The dialog arm, deliberately unfilled ─────────────────────────────────
+#
+# ✅ The placement question is settled. It was open when this file was written;
+# a probe answered it on 2026-09-11. **A popup floats like a dialog and an
+# overlay covers the whole tab**, so dialogs use popup, and popup hands back no
+# pane id at all. The kit now ships the dialog itself as a Rust module,
+# `herdr_plugin_kit::dialog`, behind its `dialog` feature.
+#
+# ⚠️ **The arm here is still empty, and that is a decision rather than an
+# oversight.** What it would take is specific:
+#
+# 1. **A newline-delimited JSON socket client, in POSIX shell.** bin/common has
+#    no socket helper of any kind, and this file cannot call the Rust module:
+#    the whole point of a build spinner is that it runs *while the binary is
+#    being compiled*, so there is no binary to call yet.
+# 2. **Possibly nothing, later.** SCOPE.md section 4.2's transport stage is
+#    unbuilt. Once it exists, a small always-available helper binary may make a
+#    shell socket client unnecessary, so writing one now risks writing it twice.
+#
+# 🚨 **And the longest wait can never use a dialog whatever gets built.** A
+# [[build]] hook during `herdr plugin install` is blocked twice over, measured
+# end to end: it is handed zero HERDR_* variables, and the plugin is not
+# registered until after the hook completes, so `plugin.pane.open` answers
+# `plugin_not_found` even with a socket recovered by hand. That is the sixty to
+# ninety second first-install compile. The terminal spinner below is its
+# permanent answer, not a placeholder.
+#
+# So a dialog arm would only ever serve the startup and pane-hosted paths,
+# which already have full environments and are the *fast* ones. Adding it means
+# one arm in progress_backend() and one pair of functions beside the terminal
+# ones. Nothing outside this file changes.
 #
 # ── What is settled whatever draws ────────────────────────────────────────
 #
