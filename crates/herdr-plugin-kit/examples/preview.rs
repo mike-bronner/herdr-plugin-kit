@@ -5,13 +5,23 @@
 //! cargo run --features dialog --example preview -- 80
 //! ```
 //!
-//! 🔑 **Why this exists.** The palette in `dialog::State::colour` is a proposal
-//! and was never measured: the probe that settled everything else about these
-//! dialogs captured geometry and characters but not colour, because the capture
-//! library discards SGR attributes. Checking it meant linking a temporary
-//! plugin into a live Herdr server and unlinking it afterwards, three times
-//! over, with the answer still unsettled. This turns each of those passes into
-//! seconds.
+//! 🔑 **Why this exists, and what it already paid for.** The palette in
+//! `dialog::State::colour` could not be measured: the probe that settled
+//! everything else about these dialogs captured geometry and characters but
+//! not colour, because the capture library discards SGR attributes. So the
+//! only way to judge it was to look at it, and before this example that meant
+//! linking a temporary plugin into a live Herdr server and unlinking it
+//! afterwards. **Mike made three such trips and the answer was still
+//! unsettled.** This turns each of those into one local command.
+//!
+//! ✅ **The fourth attempt was this example, and it settled it.** The palette
+//! was reviewed and approved on 2026-09-11 from output this file rendered,
+//! along with the stacked and floor button layouts below.
+//!
+//! 🔑 **That is the argument for building the thing that makes a check
+//! trivial**, and it is recorded here rather than in a commit message nobody
+//! re-reads. A check that costs a round trip to a live server is a check that
+//! does not happen; the same check as a local command happened immediately.
 //!
 //! 🚨 **It draws through [`herdr_plugin_kit::dialog::layout`], which is the
 //! exact call the popup's own paint path makes.** That is deliberate and must

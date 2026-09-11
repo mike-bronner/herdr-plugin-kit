@@ -110,13 +110,21 @@
 //! tab and was captured across a pane divider, and there is no position
 //! parameter at all.
 //!
-//! # ⚠️ Colour is a proposal, and was never measured
+//! # ✅ Colour is reviewed and approved, and still unmatched
 //!
-//! The probe captured **geometry and characters, not colour**: the capture
-//! library discards SGR attributes, so borders and titles were confirmed
-//! present but never confirmed coloured. **Nobody has established how Herdr
-//! colours its own dialogs.** The palette in [`State::colour`] is a proposal
-//! that looks right, not a match that was verified.
+//! ✅ **Approved by Mike on 2026-09-11**, from the `preview` example rendered
+//! in Terminal.app under his own theme: the four colours read correctly and
+//! tell the four states apart. A palette is a design question, and its author
+//! looking at it is the right authority for one — which is precisely what the
+//! original caveat was missing.
+//!
+//! ⚠️ **Approved is not matched, and the unexamined half survives the
+//! approval.** Nobody has put the kit's blue beside Herdr's own blue in one
+//! frame. The probe captured **geometry and characters, not colour** — the
+//! capture library discards SGR attributes, so borders and titles were
+//! confirmed present and never confirmed coloured — and **nobody has
+//! established how Herdr colours its own dialogs.** That was true before the
+//! review and it is true after it.
 //!
 //! Inversion is different. It is a standard terminal attribute rather than a
 //! claim about Herdr, so the primary button will render as intended.
@@ -385,21 +393,25 @@ impl State {
 
     /// The SGR foreground parameter for this state.
     ///
-    /// ⚠️ **Unmeasured, and a proposal.** The probe that settled everything
-    /// else about this dialog captured geometry and characters but not colour,
-    /// because the capture library discards SGR attributes. Nobody knows how
-    /// Herdr colours its own dialogs. See the module documentation.
+    /// ✅ **All four reviewed and approved by Mike on 2026-09-11**, from the
+    /// `preview` example rendered in Terminal.app under his own theme. The
+    /// judgement was that they read correctly and tell the four states apart,
+    /// which is the question a palette actually has to answer.
+    ///
+    /// ⚠️ **Approved is not matched.** Nobody has put these beside Herdr's own
+    /// dialog colours in one frame, and nobody has established how Herdr
+    /// colours its own. See the module documentation.
     ///
     /// These are the eight basic colours and their bright variants rather than
     /// 256-colour or truecolour values, so a themed terminal maps each one to
     /// the palette the user already chose.
     ///
-    /// ⚠️ **Info is the bright variant and the other three are not, and that
-    /// asymmetry is deliberate rather than an oversight.** Mike saw the palette
-    /// rendered on 2026-09-11 and asked for light blue on info alone; 94 is the
-    /// bright form of the same basic blue, so it stays inside the eight-plus-
-    /// eight set and keeps the property the whole palette was chosen for. The
-    /// other three were not part of that instruction and were left as they are.
+    /// ✅ **Info is the bright variant and the other three are not, and that
+    /// asymmetry was reviewed with the rest and stands.** Mike asked for light
+    /// blue on info alone; 94 is the bright form of the same basic blue, so it
+    /// stays inside the eight-plus-eight set and keeps the property the whole
+    /// palette was chosen for. Bright info against three normal siblings
+    /// looked correct to the person who asked for it.
     pub fn colour(self) -> u8 {
         match self {
             State::Info => 94,

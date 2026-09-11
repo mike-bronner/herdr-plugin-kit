@@ -17,8 +17,10 @@ path = "src/lib.rs"
 default = []
 dialog = ["dep:crossterm"]
 
-# Draws every dialog combination locally, so checking the unmeasured palette
-# does not need a temporary plugin linked into a live Herdr server.
+# Draws every dialog combination locally, so judging the palette does not need
+# a temporary plugin linked into a live Herdr server. It is what the palette
+# was reviewed and approved from on 2026-09-11, after three trips to a live
+# server had failed to settle it.
 #
 # `required-features` rather than a cfg inside the file: without it, building
 # all targets with the feature off would try to compile an example whose every

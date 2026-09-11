@@ -835,23 +835,40 @@ Asian Width `Neutral`. `U+229D`, `U+2713`, `U+26A0`, `U+2716`.
 The rule is a **test**, not four pinned literals, and `width() == width_cjk()` is an exact
 test for `Ambiguous` because the two functions differ only there.
 
-⚠️ **The palette is a proposal and was never measured.** The probe discarded SGR
+#### The palette — ✅ **reviewed and approved 2026-09-11**, and still unmatched
+
+✅ **Mike approved all four states**: light blue info at **94**, green at 32, yellow at
+33, red at 31. Info moved from 34 to 94 in the same session; 94 is the bright form of the
+same basic colour, so it stays inside the eight-plus-eight ANSI set and keeps the property
+the palette was chosen for — a themed terminal maps it to whatever blue the user already
+picked, rather than to a fixed RGB value.
+
+**What was established, stated narrowly.** Mike looked at rendered output from
+`cargo run --features dialog --example preview`, in Terminal.app, under his own theme, and
+judged that the four colours read correctly and tell the four states apart. 🔑 That is a
+**design review by the person whose tools these are**, which is the right authority for a
+palette and is exactly what the original caveat was missing.
+
+⚠️ **Approved is not matched, and the approval does not swallow the open half.** Nobody
+has put the kit's blue beside Herdr's own blue in one frame. The probe discarded SGR
 attributes, so borders were confirmed present and never confirmed coloured, and **nobody
-has established how Herdr colours its own dialogs**. Inversion is a terminal attribute
-rather than a claim about Herdr, so that part will render as intended.
-`cargo run --features dialog --example preview` draws all eight combinations locally.
+has established how Herdr colours its own dialogs**. That was true before the review and
+is true after it. Inversion is separate again: a terminal attribute rather than a claim
+about Herdr, so that part renders as intended regardless.
 
-➕ **Amended 2026-09-11, after Mike saw it rendered for the first time: info is SGR 94,
-the bright blue, rather than 34.** 94 is the bright form of the same basic colour, so it
-stays inside the eight-plus-eight ANSI set and keeps the property the palette was chosen
-for — a themed terminal maps it to whatever blue the user already picked, rather than to
-a fixed RGB value.
+✅ **The asymmetry was reviewed with the rest, and stands.** Info is bright while success,
+warning and danger are not. It was flagged rather than quietly widened, and bright info
+against three normal siblings looked correct to the person who asked for it. The argument
+for not brightening the other three — that bright red reads as more alarming rather than
+better matched, and bright yellow is often the worst cell on a light theme — was never
+tested and is now moot. Flagging it rather than acting on it was the right call anyway:
+widening the change would have been a palette decision nobody had made.
 
-⚠️ **Info is bright and the other three are not, and that asymmetry is recorded rather
-than resolved.** Success, warning and danger stay at 32, 33 and 31. Mike asked for info
-alone, and widening the change to match would have been a palette decision nobody made.
-Whether the set now reads consistently is open, and it is a question for the person
-looking at it rather than one this document can settle.
+💰 **Why this review was cheap enough to happen, which is the transferable part.** Before
+`examples/preview.rs` existed, judging the palette meant linking a temporary plugin into a
+live Herdr server and unlinking it afterwards. **Mike made three such trips and the answer
+was still unsettled.** The fourth attempt was a local command and settled it in one pass.
+Recorded beside the example itself, not only here.
 
 #### 7.5.5 Workspace scoping — ✅ delivered by the default
 
@@ -1775,7 +1792,9 @@ them, and §7.5's mechanism being proven says nothing about §7.2's fall-back po
 **Consequences accepted with the override:**
 
 - Two of three consumers gain a `crossterm` dependency (§7.5.7).
-- The palette ships unmeasured and is flagged as a proposal everywhere it appears (§7.5.4).
+- ✅ **The palette shipped unmeasured and was reviewed and approved on 2026-09-11**
+  (§7.5.4). It is the consequence on this list that closed, and it closed because
+  `examples/preview.rs` made looking at it a local command.
 - The module is feature-gated off by default, so a consumer that wants none of this
   carries none of it.
 
@@ -1902,9 +1921,12 @@ database, in the session that built §7.5. None was relayed.
 | 7.5.5 | Workspace scoping is delivered by the default, and `workspace_id` is **refused** for popup placement | 📏 measurement |
 | 13 | The one-consumer hold overridden for `dialog` alone, with the evidence and the decision recorded separately | 🔑 decision |
 
-⚠️ **One thing in §7.5 is still unmeasured and says so in every place it appears:** the
-colour palette. The probe discarded SGR attributes, so nobody has established how Herdr
-colours its own dialogs.
+⚠️ **One thing in §7.5 was still unmeasured when this was written and said so in every
+place it appeared:** the colour palette. ✅ **Closed 2026-09-11 by review rather than by
+measurement** — Mike approved all four states from the `preview` example, in Terminal.app,
+under his own theme (§7.5.4). ⚠️ The half that review cannot reach is still open and is
+still recorded: the probe discarded SGR attributes, nobody has established how Herdr
+colours its own dialogs, and nobody has put the two blues in one frame.
 
 Related vault notes: `decisions/2026-09-10-herdr-plugin-kit-shared-crate.md`,
 `decisions/2026-09-10-local-install-check-belongs-in-plugin-kit.md`,
@@ -1968,3 +1990,35 @@ staying byte-identical when `rust-version` was dropped. The second is what §11.
 records; the third is why dropping the field is a documentation change and not a
 resolution change.
 
+
+### 15.5 Extended 2026-09-11: the dialog seen, and the palette closed
+
+The same day, after Mike ran `examples/preview.rs` for the first time. Everything below
+came from looking at rendered output, which is the only instrument a palette or a layout
+has.
+
+| § | What changed | Kind |
+|---|---|---|
+| 7.5.4 | Info is SGR **94**, the bright blue, rather than 34 | 🔑 decision |
+| 7.5.4 | **The palette is reviewed and approved**, all four states | ✅ review |
+| 7.5.4 | The bright-info asymmetry was reviewed with the rest and **stands** | ✅ review |
+| 7.5.4 | The buttons **stack** when one row cannot hold both labels whole | 🔧 design |
+| 7.5.4 | Truncation survives as the last resort, for one label too wide for a row of its own | ➕ new limit |
+| 11.8 | A documentation job, after eleven rustdoc warnings were found by building the docs for the first time | ➕ new |
+
+🚨 **Approved is not matched, and this document must not let the first swallow the
+second.** Nobody has put the kit's blue beside Herdr's own in one frame, and nobody has
+established how Herdr colours its own dialogs. §7.5.4 carries both halves and both are
+load-bearing: the review answers "does this read correctly", which is the question a
+palette has, and it does not answer "is this what Herdr does", which nothing has.
+
+💰 **The transferable finding is about cost, not colour.** Three trips to a live Herdr
+server failed to settle the palette. The fourth attempt was a local command and settled it
+in one pass, because `examples/preview.rs` existed by then. **Build the thing that makes a
+check trivial**, and the check happens; leave it a round trip away, and it does not. The
+same example is what exposed the button truncation, which nobody had asked it to look for.
+
+⚠️ **Two things in §7.5 are still genuinely unknown, and neither is closed by any of the
+above.** Whether click forwarding reaches a **popup** specifically was measured against a
+plugin pane rather than a popup, and the `TerminalState` teardown guard has no test. Both
+stay flagged exactly as they are.
