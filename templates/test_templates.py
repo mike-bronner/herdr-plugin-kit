@@ -64,7 +64,9 @@ class Plugin:
     three cases while looking entirely plausible.
     """
 
-    def __init__(self, directory, binary="decoy-binary", bins=None, version="1.2.3"):
+    def __init__(
+        self, directory, binary="decoy-binary", bins=None, version="1.2.3", cargo_version=None
+    ):
         self.root = Path(directory)
         self.stubs = self.root.parent / "stubs"
         self.stubs.mkdir(exist_ok=True)
@@ -72,7 +74,11 @@ class Plugin:
         (self.root / "src" / "main.rs").write_text("fn main() {}\n")
 
         self.write_manifest(version=version)
-        self.write_cargo(binary if bins is None else None, bins=bins)
+        self.write_cargo(
+            binary if bins is None else None,
+            bins=bins,
+            version=version if cargo_version is None else cargo_version,
+        )
 
         (self.root / "bin").mkdir(exist_ok=True)
         for name in TEMPLATES:
@@ -100,11 +106,15 @@ class Plugin:
             'id = "apply"\n'
         )
 
-    def write_cargo(self, binary, bins=None):
-        text = '[package]\nname = "decoy-package"\nversion = "1.2.3"\n\n'
+    def write_cargo(self, binary, bins=None, version="1.2.3"):
+        text = f'[package]\nname = "decoy-package"\nversion = "{version}"\nedition = "2021"\n\n'
         for name in [binary] if bins is None else bins:
             text += f'[[bin]]\nname = "{name}"\npath = "src/main.rs"\n\n'
-        text += '[dependencies]\nname = "not-a-binary"\n'
+        # 🔑 A decoy `name` key after the [[bin]] section, in a table cargo
+        # ignores. It sits in [package.metadata] rather than [dependencies] so
+        # that the file stays valid TOML *and* valid cargo: tools/plugin_gate.py
+        # asks the real cargo what it builds, and cannot ask an invalid one.
+        text += '[package.metadata.decoy]\nname = "not-a-binary"\n'
         (self.root / "Cargo.toml").write_text(text)
 
     def stub(self, name, body, mode=0o755):
@@ -279,7 +289,8 @@ class ReadingThePluginsOwnFiles(Fixture):
         )
 
     def test_a_name_key_outside_the_bin_section_is_not_the_binary(self):
-        # The fixture's [dependencies] table carries name = "not-a-binary".
+        # The fixture's [package.metadata.decoy] table carries
+        # name = "not-a-binary", after the [[bin]] section rather than before.
         self.assertNotIn("not-a-binary", self.plugin.evaluate('printf %s "$BINARY"').stdout)
 
     def test_no_bin_section_at_all_refuses_rather_than_guessing(self):
@@ -476,6 +487,54 @@ class Provenance(Fixture):
         arch = "arm64" if machine in ("arm64", "aarch64") else "x64"
         system = "macos" if os.uname().sysname == "Darwin" else "linux"
         return f"{system}-{arch}"
+
+
+class TheAssetUrlIsPinnedWhole(Fixture):
+    """➕ SCOPE.md §12.2 requires this test, and requires this shape of it.
+
+    🚨 A test that built the URL the same way the shim builds it could not
+    catch a wrong tag form, because it would make the same mistake twice and
+    agree with itself. So the expected string is stated, in full, with the tag
+    form visible in it.
+
+    A wrong tag form here is silent: the fetch 404s, the plugin compiles, and
+    it still works. It just stops using the prebuilt binary the whole
+    mechanism exists to deliver.
+    """
+
+    def setUp(self):
+        super().setUp()
+        # Stubbed so the whole string can be a literal. The host's own
+        # platform would put a variable back into the one assertion whose
+        # value is being pinned.
+        self.plugin.stub(
+            "uname",
+            "#!/bin/sh\ncase \"$1\" in\n  -s) printf 'Darwin\\n' ;;\n"
+            "  -m) printf 'arm64\\n' ;;\nesac\n",
+        )
+        self.commit = self.plugin.git_init()
+
+    def ask(self):
+        return self.plugin.evaluate(
+            'asset_url; printf %s "$ASSET_URL"',
+            PATH=f"{self.plugin.stubs}:{LAUNCHD_PATH}",
+        ).stdout
+
+    def test_it_is_this_exact_string(self):
+        self.assertEqual(
+            "https://github.com/mike-bronner/decoy/releases/download/1.2.3/"
+            f"decoy-binary-macos-arm64-{self.commit}",
+            self.ask(),
+        )
+
+    def test_the_tag_carries_no_v_however_the_version_is_written(self):
+        # ⚠️ §12.1: Mike's tags are the bare version and Herdr's keep their
+        # prefix. recent-spaces' own bin/build hardcoded `v$version` and will
+        # break on the first unprefixed tag it cuts. The template prefixes
+        # nothing, so a migrated plugin inherits the right convention by
+        # construction, and this is what says so.
+        self.assertIn("/releases/download/1.2.3/", self.ask())
+        self.assertNotIn("/download/v", self.ask())
 
 
 class TheFetchGate(Fixture):
@@ -754,17 +813,22 @@ class TheLauncher(Fixture):
 
 
 class WindowsIsNamedInExactlyOnePlace(unittest.TestCase):
-    """The open .exe question, pinned so it cannot spread.
+    """The .exe question, pinned on the consuming side so it cannot spread.
 
     ⚠️ Nothing in this class runs PowerShell. It cannot: PowerShell is not
     installed here and nobody on this project has Windows hardware. These are
     structural assertions about where a decision lives, which is the one thing
     that can be checked without a Windows machine.
+
+    The producing side lives in ``tools/plugin_gate.py``, and
+    ``tools/test_plugin_gate.py`` asserts the two agree. That suite tests the
+    pair because it already depends on this one for its fixture, and the
+    reverse dependency would be a cycle.
     """
 
     def test_the_asset_extension_is_assigned_exactly_once_in_the_tree(self):
-        # 🔑 Stage 4 settles this by observation and corrects one line. That is
-        # only true while there is one line to correct.
+        # 🔑 Reversing the recommendation is one line on this side and one on
+        # the producing side. That is only true while there is one line here.
         assignments = []
         for path in sorted(REPO_ROOT.glob("**/*")):
             if not path.is_file() or ".git/" in str(path) or "target/" in str(path):
