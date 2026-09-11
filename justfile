@@ -37,12 +37,21 @@ sync-bin plugin:
 check-bin plugin:
     python3 templates/sync_bin.py {{plugin}} --check
 
+# Ask whether a plugin's manifests, its tags and its binary name still agree.
+#
+# The other half of what a plugin's own CI runs, through
+# .github/workflows/plugin-ci.yml. Every disagreement it names is silent in
+# production: the install still works and simply stops downloading.
+gate plugin:
+    python3 tools/plugin_gate.py versions {{plugin}}
+
 # Run every test: the codegen guards, the shell templates, the mutation
-# harness's own tests, then the Rust suite.
+# harness's own tests, the plugin conformance gate, then the Rust suite.
 test:
     python3 codegen/test_codegen.py
     python3 templates/test_templates.py
     python3 tools/test_mutate.py
+    python3 tools/test_plugin_gate.py
     cargo test --features dialog
 
 # Check the tests actually test: break one thing at a time and confirm the
@@ -70,8 +79,13 @@ fmt-check:
     cargo fmt --all -- --check
 
 # Lint with warnings denied.
+#
+# ⚠️ `--features dialog` is load-bearing, not thoroughness. `dialog` is off by
+# default, so without it clippy never compiles dialog.rs and never lints a line
+# of it. CI carries the same flag: a gate stricter than what a developer runs
+# by hand surprises them in CI instead of at their desk.
 lint:
-    cargo clippy --all-targets -- -D warnings
+    cargo clippy --all-targets --features dialog -- -D warnings
 
 # Everything that has to be green before a change lands.
 check: fmt-check lint test
