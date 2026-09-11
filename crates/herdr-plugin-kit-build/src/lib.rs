@@ -7,7 +7,13 @@
 //! ```
 //!
 //! That emits two environment variables into the *plugin's* compilation, which
-//! [`herdr_plugin_kit::version`] then reads back through a macro:
+//! `herdr_plugin_kit::version` then reads back through a macro:
+//!
+//! ⚠️ Named rather than linked, and that is not a style choice. **This crate
+//! depends on nothing at all**, which is the whole reason it exists separately
+//! (below), so there is no `herdr_plugin_kit` in scope for rustdoc to resolve
+//! a link against. Adding the dependency to make one link work would put the
+//! runtime crate into every plugin's build graph.
 //!
 //! | Variable | Holds |
 //! |---|---|

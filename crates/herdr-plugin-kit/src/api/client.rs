@@ -36,9 +36,9 @@
 //!
 //! SCOPE.md §4.2.1 requires any error-code match to be hand-maintained beside
 //! the transport, carrying the measurement that put it there. ✅ The kit has
-//! exactly one such code, [`crate::dialog::BUSY_CODE`], and it already carries
-//! its measurement. [`Client`]'s [`crate::dialog::Transport`] implementation
-//! routes through [`crate::dialog::OpenError::from_error`] rather than
+//! exactly one such code, `dialog::BUSY_CODE`, and it already carries
+//! its measurement. [`Client`]'s `dialog::Transport` implementation
+//! routes through `dialog::OpenError::from_error` rather than
 //! matching the string a second time. A second list here would be a structure
 //! pretending to be a policy.
 //!
@@ -241,7 +241,7 @@ pub enum CallError {
     /// Herdr answered, and the answer was a refusal.
     ///
     /// The code and message are verbatim. Nothing in the kit interprets them
-    /// except [`crate::dialog::OpenError::from_error`], which owns the one
+    /// except `dialog::OpenError::from_error`, which owns the one
     /// measured code the kit matches.
     Server(ErrorBody),
 }
@@ -283,7 +283,7 @@ impl Handshake {
     ///
     /// 🔑 **A value, never a side effect.** The kit detects; the plugin
     /// decides. That is how [`crate::version`] reports, how §7.2 hands back a
-    /// notification reason, and how [`crate::dialog`] answers `Shown`. A
+    /// notification reason, and how `dialog` answers `Shown`. A
     /// client that printed to stderr by itself would be the first place the
     /// kit decided something on a plugin's behalf, and it would hide a socket
     /// round trip inside an unrelated call, which is the exact confusion §4.3

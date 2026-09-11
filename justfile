@@ -87,5 +87,23 @@ fmt-check:
 lint:
     cargo clippy --all-targets --features dialog -- -D warnings
 
+# Build the documentation, and fail on anything rustdoc complains about.
+#
+# 🔑 Not covered by `lint`. `cargo clippy` does not run rustdoc at all, so
+# broken intra-doc links, links into private items, and links to a crate that
+# is not a dependency are checked nowhere else. One of those survived four
+# stages of green checks because nothing had ever built the docs.
+#
+# ⚠️ Both feature combinations. A link to a `dialog` item resolves only when
+# that feature is on, and warns when it is off.
+#
+# 🪤 `--document-private-items` is not thoroughness. Without it rustdoc never
+# resolves a link written on a private item, so a doc comment naming a deleted
+# function passes silently. This repository documents its private functions as
+# carefully as its public ones.
+docs:
+    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --document-private-items
+    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features --document-private-items
+
 # Everything that has to be green before a change lands.
-check: fmt-check lint test
+check: fmt-check lint docs test

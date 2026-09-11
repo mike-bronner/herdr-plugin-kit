@@ -78,6 +78,41 @@ jobs:
       - name: Lint with warnings denied
         run: cargo clippy --all-targets --features dialog --locked -- -D warnings
 
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    env:
+      # 🚨 Fail, never print. Eleven warnings accumulated behind a check that
+      # did not exist, and one of them had survived four stages of green CI
+      # because nothing had ever built the documentation at all. A warning
+      # nobody blocks on is how eleven of them got there.
+      RUSTDOCFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@v7
+
+      # 🔑 `cargo clippy --all-targets` does not run rustdoc, so this is a hole
+      # in the lint gate rather than an extra: intra-doc links, private-item
+      # links and cross-crate links are checked nowhere else.
+      #
+      # ⚠️ Both feature combinations, because a link to a gated item resolves
+      # only in the build that turned the feature on and warns in the build
+      # that did not. Of the defects that prompted this job, some were visible
+      # only with `dialog` on and the rest only with it off.
+      #
+      # 🪤 `--document-private-items` is load-bearing, and was added after
+      # measuring that the job without it misses a whole class. Without the
+      # flag rustdoc never resolves a link written on a private item, so a doc
+      # comment naming a function somebody deleted passes silently — which is
+      # exactly the defect that prompted this job. This repository documents
+      # its private functions as carefully as its public ones, so those links
+      # are worth the same check. The flag is a superset for link lints: a
+      # public item linking to a private one is still reported under it.
+      - name: Build the documentation with every feature off
+        run: cargo doc --no-deps --locked --document-private-items
+
+      - name: Build the documentation with every feature on
+        run: cargo doc --no-deps --locked --all-features --document-private-items
+
   targets:
     name: Six triples compile
     runs-on: ubuntu-latest

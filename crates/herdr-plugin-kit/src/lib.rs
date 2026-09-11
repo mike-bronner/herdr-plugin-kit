@@ -16,13 +16,20 @@
 //!
 //! | Feature | Turns on | Cost |
 //! |---|---|---|
-//! | `dialog` | [`dialog`], the four-state popup dialogs | `crossterm`, for raw mode |
+//! | `dialog` | `dialog`, the four-state popup dialogs | `crossterm`, for raw mode |
 //!
 //! 🔑 Gated because recent-spaces is a headless watcher, and should carry
 //! neither popup machinery nor a terminal library.
 //!
-//! ⚠️ [`dialog`] still does not send anything itself. It takes a
-//! [`dialog::Transport`], the two socket calls it needs, which is how every
+//! ⚠️ **A gated item is named in prose, never linked, and that is deliberate.**
+//! An intra-doc link to `dialog` resolves only in a build that turned the
+//! feature on, and reports `broken_intra_doc_links` in every build that did
+//! not. A link that is a link in one configuration and a warning in another is
+//! the kind of claim this crate does not make elsewhere, so the path is
+//! written out instead and the documentation is warning-free either way.
+//!
+//! ⚠️ `dialog` still does not send anything itself. It takes a
+//! `dialog::Transport`, the two socket calls it needs, which is how every
 //! path through it stays testable without a live server. ✅
 //! [`api::client::Client`] implements that trait, so a consumer supplies
 //! nothing.

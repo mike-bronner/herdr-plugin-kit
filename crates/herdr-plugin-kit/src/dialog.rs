@@ -70,7 +70,7 @@
 //! - **A click outside the pane is not forwarded at all**, so a dialog cannot
 //!   see clicks meant for anything else.
 //! - The pane in that run had requested reporting itself, which is why
-//!   [`TerminalState`] does the same rather than trusting the client's setting
+//!   `TerminalState` does the same rather than trusting the client's setting
 //!   to reach it.
 //! - A control confirmed keystrokes kept arriving throughout, so the two input
 //!   methods coexist rather than trading off.
@@ -102,7 +102,7 @@
 //! **identical** error, so the refusal fires on the parameter being present
 //! rather than on any lookup failing.
 //!
-//! So sending it would have meant no dialog at all. [`open_params`] leaves it
+//! So sending it would have meant no dialog at all. `open_params` leaves it
 //! unset, and now does so on a measurement rather than on caution.
 //!
 //! Confinement to the triggering *pane* was explicitly not chosen, and is
@@ -139,7 +139,7 @@
 //!
 //! **The drawing is hand-written ANSI.** The dependency buys input and terminal
 //! state and nothing else: raw mode, key decoding, SGR mouse decoding, and the
-//! three-state teardown in [`TerminalState`]. Every character of the frame is
+//! three-state teardown in `TerminalState`. Every character of the frame is
 //! this module's own.
 
 use std::collections::HashMap;
@@ -627,7 +627,7 @@ pub enum Unanswered {
     /// ⚠️ This marker is the only evidence either way. `plugin.pane.open`
     /// answers `ok` regardless, and a popup cannot be found in `pane.list`.
     NeverShown,
-    /// Nobody answered inside [`WAIT`].
+    /// Nobody answered inside `WAIT`.
     TimedOut,
     /// The channel carried a word that is neither choice.
     ///
@@ -1158,7 +1158,7 @@ impl Frame {
 /// ╰────────────────────╯
 /// ```
 ///
-/// So a dialog's height depends on its width, and [`button_rows`] decides
+/// So a dialog's height depends on its width, and `button_rows` decides
 /// which shape it takes from the drawn widths rather than from a threshold.
 ///
 /// ⚠️ **The button row is centred, and that choice is not from the approved
@@ -1426,7 +1426,7 @@ fn drawn_button(key: &str, label: &str, padded: bool, text_width: usize) -> Stri
 
 /// Joins a key affordance to its label, or stands alone when there is no label.
 ///
-/// Dropping the separator for an empty label is what keeps [`fit_labels`]
+/// Dropping the separator for an empty label is what keeps `drawn_button`
 /// honest at the narrowest frames: a button truncated to nothing must not still
 /// charge a cell for the space after its key.
 fn keyed(key: &str, label: &str) -> String {

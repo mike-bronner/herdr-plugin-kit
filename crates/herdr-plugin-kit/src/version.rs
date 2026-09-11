@@ -17,7 +17,7 @@
 //! | Piece | Where it lives | What it does |
 //! |---|---|---|
 //! | `herdr-plugin-kit-build::stamp()` | the plugin's `build.rs` | emits `HERDR_PLUGIN_COMMIT` and `HERDR_PLUGIN_BUILT` |
-//! | [`version_report!`] | expands in the plugin's crate | captures that plugin's own `env!` values |
+//! | [`crate::version_report!`] | expands in the plugin's crate | captures that plugin's own `env!` values |
 //! | [`report`], [`read_manifest`], [`provenance_of`] | here | format, read the manifest, compute staleness |
 //!
 //! # Nothing here fails
@@ -55,7 +55,7 @@ pub const PROVENANCE_SUFFIX: &str = ".download";
 /// The consuming plugin's own compile-time facts.
 ///
 /// ⚠️ **Never build one of these by hand inside a kit function.** Use
-/// [`version_report!`], which expands in the plugin's crate. The whole reason
+/// [`crate::version_report!`], which expands in the plugin's crate. The whole reason
 /// this type exists is to carry values across that boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Build {

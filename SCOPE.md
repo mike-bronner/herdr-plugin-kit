@@ -1602,6 +1602,22 @@ without it clippy never compiles `dialog.rs` and never lints a line of it. The j
 own recipe was corrected to match, because a gate stricter than what a developer runs by
 hand surprises them in CI rather than at their desk.
 
+➕ **A documentation job, added 2026-09-11 after eleven warnings were found by building
+the docs for the first time.** 🚨 `cargo clippy --all-targets` does not run rustdoc at
+all, so broken intra-doc links, links from public documentation into private items, and
+links to a crate that is not a dependency were checked **nowhere**. One of the eleven had
+been in `herdr-plugin-kit-build` since §6.1 was built and survived four stages of green
+checks. It fails on warnings rather than printing them, because a warning nobody blocks
+on is how eleven accumulated.
+
+It runs with every feature off and with every feature on, because a link to a gated item
+resolves only in the build that turned the feature on and warns in the build that did
+not. 🪤 **It also passes `--document-private-items`, which is not thoroughness.** Measured
+2026-09-11: without that flag rustdoc never resolves a link written on a **private**
+item, so a doc comment naming a function somebody had deleted passed the job silently —
+which is the defect that prompted the job. This kit documents its private functions as
+carefully as its public ones, so those links earn the same check.
+
 🚨 **The mutation runs are a separate workflow, and that placement is the decision.** The
 harness recompiles once per mutation and there are 42 of them. Two failures were weighed:
 
