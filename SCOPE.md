@@ -66,9 +66,9 @@ information the caller already received. §7.2 is what the kit does about it.
 ## 2. Repository layout
 
 The target layout. Built so far: `codegen/`, the `api` module, `env.rs`, `version.rs`,
-and the whole of `crates/herdr-plugin-kit-build/`. Still to come: `client.rs`,
-`templates/`, and `.github/workflows/`. `report.rs` and `update.rs` are held by §13
-rather than merely pending.
+the whole of `crates/herdr-plugin-kit-build/`, and `templates/`. Still to come:
+`client.rs` and `.github/workflows/`. `report.rs` and `update.rs` are held by §13 rather
+than merely pending.
 
 ```
 herdr-plugin-kit/
@@ -96,9 +96,14 @@ herdr-plugin-kit/
 │   ├── emit_sweep.py                 # the sweep, derived from the schema
 │   └── test_codegen.py               # the guards' own tests, no network
 ├── templates/
-│   └── bin/
-│       ├── build            build.ps1
-│       └── launcher         launcher.ps1
+│   ├── bin/                          # byte-identical in every plugin
+│   │   ├── common           common.ps1   # facts, staleness, asset naming
+│   │   ├── find-cargo                    # its own file so a test can blind it
+│   │   ├── progress                      # the display seam, sh only
+│   │   ├── build            build.ps1
+│   │   └── launcher         launcher.ps1
+│   ├── sync_bin.py                   # the sync task, and `--check`
+│   └── test_templates.py             # the shims' own tests, no network
 ├── .github/workflows/
 │   ├── plugin-ci.yml                 # reusable, workflow_call
 │   ├── plugin-release.yml            # reusable, workflow_call
@@ -484,8 +489,11 @@ would be useless. So "could not read the note" never collapses into "compiled he
 | A note that cannot be read | `fetched, and the note beside it could not be read` |
 | ⚠️ A **directory** with the note's name | `built from source`, matching the `[ -f ]` the shim asks |
 
-⚠️ **project-finder 0.8.0 fetches without writing a note** (§9.4). Until the template
-closes that, its report will say "built from source" for a fetched binary.
+✅ **The shell template writes it** (§10), which is what makes this section readable at
+all. A fetch path that does not write the note makes its own binary lie: the report says
+"built from source" for a binary nobody built here, and then offers a remedy that needs a
+toolchain the user does not have. One of the donor shims had that defect, and it is the
+clearest single argument for templating these files rather than hand-maintaining three.
 
 ---
 
@@ -677,8 +685,28 @@ that.** What is measured:
 |---|---|
 | `[[keys.command]]` | ✅ measured present, 2026-09-05 |
 | plugin event hook | ⚠️ measured **absent** from the injected set |
-| `[[startup]]` | ❓ never measured. Only the absence of `$TERM` is (§10) |
-| `[[build]]` | ❓ never measured, and now irrelevant |
+| `[[startup]]` | ✅ measured **present**, 2026-09-11, with the plugin id and a context JSON beside it |
+| `[[build]]` | 🚨 measured **absent**, 2026-09-11, along with every other `HERDR_*` variable |
+
+🚨 **Measured 2026-09-11: a `[[build]]` hook is handed no `HERDR_*` variables at all.**
+No socket path, no plugin id, no root, no bin path. It is an **active strip** rather than
+inheritance loss: the same install was run twice, once with `HERDR_SOCKET_PATH` set
+explicitly on the invoking CLI, and produced the same empty set both times, while
+unrelated variables passed through untouched.
+
+🚨 **Registration happens after the build hook completes**, also measured rather than
+read. With a socket recovered by guessing its path from the config root, `plugin.list`
+returns an empty list during the hook and `plugin.pane.open` answers `plugin_not_found`.
+The same call immediately after the install returns the plugin.
+
+✅ **This confirms the design above rather than disturbing it.** The kit never needed the
+socket during `[[build]]`, because the manifest flag already names the context. What the
+measurement does settle is §10's progress display: **no Herdr dialog can be shown during
+an install compile**, which is the longest wait these plugins impose.
+
+✅ **`herdr plugin link` still does not run `[[build]]`**, now confirmed a second time and
+independently: a plugin with a build hook declared was unlinked and relinked, and its log
+stayed empty.
 
 **So let the manifest say which context is calling.** The two entries are already
 declared separately in every plugin manifest, so the install entry passes a flag the
@@ -780,9 +808,10 @@ the §8.3 redesign.
 8. Move into place, and record provenance (§6.3).
 9. On any failure, fall back to building, and record why (§9.5).
 
-⚠️ **project-finder 0.8.0 does not yet write provenance at step 8**, though recent-spaces
-does. The kit's template closes that gap, because §6.3's report has nothing to read
-without it.
+✅ **Step 8 writes the note, and the template is where that became true.** One donor shim
+wrote it and the other did not, which is exactly the kind of divergence three
+hand-maintained copies produce and a diff against one template does not. §6.3's report
+has nothing to read without it.
 
 ### 9.4.1 The dirtiness check is narrowed to what the compiler reads
 
@@ -906,11 +935,85 @@ Pulling in an HTTP stack to fetch one file per week is a bad trade.
 
 ✅ A crate cannot ship `bin/build` or the launchers.
 
-The kit holds them as templates with the plugin name substituted, plus a sync task. That
-turns shell drift into a reviewable diff instead of silent three-way divergence.
+The kit holds them as templates plus a sync task. That turns shell drift into a
+reviewable diff instead of silent three-way divergence.
+
+🔑 **Decided by Mike: nothing is substituted.** An earlier draft of this section said "with
+the plugin name substituted", and that is exactly what was rejected. The files land
+**byte-identical in every plugin**, so a `diff` between two plugins' `bin/` directories
+shows drift and nothing else. Substitution would put rendering noise beside real drift in
+the one diff this whole arrangement exists to make readable.
+
+✅ **So each shim reads the plugin's own files at run time.** Exactly two facts, and both
+are inferred rather than declared:
+
+| Fact | Read from | Why not the obvious neighbour |
+|---|---|---|
+| The binary's name | `Cargo.toml`'s `[[bin]]` `name` | Not `[package]` `name`: the two agree in two of the three plugins and differ in the third |
+| The plugin's own name | `herdr-plugin.toml`'s **top-level** `id`, after the last dot | It names the plugin, not its binary |
+
+🚨 **The top-level qualifier is load-bearing.** `herdr-plugin.toml` carries further `id`
+keys further down, in `[[panes]]` and `[[actions]]` entries — `id = "picker"` and
+`id = "apply"`. A line-anchored read returns the wrong one in **two of the three
+plugins**, silently, and a log prefix reading `picker` looks entirely plausible. The
+reader stops at the first section header, and a fixture manifest with a decoy `id` in a
+later section pins it.
+
+✅ Reading `version` the same way also retires a hazard the donor shims carried as a
+comment: `min_herdr_version` sits in the same table, and an unanchored match reads the
+Herdr floor as the plugin version and then looks for a release nobody ever cut.
+
+⚠️ **Exactly one `[[bin]]` is required, and zero or several fails closed.** Guessing
+between two binaries would fetch the asset for one and execute the other.
 
 **Known bug to carry across:** ✅ a Herdr `[[startup]]` command gets no `$TERM` at all.
-This was found once and fixed three times. The template fixes it once.
+This was found once and fixed three times, each fix a different shape. ✅ The template
+fixes it once, as `can_draw()` in `bin/common`, and every caller that draws asks there.
+It asks two questions because they fail differently: `[ -t 2 ]` is false on the startup
+path, where stderr is a pipe, and `TERM` catches a real terminal with no terminfo behind
+it, which accepts escape sequences and then draws them as themselves.
+
+### 10.0 The sync task, and the `--check` that makes it stick
+
+```sh
+just sync-bin ../herdr-plugin-recent-spaces      # or: python3 templates/sync_bin.py …
+just check-bin ../herdr-plugin-recent-spaces     # writes nothing, exits non-zero on drift
+```
+
+✅ Both forms run the same module, because `just` is not installed on every machine that
+has to be able to do this, and a task nobody can run is a task nobody tests.
+
+🔑 **`--check` is what a plugin's own CI runs.** Without it the kit is a suggestion:
+drift becomes a discovery rather than a failing build.
+
+⚠️ **The sync verifies by running the synced `bin/common`, not by parsing the TOML
+itself.** A second parser on the Python side would agree with itself while disagreeing
+with the shell, which is the failure it exists to catch.
+
+### 10.2 The progress display is a seam, with two implementations
+
+**Decided by Mike: a Herdr dialog wherever a dialog can be reached** — shown only while a
+build is running, removed when it finishes, no cancel button.
+
+🚨 **A `[[build]]` hook can never show one**, measured 2026-09-11 and blocked twice over
+independently (§8.3): the hook is handed zero `HERDR_*` variables, and registration
+happens after it completes, so `plugin.pane.open` answers `plugin_not_found` even when a
+socket is recovered by hand.
+
+🔑 **So the drawn terminal spinner stays permanently for that path**, and it is the
+longest wait these plugins impose — sixty to ninety seconds of compiling against about
+one second for a fetch. One extra code path, bought by a measured constraint rather than
+a preference.
+
+`bin/progress` holds the seam. `progress_start` and `progress_stop` are the only two
+calls `bin/build` makes, and `progress_backend()` picks the implementation. ⚠️ **The
+terminal is one named implementation, not the default everything falls back to** — that
+distinction is what makes the dialog one new arm rather than a rewrite.
+
+⚠️ **The dialog is deliberately unwritten, and must not be designed around.** Which
+placement it uses is open: a probe is establishing whether an overlay floats like a
+dialog or tiles like a pane, and that answer decides between several hundred lines of
+cross-process machinery and almost none.
 
 ### 10.1 Windows doubles every template
 
@@ -948,6 +1051,38 @@ decision. **CI proves the code compiles on Windows. It never proves a plugin run
 there**, and Mike works on macOS arm64. That caveat is stated in the README rather than
 held as a deferral, because a caveat inside a deferral disappears the moment the deferral
 is closed.
+
+🚨 **The PowerShell shims do not reach even that bar, and the difference matters.**
+"Compile-verified" is a claim about Rust, which CI builds for both Windows triples.
+PowerShell has no compiler and no CI job, and it is not installed on the machine these
+were written on, so `bin/*.ps1` has never been **run or parsed by anything**. Each file
+says so in its own header, and a test asserts that every one of them still does. Treat a
+bug there as new information, never as a regression.
+
+⚠️ **They are deliberately plainer than their shell counterparts.** No progress display,
+and no download-failure classification. Unverified code should be small, because every
+line of it is one nobody can test.
+
+#### The open `.exe` question lives in exactly one assignment
+
+⚠️ §14.2 is still open, and the launcher executes the path it builds, so a wrong answer
+spread across several string concatenations would break Windows silently.
+
+✅ It is therefore decided in **one line**, `$AssetNameExtension` in `bin/common.ps1`, set
+to the empty string because that is §9.6's four-name convention read literally. It is
+marked unverified where it is assigned. **Stage 4 settles it by observation and corrects
+that one line.**
+
+🔑 **No shell template ever names a Windows asset**, which is what makes "one line" true
+rather than aspirational. `bin/common`'s `platform()` answers `macos` and `linux` and
+refuses everything else, because `sh` cannot run on Windows at all. Three tests hold the
+claim up: one counts the assignments across the whole repository, one greps every shell
+template for a Windows asset name, and one drives `platform()` under a stubbed `uname`.
+
+⚠️ Note what is **not** open. Cargo always writes an `.exe` on Windows, so the local
+binary path is settled and always has been. The open question is only what a release
+asset is *called on the server*, and the checksum gate does not care what the file was
+named.
 
 ---
 

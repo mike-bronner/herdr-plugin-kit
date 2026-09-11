@@ -15,8 +15,8 @@ across three repositories.
 
 ## Status
 
-Early. The transport, the report and update modules, the shell templates, and the CI
-workflows land in later stages, in the order `SCOPE.md` section 13 sets out.
+Early. The transport, the report and update modules, and the CI workflows land in later
+stages, in the order `SCOPE.md` section 13 sets out.
 
 | Piece | State |
 |---|---|
@@ -25,9 +25,11 @@ workflows land in later stages, in the order `SCOPE.md` section 13 sets out.
 | `env` — the reader for Herdr's launch contract | ✅ |
 | `version` — what this binary is, and where it came from | ✅ |
 | `herdr-plugin-kit-build` — the build-script stamp | ✅ |
+| Shell templates — `bin/build`, the launcher, and their sync task | ✅ |
+| PowerShell templates | ⚠️ shipped **unrun**, see below |
 | `api::client` — transport | ⏳ later stage |
 | `report`, `update` | ⏳ held until one real consumer proves the boundaries |
-| Shell templates, CI workflows | ⏳ later stage |
+| CI workflows | ⏳ later stage |
 
 Generated against **Herdr `v0.9.0`**, protocol 22, schema version 1.
 
@@ -56,9 +58,21 @@ including `aarch64-pc-windows-msvc`. Both decisions are recorded in `SCOPE.md` s
 10.1 and 14.
 
 **Nobody on this project has Windows hardware.** CI proves the code compiles on Windows.
-It never proves a plugin runs there. Every Windows path in this repository — the
-PowerShell shims when they land, and the transport that has to speak named pipes rather
-than Unix sockets — is verified by the compiler and by nothing else.
+It never proves a plugin runs there. Every Windows path in the Rust — the transport that
+has to speak named pipes rather than Unix sockets — is verified by the compiler and by
+nothing else.
+
+**The PowerShell shims do not reach even that bar.** PowerShell has no compiler and no CI
+job, and it is not installed on the machine they were written on, so `templates/bin/*.ps1`
+has never been **run or parsed by anything**. Each file says so in its own header, and a
+test asserts that every one of them still does. They are deliberately plainer than their
+shell counterparts — no progress display, no download-failure classification — because
+unverified code should be small.
+
+One Windows question is still open: whether a release asset's name carries `.exe`. It is
+decided in a single assignment, `$AssetNameExtension` in `templates/bin/common.ps1`,
+marked unverified where it sits. No shell template ever names a Windows asset, and three
+tests hold that claim up, so the release workflow settles it with a one-line change.
 
 That is stated here rather than filed as a deferral, because a caveat in a deferral
 disappears the moment the deferral is closed. Treat a Windows bug report as new
@@ -201,12 +215,52 @@ somebody runs when the plugin is already broken. It never touches the socket eit
 A plugin that never calls `stamp()` still compiles and still reports. The commit and
 build instant just read `unknown`.
 
+## The shell templates
+
+A crate cannot ship `bin/build` or a launcher, so the kit holds them as templates and
+syncs them into each plugin:
+
+```sh
+just sync-bin ../herdr-plugin-recent-spaces      # or: python3 templates/sync_bin.py …
+just check-bin ../herdr-plugin-recent-spaces     # writes nothing, non-zero on drift
+```
+
+**Nothing is substituted.** The files land byte-identical in every plugin, so a `diff`
+between two plugins' `bin/` directories shows drift and nothing else. That is the whole
+point: three hand-maintained copies diverge in silence, one template diverges in a diff
+somebody has to read. `--check` is what a plugin's CI runs, and it is what turns drift
+into a failing build rather than a discovery.
+
+Each shim therefore reads two facts from the plugin's own files at run time: the binary's
+name from `Cargo.toml`'s `[[bin]]` section, and the plugin's own name from
+`herdr-plugin.toml`'s **top-level** `id`, after the last dot.
+
+> **The top-level qualifier is not pedantry.** `herdr-plugin.toml` carries further `id`
+> keys in `[[panes]]` and `[[actions]]` entries — `id = "picker"`, `id = "apply"`. A
+> line-anchored read returns the wrong one in two of the three plugins, silently, and a
+> log prefix reading `picker` looks entirely plausible.
+
+Two things the templates fix that the three plugins each got to separately:
+
+- **A Herdr `[[startup]]` command is handed no `$TERM` and no terminal.** Found once,
+  fixed three times, three different shapes. It is now `can_draw()` in one file, and
+  every caller that draws asks there.
+- **A fetched binary records how it arrived**, in a `KEY=value` note beside itself that
+  `version::provenance_of` reads back. Without it a downloaded binary reports itself as
+  built from source, and then offers a remedy needing a toolchain its user does not have.
+
+The progress display is a seam. `bin/progress` holds it, `bin/build` makes two calls into
+it, and the terminal spinner is one named implementation rather than the default. A Herdr
+dialog is coming for every path that can reach one — an install compile is measured to
+reach none, so the drawn path stays for that case permanently.
+
 ## Layout
 
 ```
 crates/herdr-plugin-kit/        the runtime crate
 crates/herdr-plugin-kit-build/  the build-script stamp, a build-dependency only
 codegen/                        the four-stage pipeline and its tests
+templates/                      the shell shims every plugin's bin/ is synced from
 SCOPE.md                        the specification
 justfile                        task wrappers, all one line each
 ```
@@ -214,12 +268,19 @@ justfile                        task wrappers, all one line each
 ## Testing
 
 ```sh
-just test          # or: python3 codegen/test_codegen.py && cargo test
-just check         # formatting, lints, and both suites
+just test          # or: python3 codegen/test_codegen.py && \
+                   #     python3 templates/test_templates.py && cargo test
+just check         # formatting, lints, and all three suites
 ```
 
-The codegen guards have their own suite because an untested guard is a claim rather than
-a check. It needs no network and nothing beyond the standard library.
+The codegen guards and the shell templates have their own suites because an untested
+guard is a claim rather than a check. Neither needs a network, and neither needs anything
+beyond the standard library.
+
+The template suite drives the real shims against fixture plugin trees, on Herdr's own
+launchd `PATH` of `/usr/bin:/bin:/usr/sbin:/sbin`, with stub binaries for `cargo`,
+`curl`, `git` and `herdr`. It allocates a pty where a terminal is the thing under test.
+It never runs PowerShell, because it cannot.
 
 ## Licence
 
