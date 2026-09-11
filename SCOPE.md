@@ -1,9 +1,9 @@
 # herdr-plugin-kit — Specification
 
-**Status:** partly built. `api`, `env`, `version` and the shell templates have landed,
-plus `dialog` (§7.5), which §13 released from its one-consumer hold by a deliberate
-decision. The transport and CI have not.
-**Date:** 2026-09-10, corrected and extended 2026-09-11 (§15.1, §15.2).
+**Status:** partly built. `api` including its transport (§4.2, §4.3), `env`, `version`
+and the shell templates have landed, plus `dialog` (§7.5), which §13 released from its
+one-consumer hold by a deliberate decision. CI has not.
+**Date:** 2026-09-10, corrected and extended 2026-09-11 (§15.1, §15.2, §15.3).
 **Repo:** `mike-bronner/herdr-plugin-kit`, public, under the `mike-bronner` GitHub organization.
 
 **Verified against:** Herdr 0.9.0, API protocol 22, schema_version 1, `cargo-typify` 0.8.0, rustc 1.97.0, cargo 1.97.0.
@@ -66,12 +66,12 @@ information the caller already received. §7.2 is what the kit does about it.
 
 ## 2. Repository layout
 
-The target layout. Built so far: `codegen/`, the `api` module, `env.rs`, `version.rs`,
-`dialog.rs`, the whole of `crates/herdr-plugin-kit-build/`, and `templates/`. Still to
-come: `client.rs` and `.github/workflows/`. `report.rs` and `update.rs` are held by §13
-rather than merely pending. ⚠️ **`dialog.rs` was held by the same bar and was released
-from it by a deliberate decision** — §13 records which half of that was evidence and
-which was a choice.
+The target layout. Built so far: `codegen/`, the `api` module including `client.rs`,
+`env.rs`, `version.rs`, `dialog.rs`, the whole of `crates/herdr-plugin-kit-build/`, and
+`templates/`. Still to come: `.github/workflows/`. `report.rs` and `update.rs` are held
+by §13 rather than merely pending. ⚠️ **`dialog.rs` was held by the same bar and was
+released from it by a deliberate decision** — §13 records which half of that was
+evidence and which was a choice.
 
 ```
 herdr-plugin-kit/
@@ -93,6 +93,7 @@ herdr-plugin-kit/
 │   │   ├── examples/
 │   │   │   └── preview.rs            # draws every dialog locally, in real colour
 │   │   └── tests/
+│   │       ├── client.rs             # the transport, against a scripted server
 │   │       ├── dialog.rs             # the dialogs, against a fake opener
 │   │       └── method_sweep.rs       # generated, the 102-discriminator sweep
 │   └── herdr-plugin-kit-build/       # build-dependency crate only
@@ -115,6 +116,7 @@ herdr-plugin-kit/
 │   ├── mutate.py                     # the mutation harness, JSON-classified
 │   ├── test_mutate.py                # its own tests, including two regressions
 │   └── mutations/
+│       ├── client.json               # the transport's 17 mutations
 │       └── dialog.json               # the dialogs' 25 mutations
 ├── .github/workflows/
 │   ├── plugin-ci.yml                 # reusable, workflow_call
@@ -245,7 +247,7 @@ GENERATED_PROTOCOL        // 22
 GENERATED_SCHEMA_VERSION  // 1
 ```
 
-### 4.2 Transport — must be portable
+### 4.2 Transport — must be portable ✅ **built 2026-09-11**
 
 🚨 ✅ **`HERDR_SOCKET_PATH` is a Unix socket on Unix and a named pipe on Windows.**
 `UnixStream` is therefore not portable, and the existing plugin code is Unix-only.
@@ -262,6 +264,54 @@ never threatens it.
 - Request ids from an atomic counter, prefixed with the plugin id.
 - Read and write timeouts, defaulting to 5 seconds, matching recent-spaces today.
 - A typed `CallError` distinguishing connect, timeout, protocol, and server-error cases.
+
+#### What shipped, and the four decisions that were not in the list above
+
+`api/client.rs`. One connection per call, newline-delimited JSON, which is the wire
+protocol as measured and as all three donors use it. `interprocess` costs the graph
+`libc` and nothing else at run time, and its own floor of 1.75 sits under this
+workspace's 1.80.
+
+⚠️ **It fails the bar `toml` cleared in §5, and harder than `crossterm` did in §7.5.7:
+no donor depends on it, so all three consumers gain a dependency.** Bought anyway, and
+not for convenience — without it there is no portable transport to write at all.
+
+**1. Off Unix there is no fallback, and that is deliberate.** 🚨 `interprocess` maps a
+filesystem path to a named pipe only when it already starts `\\.\pipe\`, and **refuses
+any other path outright**. So the Unix default cannot simply be reused: it would fail as
+an opaque name-mapping error far from its cause, and resolution would stay infallible
+only by lying. Inventing a pipe name is worse, because the failure then names a path
+Herdr never used and reads as plausible. `Socket::resolve` answers `NoSocket` instead,
+naming the one variable that fixes it. The signature is a `Result` that can never fire
+on Unix, which is the price of not lying on the platform nobody can check.
+
+**2. The answer's id is checked against the request's.** Wire data is untrusted input,
+and an answer addressed to somebody else is worse than no answer because it looks like
+one. 🔑 Without the check the atomic counter is decoration: one connection per call
+already correlates a request with its reply, so nothing verifies the id until something
+does.
+
+**3. The timeout is measured, not assumed.** ✅ `set_recv_timeout` existing says nothing
+about a timeout firing, and one set on the wrong handle only shows itself against a
+wedged server. A server that accepts and then says nothing was stood up and the call
+timed. On macOS the timeout arrives as `WouldBlock`; `TimedOut` is the Windows mapping
+and is compile-verified only. A failure to *set* the timeout is propagated rather than
+discarded — recent-spaces writes `let _ =` there, which leaves the call able to hang
+forever in the one situation the timeout exists for.
+
+**4. No second error-code list was built.** See §4.2.1 below.
+
+#### Where the transport is still blind
+
+Nothing here has run against a live Herdr server. The scripted server in
+`tests/client.rs` speaks the real wire protocol over a real socket, so the bytes are
+genuine, but the peer is not Herdr.
+
+⚠️ **Everything Windows is compile-verified only, and that much was actually done**:
+`cargo clippy --all-targets --features dialog --target x86_64-pc-windows-msvc -D
+warnings` is clean, 2026-09-11. That type-checks the Windows arms of the default socket,
+the timeout classification, and the test harness's own pipe naming. It proves nothing
+about behaviour.
 
 #### 4.2.1 Error codes are hand-maintained, and never generated
 
@@ -288,7 +338,20 @@ that put it there: the call, the Herdr version, and what came back. ⚠️ An en
 measurement beside it is a claim rather than a check, and nothing in the pipeline can
 tell the two apart.
 
-### 4.3 The protocol handshake
+##### ✅ Settled 2026-09-11: the list already existed, so a second one was not built
+
+**The kit matches exactly one error code, and it is `dialog::BUSY_CODE`.** That constant
+already sits beside its measurement (§7.5.3), and `dialog::OpenError::from_error` is
+already the function that reads it. §4.2's client routes through that rather than
+matching `ui_busy` a second time.
+
+🔑 **This clause governs where a list lives, not whether one must exist.** A second list
+in `client.rs` with nothing in it would be a structure pretending to be a policy, and
+the first entry somebody added to it would have no reason to be there rather than in the
+one that already works. Everywhere else the code and message are handed back verbatim in
+`CallError::Server`, for the caller to read or ignore.
+
+### 4.3 The protocol handshake ✅ **built 2026-09-11**
 
 ✅ `ping` returns a required `version` string and a required `protocol` integer, plus
 optional `capabilities`.
@@ -299,6 +362,32 @@ currently appears as a confusing parse failure.
 
 A mismatch is a warning, never a hard failure. A plugin that still works must keep
 working.
+
+#### The diagnosis is a value, and the plugin decides what to do with it
+
+`Client::ping` answers a `Handshake`. `Handshake::mismatch` answers
+`Option<ProtocolMismatch>`, and `ProtocolMismatch`'s `Display` writes the warning line
+naming both numbers, so a plugin writes one line and gets the wording for free.
+
+🔑 **Returning the information rather than acting on it is this kit's established
+pattern, not a new choice.** §7.2 hands back a notification's delivery reason instead of
+assuming an outcome. §6.2 formats a version report and never prints it. §7.5 answers
+`Shown` and `Unanswered` and lets the caller act. A client that wrote to stderr itself
+would be the first place the kit decided something on a plugin's behalf.
+
+⚠️ **Two concrete costs settled it, beyond the pattern.** Checking automatically inside
+an unrelated call would hide a socket round trip there, which is precisely the class of
+confusion this section exists to end. And recent-spaces is a headless watcher, so it
+would take stderr output it never asked for.
+
+**The accepted cost: a plugin can forget to ask.** Taken rather than engineered around.
+Three plugins wording the warning three ways is not a defect — they are three programs
+with three voices — and the `Display` implementation means none of them has to invent
+the sentence.
+
+⚠️ **A mismatch never fails a call.** `ping` succeeds and the diagnosis rides along
+beside the result. A test holds that up specifically, because "warning, not failure" is
+the kind of promise that erodes quietly.
 
 ---
 
@@ -753,6 +842,17 @@ server. When §4.2 lands it implements the trait and no caller changes.
 
 The answer file and the pid marker stay outside it. They are filesystem work.
 
+✅ **Closed 2026-09-11, and the claim held.** `api::client::Client` implements
+`Transport`, so a consumer supplies nothing. **No caller changed**, and nothing in
+`dialog.rs` was touched to make it fit — which is what the paragraph above predicted
+when it said this shape was not a workaround. The implementation lives in `client.rs`
+behind the `dialog` feature, so the dialog module still knows nothing about transports.
+
+⚠️ **`open_pane` treats any success as acceptance, deliberately.** The trait promises
+Herdr accepted the request, not that a pane appeared. ✅ A popup answers `{"type":"ok"}`
+and an overlay answers `plugin_pane_opened`, both measured 2026-09-11, and reading the
+shape here would refuse a placement the trait never restricted.
+
 #### 7.5.7 Costs, recorded rather than discovered later
 
 ⚠️ **`crossterm` fails the bar `toml` cleared in §5.** `toml` was accepted because all
@@ -1170,8 +1270,10 @@ floats like a dialog, an overlay covers the whole tab, and popup hands back no p
 ⚠️ **The arm in `bin/progress` is still empty, deliberately.** Filling it needs a
 newline-delimited JSON socket client **in POSIX shell**: `bin/common` has no socket
 helper, and the shim cannot call the Rust module, because a build spinner runs *while the
-binary is being compiled* and there is no binary to call. §4.2's transport stage may make
-that unnecessary, so writing one now risks writing it twice.
+binary is being compiled* and there is no binary to call. ✅ **§4.2 has since landed and
+does not help here**, for exactly that reason: the Rust client cannot run before the
+binary it lives in exists. The arm stays empty, and the duplication risk that argued for
+waiting is now settled rather than pending.
 
 🚨 **The longest wait can never use a dialog whatever gets built**, per the measurement
 above. So a dialog arm would only ever serve the startup and pane-hosted paths, which
@@ -1548,4 +1650,27 @@ Related vault notes: `decisions/2026-09-10-herdr-plugin-kit-shared-crate.md`,
 `insights/2026-09-10-herdr-build-never-runs-for-local-installs.md`,
 `insights/2026-09-10-caveat-decay-is-one-way.md`,
 `insights/2026-09-11-plugin-pane-open-placement-decides-the-handle.md`.
+
+### 15.3 Extended 2026-09-11: the transport and the handshake
+
+The same session, later. §4.2 and §4.3 moved from specified to built.
+
+| § | What changed | Kind |
+|---|---|---|
+| 4.2 | `api/client.rs`. One connection per call, newline-delimited JSON, `interprocess` over both platforms | ➕ new |
+| 4.2 | Off Unix there is **no** fallback socket: `interprocess` refuses any path that does not already start `\\.\pipe\`, so reusing the Unix default would fail opaquely and inventing a pipe name would fail plausibly | 📏 measurement + 🔑 decision |
+| 4.2 | The answer's id is checked against the request's, which is what makes the atomic counter load-bearing rather than decorative | 🔧 design |
+| 4.2 | A receive timeout arrives as `WouldBlock` on macOS, established against a deliberately wedged server rather than inferred from the API | 📏 measurement |
+| 4.2.1 | No second error-code list was built. `dialog::BUSY_CODE` already is that list, and the client routes through it | 🔑 decision |
+| 4.3 | A mismatch is a returned value, never a side effect, following §6.2, §7.2 and §7.5 rather than departing from them | 🔑 decision |
+| 7.5.6 | The `Transport` seam met a real client. No caller changed, as §7.5.6 predicted | ✅ confirmation |
+
+⚠️ **Nothing in §4.2 or §4.3 has run against a live Herdr server.** The tests drive a
+scripted peer over a real socket, so the bytes are genuine and the peer is not. Every
+Windows path remains compile-verified only.
+
+Related vault note:
+`insights/2026-09-11-plugin-pane-open-placement-decides-the-handle.md`, which carries the
+measured `[[build]]`-hook and event-hook environments that make the socket fallback an
+ordinary path rather than a rare branch.
 

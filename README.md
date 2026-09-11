@@ -15,19 +15,20 @@ across three repositories.
 
 ## Status
 
-Early. The transport, the report and update modules, and the CI workflows land in later
-stages, in the order `SCOPE.md` section 13 sets out.
+Early. The report and update modules and the CI workflows land in later stages, in the
+order `SCOPE.md` section 13 sets out.
 
 | Piece | State |
 |---|---|
 | `api::generated` — 102 request methods, 187 schema types | ✅ generated and committed |
 | `api::Request` — the hand-written envelope | ✅ |
+| `api::client` — the socket transport and the protocol handshake | ✅ **never run against a live server**, see below |
 | `env` — the reader for Herdr's launch contract | ✅ |
 | `version` — what this binary is, and where it came from | ✅ |
+| `dialog` — four styled popup states | ✅ feature-gated, off by default |
 | `herdr-plugin-kit-build` — the build-script stamp | ✅ |
 | Shell templates — `bin/build`, the launcher, and their sync task | ✅ |
 | PowerShell templates | ⚠️ shipped **unrun**, see below |
-| `api::client` — transport | ⏳ later stage |
 | `report`, `update` | ⏳ held until one real consumer proves the boundaries |
 | CI workflows | ⏳ later stage |
 
@@ -40,11 +41,21 @@ and it is not a preference: `cargo-typify` emits `std::sync::LazyLock` for every
 pattern-constrained string in Herdr's schema, and that landed in 1.80. The generated
 file is never hand-edited, so the floor moves with it.
 
-Nothing else. The crate depends on `serde`, `serde_json`, `regress`, and `toml`, and it
+The crate depends on `serde`, `serde_json`, `regress`, `toml`, and `interprocess`, and it
 carries no build script, no build dependencies, and no proc macro of its own. `regress`
 arrives with the generated types. `toml` is used only to parse `herdr-plugin.toml`, and
 all three donor plugins already depend on it directly, so it costs them nothing new and
 its own floor of 1.66 sits well under this crate's.
+
+`interprocess` is the one dependency that costs every consumer something new, because no
+donor plugin has it today. It is bought for portability rather than convenience:
+`HERDR_SOCKET_PATH` is a Unix socket on Unix and a **named pipe** on Windows, so all
+three donors' `UnixStream` clients are Unix-only and none of them could be promoted as
+written. It is the same crate Herdr itself depends on, its floor of 1.75 sits under this
+crate's, and at run time it pulls in `libc` and nothing else.
+
+`crossterm` reaches a consumer only through the `dialog` feature, which is off by
+default.
 
 The build-script stamp is a **second crate**, `herdr-plugin-kit-build`, with no
 dependencies at all. It goes in a plugin's `[build-dependencies]` and never reaches the
@@ -61,6 +72,25 @@ including `aarch64-pc-windows-msvc`. Both decisions are recorded in `SCOPE.md` s
 It never proves a plugin runs there. Every Windows path in the Rust — the transport that
 has to speak named pipes rather than Unix sockets — is verified by the compiler and by
 nothing else.
+
+Two Windows behaviours in `api::client` follow from that, and both are deliberate:
+
+- **There is no default socket off Unix.** `HERDR_SOCKET_PATH` unset on Windows is an
+  error naming that variable, not a guess. `interprocess` accepts only paths already
+  starting `\\.\pipe\`, so the Unix default cannot be reused, and nobody has measured
+  what Herdr names its pipe. An invented default would fail with a message pointing at a
+  path Herdr never used, which reads as plausible and sends the reader down the wrong
+  road.
+- **A receive timeout is matched on two error kinds.** `WouldBlock` is measured on macOS.
+  `TimedOut` is the documented Windows mapping and is compile-verified only. Both are
+  kept, because dropping the unverifiable one would leave a wedged server hanging on the
+  platform nobody can check.
+
+The compile half was run rather than assumed:
+
+```sh
+cargo clippy --all-targets --features dialog --target x86_64-pc-windows-msvc -- -D warnings
+```
 
 **The PowerShell shims do not reach even that bar.** PowerShell has no compiler and no CI
 job, and it is not installed on the machine they were written on, so `templates/bin/*.ps1`
@@ -104,15 +134,47 @@ let wire = serde_json::to_string(&request).unwrap();
 That example is a doctest in `src/api/mod.rs`, so the wire format above is checked by
 `cargo test` rather than asserted here.
 
-The kit also exports what the types were generated against, so a plugin can compare its
-expectations with a live server:
+Call Herdr:
+
+```rust
+use herdr_plugin_kit::api::client::{Client, Socket};
+use herdr_plugin_kit::env::Environment;
+
+let env = Environment::from_process();
+let socket = Socket::resolve(&env).expect("no socket could be named");
+let client = Client::new(socket, "mikebronner.my-plugin");
+
+match client.ping() {
+    Ok(handshake) => {
+        if let Some(mismatch) = handshake.mismatch() {
+            eprintln!("warning: {}", mismatch);
+        }
+    }
+    Err(error) => eprintln!("herdr is not answering: {}", error),
+}
+```
+
+That example is a doctest on `api::client::Client`, so it is compiled by `cargo test`
+rather than asserted here.
+
+**A protocol mismatch is a diagnosis, never a hard failure.** A plugin that still works
+must keep working, so the kit hands the finding back and the plugin decides. The
+`Display` above writes the whole warning line, naming both protocol numbers, so nobody
+has to invent the sentence. Nothing prints by itself: a client that wrote to stderr would
+be the first place the kit decided something on a plugin's behalf, and a headless watcher
+like recent-spaces would get output it never asked for.
+
+The constants behind that comparison are exported too:
 
 ```rust
 use herdr_plugin_kit::api::{GENERATED_FOR_HERDR_TAG, GENERATED_PROTOCOL};
 ```
 
-A protocol mismatch is a diagnosis, never a hard failure. A plugin that still works must
-keep working.
+⚠️ **Do not assume `HERDR_SOCKET_PATH` is set.** Measured on Herdr 0.9.0: a `[[build]]`
+hook during `herdr plugin install` receives **zero** `HERDR_*` variables, and a plugin
+event hook receives pane and workspace variables but not this one. `Socket::resolve`
+falls back to `~/.config/herdr/herdr.sock` on Unix, and `Socket` records which of the two
+answered so a connection failure can say.
 
 ## The generated layer
 
@@ -276,6 +338,17 @@ just check         # formatting, lints, and all three suites
 The codegen guards and the shell templates have their own suites because an untested
 guard is a claim rather than a check. Neither needs a network, and neither needs anything
 beyond the standard library.
+
+The transport suite stands up a scripted server on a real local socket, so the bytes are
+genuine even though the peer is not Herdr. That is also how the call timeout is checked:
+`set_recv_timeout` existing proves nothing, and one set on the wrong handle only shows
+itself against a server that accepts a connection and then says nothing. So the suite
+builds exactly that server and times the call.
+
+```sh
+just mutate tools/mutations/client.json   # the transport's 17 guards
+just mutate tools/mutations/dialog.json   # the dialogs' 25
+```
 
 The template suite drives the real shims against fixture plugin trees, on Herdr's own
 launchd `PATH` of `/usr/bin:/bin:/usr/sbin:/sbin`, with stub binaries for `cargo`,
