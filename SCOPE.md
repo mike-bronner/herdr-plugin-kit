@@ -1,7 +1,8 @@
 # herdr-plugin-kit — Specification
 
-**Status:** design, ready to build.
-**Date:** 2026-09-10.
+**Status:** partly built. `api`, `env`, and `version` have landed, which is the whole of
+what §13 ships. The transport, the shell templates, and CI have not.
+**Date:** 2026-09-10, corrected and extended 2026-09-11 (§15.1).
 **Repo:** `mike-bronner/herdr-plugin-kit`, public, under the `mike-bronner` GitHub organization.
 
 **Verified against:** Herdr 0.9.0, API protocol 22, schema_version 1, `cargo-typify` 0.8.0, rustc 1.97.0, cargo 1.97.0.
@@ -64,8 +65,10 @@ information the caller already received. §7.2 is what the kit does about it.
 
 ## 2. Repository layout
 
-The target layout. Stage 1 built `crates/herdr-plugin-kit/` and `codegen/`; everything
-else lands in a later stage.
+The target layout. Built so far: `codegen/`, the `api` module, `env.rs`, `version.rs`,
+and the whole of `crates/herdr-plugin-kit-build/`. Still to come: `client.rs`,
+`templates/`, and `.github/workflows/`. `report.rs` and `update.rs` are held by §13
+rather than merely pending.
 
 ```
 herdr-plugin-kit/
@@ -387,12 +390,60 @@ wrong and every plugin reports the kit's commit as its own.
 
 Fixed variable names for every plugin. No per-plugin prefix parameter.
 
+⚠️ **The claim cannot be tested from inside the kit.** Expanded there, the kit *is* the
+calling crate, so `env!("CARGO_PKG_VERSION")` answers the kit's version whether the
+design is right or wrong. ✅ The test therefore compiles a real consumer crate declaring
+`9.9.9`, runs it, and asserts the kit's own version never appears in its report.
+
+✅ **A plugin whose `build.rs` never calls `stamp()` still compiles and still reports.**
+The macro reads the two stamp variables with `option_env!` rather than `env!`, so an
+absent stamp becomes the word `unknown` instead of a compile error. That is §6.2's rule
+applied one level earlier than it looks like it should be.
+
+#### The stamp's pathspec
+
+`stamp()` asks `git status --porcelain` about this list and nothing else:
+
+```
+src build.rs Cargo.toml Cargo.lock .cargo rust-toolchain rust-toolchain.toml
+```
+
+🔑 **The same list is `bin/build`'s releasable check (§9.4.1)**, and §9.4.1 carries why
+both toolchain names have to appear. The two answer the same question about the same
+tree, so they cannot be allowed to disagree.
+
+⚠️ Watched for a rebuild **only where the path exists**. ✅ Measured: a
+`cargo:rerun-if-changed` pointing at an absent path rebuilds on every invocation, which
+would move the build instant under a binary that never changed. ✅ Also measured: `git
+status` exits 0 for a pathspec matching nothing, so naming a file the plugin does not
+have costs nothing on the status side.
+
 ### 6.2 Behaviour
 
 Keeps the existing format: crate version, commit with `-dirty` or `-unverified` marker,
-build timestamp, manifest version, and the `STALE:` line when the two disagree.
+build timestamp, manifest version, and the `STALE:` line when the two disagree. §6.3's
+provenance line joins them.
 
-**Nothing here may fail.** Every lookup degrades to a word.
+```text
+watch 0.5.0 (a1b2c3d, built 2026-09-11T04:39:22Z)
+manifest 0.5.0 at /p/herdr-plugin.toml
+built from source on this machine
+STALE: this binary is 0.5.0 but the manifest is 9.9.9. Rebuild it with `cargo build --release`.
+```
+
+🔑 **The first three lines are unconditional, and the fourth is the only verdict.** A
+report with a fact line missing would be ambiguous between "fine" and "could not tell",
+which is the failure this whole module exists to remove.
+
+**Nothing here may fail.** Every lookup degrades to a word. Concretely:
+
+| Lookup | When it cannot answer |
+|---|---|
+| The commit and build instant | `unknown`, and an empty value counts as absent |
+| The manifest | names the path and what went wrong: unreadable, unparsed, or no version key |
+| No plugin root at all | says so, and says which variable would fix it |
+| Staleness against a manifest it could not read | ⚠️ **no verdict**, because unknown is not agreement |
+| Provenance | see §6.3 |
 
 ### 6.3 Provenance
 
@@ -401,7 +452,40 @@ or built locally at a given time. This is what answers "did the download actuall
 without inferring it from timing.
 
 Provenance is a runtime read of a file the fetch path writes. It is deliberately **not**
-part of the compile-time `version_report!()` macro.
+part of the compile-time `version_report!()` macro. A binary can be built once and
+shipped, so how it arrived is not something its own compilation can know.
+
+**The note sits beside the binary**, at the binary's own path plus `.download`. Beside it
+rather than in the state directory, because the two have to travel together: a note that
+outlived the binary it describes would describe the wrong one.
+
+✅ Its format is recent-spaces' existing one, a `KEY=value` file the shell shim writes:
+
+```
+version=0.5.0
+asset=watch-macos-arm64-6c55e13a5445
+sha256=<64 hex characters>
+url=https://github.com/.../releases/download/0.5.0/watch-macos-arm64-6c55e13a5445
+```
+
+So §5's `parse_env_file` reads it. The shim already writes this shape, and a second
+format would be a second thing to keep in step.
+
+🔑 **The note's existence is the fact that decides the remedy**, not its contents. A
+thin note, or one that cannot be read at all, still means the binary was fetched, and
+whoever installed a published binary has no toolchain. Telling them to run `cargo build`
+would be useless. So "could not read the note" never collapses into "compiled here":
+
+| On disk | Reported |
+|---|---|
+| No note | `built from source on this machine` |
+| A note naming the asset and url | `fetched <asset> from <url>` |
+| A note that is thin | `fetched`, and says which field it lacks |
+| A note that cannot be read | `fetched, and the note beside it could not be read` |
+| ⚠️ A **directory** with the note's name | `built from source`, matching the `[ -f ]` the shim asks |
+
+⚠️ **project-finder 0.8.0 fetches without writing a note** (§9.4). Until the template
+closes that, its report will say "built from source" for a fetched binary.
 
 ---
 

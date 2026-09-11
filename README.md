@@ -23,8 +23,9 @@ workflows land in later stages, in the order `SCOPE.md` section 13 sets out.
 | `api::generated` — 102 request methods, 187 schema types | ✅ generated and committed |
 | `api::Request` — the hand-written envelope | ✅ |
 | `env` — the reader for Herdr's launch contract | ✅ |
+| `version` — what this binary is, and where it came from | ✅ |
+| `herdr-plugin-kit-build` — the build-script stamp | ✅ |
 | `api::client` — transport | ⏳ later stage |
-| `version` | ⏳ later stage |
 | `report`, `update` | ⏳ held until one real consumer proves the boundaries |
 | Shell templates, CI workflows | ⏳ later stage |
 
@@ -37,8 +38,16 @@ and it is not a preference: `cargo-typify` emits `std::sync::LazyLock` for every
 pattern-constrained string in Herdr's schema, and that landed in 1.80. The generated
 file is never hand-edited, so the floor moves with it.
 
-Nothing else. The crate depends on `serde`, `serde_json`, and `regress`, and it carries
-no build script, no build dependencies, and no proc macro of its own.
+Nothing else. The crate depends on `serde`, `serde_json`, `regress`, and `toml`, and it
+carries no build script, no build dependencies, and no proc macro of its own. `regress`
+arrives with the generated types. `toml` is used only to parse `herdr-plugin.toml`, and
+all three donor plugins already depend on it directly, so it costs them nothing new and
+its own floor of 1.66 sits well under this crate's.
+
+The build-script stamp is a **second crate**, `herdr-plugin-kit-build`, with no
+dependencies at all. It goes in a plugin's `[build-dependencies]` and never reaches the
+shipped binary. That separation is the only reason two crates exist rather than one, and
+a test in the kit fails if the two are ever wired together.
 
 ## Windows is compile-verified only
 
@@ -155,13 +164,51 @@ with a message naming what changed and what to do:
 
 Every one of those would otherwise produce Rust that compiles and is quietly wrong.
 
+## Reporting a version
+
+A plugin gets `--version` from two pieces. Its `build.rs` calls the stamp:
+
+```rust
+fn main() {
+    herdr_plugin_kit_build::stamp();
+}
+```
+
+And it asks for the report through a macro:
+
+```rust
+use herdr_plugin_kit::env::Environment;
+
+let environment = Environment::from_process();
+print!("{}", herdr_plugin_kit::version_report!("watch", &environment));
+```
+
+```text
+watch 0.5.0 (a1b2c3d, built 2026-09-11T04:39:22Z)
+manifest 0.5.0 at /p/herdr-plugin.toml
+built from source on this machine
+```
+
+**It has to be a macro.** `env!` resolves in whichever crate it is written in, so a plain
+kit function would capture the kit's version and the kit's commit, and every plugin
+calling it would report them as its own. The output would still look like a version
+report, which is what makes that bug worth a macro to avoid.
+
+**Nothing in the report fails.** Every lookup degrades to a word, because this is what
+somebody runs when the plugin is already broken. It never touches the socket either:
+`--version` has to answer when the server is down, which is exactly when it gets run.
+
+A plugin that never calls `stamp()` still compiles and still reports. The commit and
+build instant just read `unknown`.
+
 ## Layout
 
 ```
-crates/herdr-plugin-kit/    the runtime crate
-codegen/                    the four-stage pipeline and its tests
-SCOPE.md                    the specification
-justfile                    task wrappers, all one line each
+crates/herdr-plugin-kit/        the runtime crate
+crates/herdr-plugin-kit-build/  the build-script stamp, a build-dependency only
+codegen/                        the four-stage pipeline and its tests
+SCOPE.md                        the specification
+justfile                        task wrappers, all one line each
 ```
 
 ## Testing

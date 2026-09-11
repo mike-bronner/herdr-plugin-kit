@@ -16,3 +16,6 @@ repository = "https://github.com/mike-bronner/herdr-plugin-kit"
 regress = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Already a dependency of all three donor plugins, so the kit adds nothing
+# to any consumer's graph by reading `herdr-plugin.toml` with it.
+toml = "0.8"
