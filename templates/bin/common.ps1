@@ -54,23 +54,29 @@ $OverrideFile = 'BUILD_FROM_SOURCE'
 
 # Does a Windows release asset's name carry '.exe'?
 #
-# UNVERIFIED, AND THIS IS THE ONLY PLACE IT IS DECIDED.
+# UNVERIFIED. Recommended, not confirmed, and this is the *consuming* half of
+# the answer.
 #
-# SCOPE.md section 14.2 holds the question open. Section 9.6 extends a
-# four-name convention that shipped without any suffix, so that is what this is
-# set to, and it is the specification read literally rather than a measurement.
-# Nothing has ever produced or consumed the two Windows asset names.
+# SCOPE.md section 14.2 holds the question and now records the recommendation:
+# a file without this extension is not executable on Windows, and somebody
+# downloading from the releases page should get something that runs. Nobody on
+# this project has Windows hardware, so nothing has produced or consumed one of
+# these names and nothing here is a measurement.
 #
-# Stage 4 builds the release workflow and settles this by observation.
-# Correcting it is a one-line change to this one assignment. No other file in
-# this repository names a Windows asset: bin/common's platform() answers only
-# macos and linux, and refuses everything else rather than guessing.
-# templates/test_templates.py asserts both halves of that, so the claim on this
-# line cannot quietly stop being true.
+# The producing half is WINDOWS_ASSET_EXTENSION in tools/plugin_gate.py, which
+# is what .github/workflows/plugin-release.yml publishes. Those two assignments
+# are the only places in this repository that decide this name, and
+# tools/test_plugin_gate.py fails if they ever disagree — a producer and a
+# consumer disagreeing here is a 404 and a silent compile on every Windows
+# install. Reversing the recommendation is one line in each.
+#
+# No shell template names a Windows asset at all: bin/common's platform()
+# answers only macos and linux, and refuses everything else rather than
+# guessing. templates/test_templates.py asserts that too.
 #
 # Being wrong here costs a 404 and a compile, never a wrong binary, because the
 # checksum gate below the fetch does not care what the file was called.
-$AssetNameExtension = ''
+$AssetNameExtension = '.exe'
 
 # ---- Reading the plugin's own files --------------------------------------
 

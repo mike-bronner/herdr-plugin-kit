@@ -1,0 +1,233 @@
+name: Plugin Release
+
+# Reusable. Builds the six targets on native runners and publishes a raw
+# binary plus a checksum for each, named exactly as every plugin's bin/build
+# asks for them.
+#
+#     # .github/workflows/release.yml in the plugin
+#     name: Release
+#     on:
+#       release:
+#         types: [created]
+#     permissions:
+#       contents: write          # ⚠️ required — see below
+#     jobs:
+#       release:
+#         uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-release.yml@0.1.0
+#         permissions:
+#           contents: write
+#
+# 🚨 THE CALLER MUST GRANT `contents: write`. A called workflow runs on the
+# caller's permissions and cannot raise its own, so without that line the run
+# fails before it starts, with a message about the permission it asked for. It
+# is needed to create the release and attach the twelve files to it.
+#
+# What it publishes, and why the names are what they are
+# ======================================================
+#
+#     https://github.com/<owner>/<repo>/releases/download/<version>/
+#       <binary>-<platform>-<commit12>            and .sha256 beside each
+#
+# 🔑 The tag is version-keyed and the asset is **commit**-keyed. The URL then
+# asserts that the binary was built from the source in the folder asking for
+# it: a checkout one commit past the tag asks for a file that does not exist,
+# gets a 404, and compiles. That is the correct outcome, and it needs no
+# comparison logic and no network call to resolve a tag. SCOPE.md §9.6.
+#
+# ⚠️ Raw binaries, no archive. bin/build downloads one file and checks one
+# checksum; there is no tar on the path it runs on.
+#
+# ⚠️ Nothing is stripped here. All three plugins set `strip = true` in
+# `[profile.release]`, so cargo strips at link time, before macOS ad-hoc signs
+# the Mach-O. A strip step after the fact would be stripping an already
+# stripped binary and taking a re-signing risk for nothing.
+
+on:
+  workflow_call:
+    outputs:
+      tag:
+        description: The tag the assets were published under.
+        value: ${{ jobs.guard.outputs.tag }}
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: The tag says what the manifests say
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      binary: ${{ steps.facts.outputs.binary }}
+      matrix: ${{ steps.facts.outputs.matrix }}
+    steps:
+      # A release event and a tag push name the tag in different places. Both
+      # are supported because callers use both; anything else — a branch, a
+      # manual run on main — reaches the gate below and is refused there
+      # rather than publishing assets under a name nothing asks for.
+      - name: Which tag is being published
+        id: tag
+        run: |
+          tag='${{ github.event.release.tag_name }}'
+          [ -n "$tag" ] || tag='${{ github.ref_name }}'
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Take the plugin at that tag
+        uses: actions/checkout@v7
+        with:
+          path: plugin
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - name: Establish which kit this is
+        id: kit
+        run: |
+          sha='${{ github.job_workflow_sha }}'
+          case "$sha" in
+            [0-9a-f]*) [ ${#sha} -eq 40 ] || sha='' ;;
+            *) sha='' ;;
+          esac
+          if [ -z "$sha" ]; then
+            echo "job_workflow_sha did not name a commit, so the kit version" \
+                 "publishing this release could not be established" >&2
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Take the kit the caller pinned
+        uses: actions/checkout@v7
+        with:
+          repository: mike-bronner/herdr-plugin-kit
+          ref: ${{ steps.kit.outputs.sha }}
+          path: kit
+
+      # 🚨 One tag form, never both. Mike's plugin tags are the bare semantic
+      # version and Herdr's keep their `v`; a release published under the
+      # wrong one 404s on every install and then compiles, in silence.
+      # SCOPE.md §12.1 and §12.2. This is the one place that publishes, so it
+      # is the one place that can stop the two conventions crossing.
+      - name: The tag form and every manifest agree
+        run: >-
+          python3 kit/tools/plugin_gate.py versions plugin
+          --tag '${{ steps.tag.outputs.tag }}'
+
+      - name: What to build, and what to call it
+        id: facts
+        run: |
+          echo "binary=$(python3 kit/tools/plugin_gate.py binary-name plugin)" >> "$GITHUB_OUTPUT"
+          echo "matrix=$(python3 kit/tools/plugin_gate.py matrix)" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: ${{ matrix.platform }}
+    needs: guard
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      # 🚨 Every platform's answer is wanted, and nothing is published unless
+      # all six arrive: the publish job below needs this one, so a failed leg
+      # cancels the release rather than shipping five platforms and leaving
+      # the sixth to compile on every install forever.
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.guard.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.guard.outputs.tag }}
+
+      # musl links its libc statically. A gnu build carries the runner's glibc
+      # floor, and a user on an older distribution would get a download that
+      # passes its checksum and then refuses to start — worse than the 404
+      # this whole design is built around, because the fetch succeeded.
+      - name: Take the musl toolchain
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Take the standard library for this target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Build the release binary
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      # 🔑 The commit comes from the checkout rather than from a context
+      # variable, so it is the same answer `git rev-parse HEAD` gives in the
+      # folder a user installed into. That equality is the entire convention.
+      - name: Name it for the commit it was built from
+        id: asset
+        shell: bash
+        env:
+          BINARY: ${{ needs.guard.outputs.binary }}
+          PLATFORM: ${{ matrix.platform }}
+          TARGET: ${{ matrix.target }}
+          EXE_SUFFIX: ${{ matrix.exe_suffix }}
+          ASSET_SUFFIX: ${{ matrix.asset_suffix }}
+        run: |
+          set -eu
+          asset="$BINARY-$PLATFORM-$(git rev-parse HEAD | cut -c1-12)$ASSET_SUFFIX"
+          cp "target/$TARGET/release/$BINARY$EXE_SUFFIX" "$asset"
+          # Both spellings, because the runners differ and bin/build accepts
+          # either: it reads the first field of the first line.
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$asset" > "$asset.sha256"
+          else
+            shasum -a 256 "$asset" > "$asset.sha256"
+          fi
+          echo "name=$asset" >> "$GITHUB_OUTPUT"
+          cat "$asset.sha256"
+
+      - name: Hold both files until every platform has arrived
+        uses: actions/upload-artifact@v7
+        with:
+          name: asset-${{ matrix.platform }}
+          path: |
+            ${{ steps.asset.outputs.name }}
+            ${{ steps.asset.outputs.name }}.sha256
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish
+    needs: [guard, build]
+    runs-on: ubuntu-latest
+    permissions:
+      # ⚠️ Granted by the caller, not by this file. A called workflow cannot
+      # raise its own permissions, so a caller that omits it fails here.
+      contents: write
+    steps:
+      # Every artifact this run produced, each in its own directory under
+      # assets/. No pattern and no merge: this run makes nothing else, and
+      # the fewer options in play the fewer there are to go stale.
+      - name: Collect every platform's two files
+        uses: actions/download-artifact@v8
+        with:
+          path: assets
+
+      # 🚨 A partial release is the failure this exists to prevent: five
+      # platforms published and the sixth silently compiling on every install.
+      # The count comes from the same table the matrix was built from.
+      - name: Every platform, or none
+        env:
+          MATRIX: ${{ needs.guard.outputs.matrix }}
+        run: |
+          set -eu
+          expected="$(printf '%s' "$MATRIX" | python3 -c 'import json,sys; print(2 * len(json.load(sys.stdin)))')"
+          found="$(find assets -type f | wc -l | tr -d ' ')"
+          if [ "$found" -ne "$expected" ]; then
+            echo "expected $expected files and collected $found; nothing is published" >&2
+            find assets -type f >&2
+            exit 1
+          fi
+          find assets -type f | sort
+
+      # A tag push has no release to attach to, and a release event already
+      # has one. Both callers are supported, so this makes one only when there
+      # is none.
+      - name: Attach them to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.guard.outputs.tag }}
+        run: |
+          set -eu
+          gh release view "$TAG" >/dev/null 2>&1 ||
+            gh release create "$TAG" --title "$TAG" --generate-notes
+          gh release upload "$TAG" assets/*/* --clobber
