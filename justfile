@@ -48,12 +48,14 @@ gate plugin:
     python3 tools/plugin_gate.py versions {{plugin}}
 
 # Run every test: the codegen guards, the shell templates, the mutation
-# harness's own tests, the plugin conformance gate, then the Rust suite.
+# harness's own tests, the plugin conformance gate, the one block that has to
+# live in YAML, then the Rust suite.
 test:
     python3 codegen/test_codegen.py
     python3 templates/test_templates.py
     python3 tools/test_mutate.py
     python3 tools/test_plugin_gate.py
+    python3 tools/test_kit_pin.py
     cargo test --features dialog
 
 # Check the tests actually test: break one thing at a time and confirm the

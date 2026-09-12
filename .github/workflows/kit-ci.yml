@@ -56,6 +56,12 @@ jobs:
       - name: The plugin conformance gate
         run: python3 tools/test_plugin_gate.py
 
+      # 🔑 Runs the kit-pin block out of the three files that carry it, and
+      # fails if they have drifted apart. It is the only logic here that cannot
+      # live in tools/, because it decides which tools/ to check out.
+      - name: The kit-pin resolution, out of the files that ship it
+        run: python3 tools/test_kit_pin.py
+
 
       - name: The Rust suite
         run: cargo test --locked --features dialog

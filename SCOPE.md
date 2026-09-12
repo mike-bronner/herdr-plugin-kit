@@ -1755,16 +1755,21 @@ named.
 
 ## 11. CI ✅ **built 2026-09-11**, 🔻 **plugin-facing half removed 2026-09-12**
 
-🔑 **Decided by Mike 2026-09-12: the kit stops running anything for anyone, and keeps
-providing things a plugin can run.** `plugin-ci.yml` and `plugin-release.yml` are gone.
-`tools/plugin_gate.py` and `templates/sync_bin.py` stay, in the same category as
-`templates/` itself: shipped, and called by whoever wants them.
+🔑 **Decided by Mike 2026-09-12, and corrected the same day.** The kit does not run
+**tests** for other repositories: `plugin-ci.yml` is gone and stays gone. It does
+publish releases: `plugin-release.yml` came back once the resolution problem turned out
+to be solvable (§11.2.1).
 
-⚠️ **What failed was the delivery, never the gates.** §11.2.1 has the measurement, and
-this is the whole of it in one sentence: **a callee cannot discover which version of
-itself a caller pinned, but a caller always knows what it pinned.** It is in the plugin's
-own `Cargo.toml`. So every gate works when the plugin runs it, and none of them worked
-when the kit tried to run them on the plugin's behalf.
+⚠️ **`plugin-ci.yml` could work now, and is still not coming back.** The correction below
+applies to it identically. It stays deleted because Mike does not want the kit running
+another repository's tests, which is a **scope decision rather than a technical one**.
+Nobody should reinstate it believing they have solved something.
+
+🔑 **The gates never failed; one lookup did.** A callee cannot discover which version of
+itself a caller pinned **from the Actions context** — but it does not have to, because
+the caller's repository is checked out in front of it and the pin is in that repository's
+`Cargo.toml`. §11.3's recipe and §11.5's workflow now read it the same way, out of the
+same file, with the same block of shell.
 
 **Corrected 2026-09-11 against what shipped.** This section was written before any code
 existed. Three things changed in the building and survive the removal: Linux is musl
@@ -1783,12 +1788,13 @@ cross-repo, pins to a tag or SHA, and nests up to ten levels. Two shipped, each 
 was to get a caller of roughly ten lines, and bumping the pinned ref would propagate to
 all three exactly as pinning the crate does.
 
-🚨 **It fails on the one thing it needed: a called workflow cannot learn which of its own
-versions it is.** It therefore cannot check out the matching kit, and checking a plugin
-against the wrong kit is worse than not checking it. §11.2.1 carries the measurement.
+🪤 **It appeared to fail on the one thing it needed**, because the Actions context tells
+a called workflow nothing about which of its own versions it is. §11.2.1 carries that
+measurement and the correction: it does not need the context, because the caller's
+repository is checked out in front of it.
 
-**So the plugins run the gates themselves** (§11.3), which has no discovery problem
-because a caller always knows what it pinned.
+**Both arrangements now work, and the split between them is a scope decision.** A plugin
+runs its own checks (§11.3); the kit publishes its releases (§11.5).
 
 ### 11.2.1 The logic is `tools/plugin_gate.py`, and that is what outlived the workflows
 
@@ -1829,13 +1835,37 @@ caller's own file at the caller's own ref. **Following it would check a plugin o
 against whatever `refs/heads/main` means in this kit**, and pass. The repository check
 added the same day is what refuses it.
 
-🔑 **So there is no route.** A reusable workflow cannot learn which of its own versions a
-caller pinned, and four stages of this design rested on a documented value that is empty
-in practice. **The documented behaviour of `github.job_workflow_sha` and what it does are
-different things**, which is worth more outside this repository than in it.
+🔑 **The measurement stands: a reusable workflow cannot learn which of its own versions a
+caller pinned *from the context*.** Four stages of this design rested on a documented
+value that is empty in practice, and **the documented behaviour of
+`github.job_workflow_sha` and what it does are different things**, which is worth more
+outside this repository than in it.
 
-⚠️ **Keep this subsection through any rewrite of §11.** It is the reason the sections
-around it changed, and it would otherwise vanish with the workflows it explains.
+#### 🪤 Corrected an hour later: the conclusion drawn from it was too strong
+
+🚨 **"So there is no route" is what this section said, and it was wrong.** There is a
+route, and it was written one subsection later while §11.3's recipe was being drafted for
+plugins to use.
+
+`github.repository` is the **caller's** repository, so a called workflow that runs
+`actions/checkout` with no `repository:` gets the **plugin**. The plugin's `Cargo.toml`
+carries the kit pin. So the callee resolves the kit's ref exactly as §11.3 does, and
+never consults `job_workflow_sha` at all.
+
+🔑 **The asymmetry was right and the inference from it was not.** A callee cannot learn
+what a caller pinned **from the context**. It can read it out of the caller's checkout,
+because it has one. The difference between those two sentences is a working release
+workflow.
+
+⚠️ **The tell, for next time: the answer was already written down in a neighbouring
+section, for a different audience.** §11.3 told plugins to read their own pin with `cargo
+metadata` at the same moment §11.2.1 concluded that nothing could. Both were written the
+same afternoon. **A conclusion of the form "there is no way to do X" deserves one pass
+over what was just built for somebody else.**
+
+⚠️ **Keep this subsection through any rewrite of §11**, both halves of it. The
+measurement is the reason the sections around it changed, and the correction is the
+reason one of them changed back.
 
 ### 11.3 What a plugin's own CI runs
 
@@ -1855,12 +1885,20 @@ jobs:
           # clone lets it pass by seeing no releases at all.
           fetch-depth: 0
 
-      # The tag comes from this plugin's own dependency pin, read through
-      # cargo rather than out of the TOML. `--no-deps` needs no network and no
-      # lockfile, and it answers for a workspace-inherited dependency, which a
-      # regex over Cargo.toml does not.
       - id: kit
         run: |
+          # ---8<--- kit pin resolution. This exact text sits in SCOPE.md §11.3's recipe
+          # and in .github/workflows/plugin-release.yml, and tools/test_kit_pin.py runs
+          # it and fails if the two copies differ.
+          #
+          # 🔑 It reads the pin out of the repository rather than asking the Actions
+          # context. ✅ Measured 2026-09-12 (§11.2.1): a called workflow is told nothing
+          # about which of its own versions was pinned. It does not need to be told —
+          # `github.repository` is the *caller's*, so the plugin is already checked out,
+          # and the pin is in the plugin's own Cargo.toml.
+          #
+          # `--no-deps` needs no network and no lockfile, and it answers for a
+          # workspace-inherited dependency, which a regex over Cargo.toml cannot see.
           source=$(cargo metadata --no-deps --format-version 1 | python3 -c '
           import json, sys
           for package in json.load(sys.stdin)["packages"]:
@@ -1880,6 +1918,7 @@ jobs:
             exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          # --->8--- end kit pin resolution
 
       - uses: actions/checkout@v7
         with:
@@ -1950,33 +1989,46 @@ and the tag being pushed, `main` advertises an unreleased version. Assertion 4 p
 deliberately, because it is the ordinary state of a bumped tree. Push the bump and the
 tag together, or trigger the release from the bump commit.
 
-### 11.5 🔻 What a plugin's release job has to do, now that the kit does not
+### 11.5 `plugin-release.yml` ✅ **restored 2026-09-12**
 
-**The workflow is gone; the requirements it met are not.** Download-by-default (§9.3) is
-unchanged, so a plugin that publishes nothing has every install compiling from source
-forever, and §9.6's convention still decides what the shim asks GitHub for.
+Tag-triggered, cross-repository, and the one workflow the kit still runs for a plugin.
+Builds the matrix, generates a `.sha256` beside each binary, and uploads both. Produces
+exactly what §9.6 consumes: raw binaries, keyed on the commit, and **no archive step**.
 
-A plugin's own release job, on a tag:
+➕ **Two things changed while it was away, and both are improvements it keeps.**
 
-| Requirement | Why, and what provides it |
-|---|---|
-| Build the six targets on native runners | `python3 kit/tools/plugin_gate.py matrix` prints the rows a `matrix.include` takes (§11.6) |
-| Name each asset | `python3 kit/tools/plugin_gate.py asset-name . --target <triple>`. 🚨 **The producing half of §9.6.** The consuming half is `asset_url` in `bin/common`, and `tools/test_plugin_gate.py` runs both and compares |
-| A `.sha256` beside each binary | `bin/build` verifies it **before** anything executes (§9.4 step 7) |
-| Raw binaries, **no archive step** | §9.6: what the shim fetches is the file it runs |
-| Assert the tag form | §12.2, the one place two conventions can cross |
-| `contents: write` | The job uploads to a release |
-| **All six, or none** | Count the collected files against the table before uploading any. Five published and a sixth missing is one platform compiling on every install, forever, with nothing to say so |
+- 🔑 **It resolves the kit from the plugin's own pin** (§11.2.1), not from the Actions
+  context. The same block of shell as §11.3's recipe, byte-identical, held together by
+  `tools/test_kit_pin.py`.
+- 🔑 **It no longer names assets itself.** `plugin_gate.py asset-name` is the producing
+  half of §9.6's convention, and the shim is the consuming half. A name this workflow
+  built for itself would be a second opinion about a convention already written down, and
+  `tools/test_plugin_gate.py` runs both halves and compares them.
+
+Requires the **caller** to grant `contents: write`. A called workflow runs on the
+caller's permissions. ✅ The requirement is stated in the workflow's own header and in the
+README's caller snippet, which are the two places a caller reads, and a caller who omits
+it gets a run that fails before it starts rather than a 403 halfway through a release.
 
 ⚠️ **It strips nothing.** All three plugins set `strip = true` in `[profile.release]`, so
 cargo strips at link time, **before** macOS ad-hoc signs the Mach-O. A strip step after
 the fact would re-strip an already stripped binary and take a re-signing risk on arm64
 for nothing.
 
-🚧 **Nothing here has ever run**, and that is now a plugin-side gap rather than a kit-side
-one. ✅ The kit-side half is testable and tested: the asset name a release would publish
-and the name a shim requests are compared by `tools/test_plugin_gate.py` on every run.
-⚠️ What no test covers is a plugin actually publishing six files under those names.
+➕ **All six, or none.** The publish job needs the whole matrix, and it counts the files
+it collected against the size of the table before uploading any of them. Five platforms
+published and a sixth missing is not a partial success: it is one platform compiling on
+every install, forever, with nothing to say so.
+
+➕ **Both caller triggers work.** `release: types: [created]` is what project-finder uses
+today; a bare tag push works too, and the release is created if it does not exist.
+Anything else — a branch, a manual run on `main` — reaches the tag-form gate and is
+refused there.
+
+🚧 **It has still never run.** Its first call failed at the resolution step that has now
+been replaced, and nothing has exercised the six build legs or the publish job. ⚠️ **The
+first migrated plugin release is what settles it**, and under download-by-default that
+release must produce assets, so this has to be correct before it rather than after.
 
 ### 11.6 Build matrix — native runners, not cross-compilation
 
@@ -2235,8 +2287,9 @@ tag form when recent-spaces migrates (§13).
 3. Copy §11.3's recipe into the plugin's own CI. ⚠️ **Copy it; the kit no longer runs it
    for anybody** (§11), and a paraphrase is how three plugins end up running three
    different checks.
-4. Build the plugin's own release job against §11.5's requirements, which is the step
-   with no kit-side workflow behind it any more and the largest piece of new work.
+4. Wire up `plugin-release.yml` (§11.5), which the kit still runs. ➕ **Corrected
+   2026-09-12**: this step said "build your own release job" for part of one day, while
+   the workflow was deleted.
 
 #### 🚨 Bumping the pin is half the migration, and half is worse than none
 

@@ -470,12 +470,20 @@ jobs:
           # clone lets it pass by seeing no releases at all.
           fetch-depth: 0
 
-      # The tag comes from this plugin's own dependency pin, read through
-      # cargo rather than out of the TOML. `--no-deps` needs no network and no
-      # lockfile, and it answers for a workspace-inherited dependency, which a
-      # regex over Cargo.toml does not.
       - id: kit
         run: |
+          # ---8<--- kit pin resolution. This exact text sits in SCOPE.md §11.3's recipe
+          # and in .github/workflows/plugin-release.yml, and tools/test_kit_pin.py runs
+          # it and fails if the two copies differ.
+          #
+          # 🔑 It reads the pin out of the repository rather than asking the Actions
+          # context. ✅ Measured 2026-09-12 (§11.2.1): a called workflow is told nothing
+          # about which of its own versions was pinned. It does not need to be told —
+          # `github.repository` is the *caller's*, so the plugin is already checked out,
+          # and the pin is in the plugin's own Cargo.toml.
+          #
+          # `--no-deps` needs no network and no lockfile, and it answers for a
+          # workspace-inherited dependency, which a regex over Cargo.toml cannot see.
           source=$(cargo metadata --no-deps --format-version 1 | python3 -c '
           import json, sys
           for package in json.load(sys.stdin)["packages"]:
@@ -495,6 +503,7 @@ jobs:
             exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          # --->8--- end kit pin resolution
 
       - uses: actions/checkout@v7
         with:
@@ -533,28 +542,44 @@ the kit.
 
 ### Releasing a plugin
 
-The kit ships no release workflow, and download-by-default means a plugin that publishes
-nothing has every install compiling from source. `SCOPE.md` §11.5 lists what a release
-job has to do; the two pieces the kit provides are:
+**The kit still publishes releases**, which is the one thing it runs for a plugin. It has
+to: download-by-default means a plugin that publishes nothing has every install compiling
+from source.
 
-```sh
-python3 kit/tools/plugin_gate.py matrix                            # the six build rows
-python3 kit/tools/plugin_gate.py asset-name . --target <triple>    # what to call each file
+```yaml
+# .github/workflows/release.yml in the plugin
+name: Release
+on:
+  release:
+    types: [created]
+permissions:
+  contents: write
+jobs:
+  release:
+    uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-release.yml@0.4.1
+    permissions:
+      contents: write
 ```
 
-🚨 **`asset-name` is the producing half of a two-sided agreement.** The consuming half is
-the shim asking GitHub for that exact file, and `tools/test_plugin_gate.py` runs both and
-compares. Get it wrong and GitHub answers 404, `bin/build` compiles instead, the plugin
-still works, and nobody finds out.
+> 🚨 **The caller must grant `contents: write`.** A called workflow runs on the caller's
+> permissions and cannot raise its own, so a caller that omits it fails before the run
+> starts. It is needed to create the release and attach the twelve files to it.
+
+It reads which kit to use from your own `Cargo.toml` pin, the same way the recipe above
+does, then builds six targets on native runners and publishes a raw binary and a `.sha256`
+beside it for each, named exactly as `bin/build` asks for them:
 
 ```
 https://github.com/<owner>/<repo>/releases/download/<version>/
   <binary>-<platform>-<commit12>            and .sha256 beside each
 ```
 
-Nothing should be published unless all six arrive. Five platforms published and a sixth
-missing is not a partial success — it is one platform silently compiling on every
-install, and nothing would say so.
+Nothing is published unless all six arrive. Five platforms published and a sixth missing
+is not a partial success — it is one platform silently compiling on every install, and
+nothing would say so.
+
+> 🚧 **It has never run.** Its first call failed at a resolution step that has since been
+> replaced, and nothing has exercised the build legs or the publish job.
 
 ## Layout
 
@@ -576,10 +601,16 @@ just test          # or run the five entry points the recipe wraps, directly
 just check         # formatting, lints, and every suite
 ```
 
-Five suites, because an untested guard is a claim rather than a check: the codegen
-guards, the shell templates, the mutation harness's own tests, the plugin conformance
-gate, and the Rust suite. None needs a network, and none of the four Python ones needs
-anything beyond the standard library.
+Six suites, because an untested guard is a claim rather than a check: the codegen guards,
+the shell templates, the mutation harness's own tests, the plugin conformance gate, the
+kit-pin resolution, and the Rust suite. None needs a network, and none of the five Python
+ones needs anything beyond the standard library.
+
+The kit-pin suite is the odd one. Every other piece of CI logic lives in `tools/` because
+YAML cannot be run, and this one cannot: it decides which kit to check out, so it runs
+before there is a `tools/` to call. So the test goes to it — extracting the block from the
+release workflow and from both copies of the recipe, proving all three are identical, and
+running the real text against what `cargo metadata` actually answers.
 
 The conformance gate's suite runs both sides of every agreement it asserts. It extracts
 the release workflow's own asset-naming line and executes it, then asks the real shim
