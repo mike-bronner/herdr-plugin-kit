@@ -550,6 +550,13 @@ deserializing the 64-variant `ResponseResult` costs **1,951,648**. A factor of n
 on the axis nobody was watching. serde generates parsing code per variant and dead-code
 elimination cannot drop any, because every one is reachable through the single type.
 
+⚠️ **The size is not the only thing the union was costing, and it is the half that gets
+quoted.** ✅ Under the union, recent-spaces' `workspace.move` call discarded its answer:
+`{"type":"ok"}` read as a silent success on a call that reorders somebody's sidebar.
+Naming the result makes an unexpected answer a `CallError::Protocol` instead. That is
+§7.2's discarded-response defect arriving on a second call site, and it is arguably the
+better headline than 43.9%.
+
 #### Per variant, never per method
 
 **A method-to-variant mapping is not derivable, and building one by hand is §3.4's blast
@@ -607,6 +614,37 @@ no LTO, default codegen-units, kit as a path dependency with default features.
 so it is the call rather than `ping` that moves. It lands 89,792 short of the 1,095,888
 a scratch crate bounded it at, which is the right direction: the transport, `regress`,
 and the request enum sit in both rungs of a real client.
+
+#### ⚠️ Two measurements, two intervals, and neither is safe alone
+
+Quoting one of these without the other misleads in opposite directions.
+
+| Interval | Effect | Measured on |
+|---|---|---|
+| kit 0.1.0 → 0.2.0, **union named on both sides** | **+92,944** | recent-spaces, one tree, pin bumped and nothing else |
+| within 0.2.0, **union → narrow** | **−1,471,712**, 43.9% | recent-spaces, same tree |
+| within this branch, **non-generic → generic call**, union named on both sides | **−331,552** | the kit's own probe below |
+
+🚨 **The first row is what a consumer experiences for doing half the work**, and §13 leads
+with it. The 128 new types land whether or not anything narrows.
+
+⚠️ **Nothing here isolates the generic's own cost, and the second and third rows are not
+subtractable.** They come from two different programs: one a real plugin, one a probe
+built for this. The +92,944 contains the new types, the generic, and everything else
+between two tags. recent-spaces refused to claim it had isolated the generic and the
+refusal is right; isolating it would need a build of 0.2.0's crate with a non-generic
+call, which does not exist and is not worth constructing now that the net figure is the
+one a consumer lives with.
+
+⚠️ **These figures carry about ±16 bytes of build-to-build noise**, which is the gap
+between the 3,257,616 recorded at the top of this section and the 3,257,600 in §13 for
+what is the same build of the same tree. Read the differences, not the last digits.
+
+✅ **`regress` survives narrowing entirely, which the measurement now shows rather than
+argues.** `WorkspaceInfo.tokens` keys through a pattern-constrained type, so the regex
+engine is reachable from the narrowest result a consumer can name. It is a fixed floor
+under every figure here, and the saving is the other 63 variants' visitor machinery
+rather than anything shared.
 
 #### ✅ The generic signature has no cost. It pays.
 
@@ -2086,6 +2124,26 @@ tag form when recent-spaces migrates (§13).
 | 1️⃣ | recent-spaces | Smallest at 158 lines of `api.rs`, no TUI, donates the best `version.rs`, and carries the live `v`-prefix hazard (§12.2) |
 | 2️⃣ | agentic-panes-layout | Donates `issues.rs` |
 | 3️⃣ | project-finder | Only one with a real behaviour change (§7.3), and donates the shim (§9.4) |
+
+#### 🚨 Bumping the pin is half the migration, and half is worse than none
+
+✅ **Measured 2026-09-12 by recent-spaces, the first real migration**, across three builds
+of one tree at `opt-level = "s"` with `strip = true` on macOS arm64.
+
+| Build | Bytes |
+|---|---|
+| kit 0.1.0, naming `ResponseResult` | 3,257,600 |
+| kit 0.2.0, naming `ResponseResult` — **the pin bumped and nothing else** | **3,350,544** |
+| kit 0.2.0, naming `WorkspaceListAnswer` | 1,878,832 |
+
+🚨 **A plugin that bumps the pin and stops is 92,944 bytes worse off than it was on
+0.1.0.** The per-variant types are 128 new types every consumer compiles, and nothing
+recovers that until a call site names one. Narrowing then saves **1,471,712 bytes,
+43.9%**, and the net against 0.1.0 is **1,378,768, 42.3%**.
+
+⚠️ **So the migration is the call sites, not the pin.** There is no signal when somebody
+does half of it: the build succeeds, the plugin works, and it is simply bigger. §4.4 has
+the mechanism and the kit's own figures.
 
 **Ship the kit with `api`, `env`, and `version` only.** Hold `report` and `update` until
 one real consumer has proven the boundaries. Designing abstractions with no consumer is

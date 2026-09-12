@@ -207,6 +207,14 @@ for pane in panes.panes {
 answer with, serde generates parsing code for every one, and nothing can drop them while
 they are all reachable through one type.
 
+🚨 **Upgrading the pin without naming a result makes your binary bigger, not smaller.**
+The per-variant types are 128 new types every consumer compiles, and nothing recovers
+them until a call site asks for one. ✅ Measured 2026-09-12 by the first real migration:
+the same plugin built **3,257,600 bytes on 0.1.0 and 3,350,544 on 0.2.0** with its call
+sites untouched, then **1,878,832** once one named `WorkspaceListAnswer`. There is no
+signal when you stop halfway — the build succeeds and the plugin works. `SCOPE.md` §13
+carries this beside the migration order.
+
 The union is still there, and `client.call::<ResponseResult>(…)` still works. It is a
 narrower option rather than a replacement, so a caller that genuinely wants any answer
 can still say so and pay for it on purpose.
