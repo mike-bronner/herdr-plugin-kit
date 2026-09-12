@@ -143,7 +143,7 @@ Pin to a tag:
 
 ```toml
 [dependencies]
-herdr-plugin-kit = { git = "https://github.com/mike-bronner/herdr-plugin-kit", tag = "0.4.0" }
+herdr-plugin-kit = { git = "https://github.com/mike-bronner/herdr-plugin-kit", tag = "0.4.1" }
 ```
 
 Build a request:

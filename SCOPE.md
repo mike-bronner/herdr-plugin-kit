@@ -2331,6 +2331,16 @@ tag form when recent-spaces migrates (§13).
   one day, on a rule with no exercise before any of them**, and the third is the one the
   rule's wording nearly missed: nothing about a deleted workflow is Rust source, and it
   breaks a consumer just the same.
+- ➕ **A purely additive change is a patch**, added 2026-09-12, and 0.4.1 is the first.
+  🔑 **The rule above had been tested three times in one day and every test was a break**,
+  so this section spoke only to breaking changes while the common case went unstated and
+  the next person would have inferred it. Stated beside the breaking clause so the
+  contrast is visible rather than assembled.
+  ⚠️ **Two cases from that same day show what "additive" does not mean.** A deleted
+  reusable workflow is not Rust source and breaks a consumer just the same, so it took a
+  minor bump. And restoring it is additive **against the release that removed it**, not
+  against the release that had it: the interval a version describes is the one since the
+  last tag, never the last time the tree looked this way.
 - ➕ **A consumer may pin any kind of tag**, added 2026-09-12. All three of this kit's
   releases are annotated tags, and ✅ the probe in §11.2.1 measured both kinds behaving
   identically. `actions/checkout` takes either, and a `cargo` git dependency takes either.
