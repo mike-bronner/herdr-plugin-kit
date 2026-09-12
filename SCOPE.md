@@ -1902,25 +1902,47 @@ fetch fails (§9.4), so a user on that path with an old toolchain gets a compile
 That failure is loud and names itself. It does not justify keeping a claim that was
 measurably false, and **removing a false claim beats keeping it in either direction**.
 
-#### 📏 What the tree demands today, measured 2026-09-11
+#### 📏 What the tree demands today — **1.85**, corrected 2026-09-12
 
-This is a fact about the dependency graph rather than a promise, and it will be worth
-re-measuring the next time somebody asks what toolchain this needs.
+This is a fact about the dependency graph rather than a promise, and it is worth
+re-measuring whenever somebody asks what toolchain this needs. ⚠️ **The number below
+replaces "above 1.80", which this section carried until 2026-09-12 and which understated
+the floor by five releases.** recent-spaces was about to put 1.80 in its README.
+
+**The floor is `edition = "2024"`, which stabilised in Rust 1.85**, and ✅ three crates in
+the runtime crate's *normal* tree declare it:
+
+| Crate | Declares `rust-version` | Reached |
+|---|---|---|
+| `regress 0.10.5` | ❌ **none at all** | **direct dependency** of the runtime crate |
+| `hashbrown 0.17.1` | ✅ `1.85.0` | `toml` → `toml_edit` → `indexmap` |
+| `indexmap 2.14.2` | ✅ `1.85` | `toml` → `toml_edit` |
+
+🚨 **`regress` is the constraint that matters, and it is the one nothing advertises.** It
+is a direct dependency with or without the `dialog` feature, it declares edition 2024 in
+its own manifest, and it declares no `rust-version`, so nothing in `Cargo.lock` says a
+word about it. The other two are transitive *and* self-declaring, which is the easier
+case in both directions.
+
+⚠️ **What this section said before was the weakest of the three reasons, and it read the
+limit wrongly.** It cited only the `hashbrown` manifest-parse failure and framed the
+floor as a cargo *parsing* limit four levels down. Parsing is merely where 1.80 stops
+first: `regress` and `hashbrown` are both *compiled into* every consumer, so the floor is
+about building an edition-2024 crate rather than about reading a manifest.
+
+✅ **1.80 fails, reproduced again 2026-09-12:**
 
 ```sh
 cargo +1.80 check --all-targets --features dialog --locked
+# error: failed to parse manifest at `…/hashbrown-0.17.1/Cargo.toml`
+#   feature `edition2024` is required
 ```
 
-⚠️ **fails**, and not on this crate's own source:
-
-```
-error: failed to parse manifest at `…/hashbrown-0.17.1/Cargo.toml`
-  feature `edition2024` is required
-```
-
-`hashbrown 0.17.1` reaches the tree through `toml` → `toml_edit` → `indexmap`, traced
-with `cargo tree -i`. It needs the `edition2024` cargo feature, which 1.80's cargo does
-not have. ✅ Independently reproduced before the decision was taken.
+🚨 **1.85 is reasoned, not measured, and the difference is stated rather than buried.**
+No toolchain between 1.80 and 1.97 is installed on this machine, so **nothing has been
+built at the 1.84/1.85 boundary**. The figure comes from the declared edition, from when
+edition 2024 stabilised, and from two crates declaring `1.85` outright. The 1.80 half is
+reproducible here; the 1.85 half is not.
 
 ➕ **A second floor sits underneath that one and moves for a different reason.** The
 generated types use `std::sync::LazyLock`, which `cargo-typify` emits for every

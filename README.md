@@ -42,23 +42,23 @@ of download-by-default. A floor would document a requirement for people who will
 compile, and the number it carried would be whatever the dependency tree currently
 demanded rather than anything this project chose.
 
-Two things are worth knowing rather than asserting. The generated types use
-`std::sync::LazyLock`, which `cargo-typify` emits for every pattern-constrained string in
-Herdr's schema and which landed in **1.80**, so nothing older than that can compile this
-crate whatever any manifest says. And the committed `Cargo.lock` currently demands more
-than 1.80 anyway: `hashbrown 0.17.1` arrives through `toml` → `toml_edit` → `indexmap`
-and needs the `edition2024` cargo feature, which 1.80's cargo does not have. `SCOPE.md`
-§11.8 records the measurement.
+**What the tree demands today is 1.85**, corrected 2026-09-12 from a weaker reading that
+said "more than 1.80". Three crates in the runtime crate's normal tree declare
+`edition = "2024"`, which stabilised in Rust 1.85: `regress 0.10.5`, which is a **direct**
+dependency and declares no `rust-version` at all, plus `hashbrown 0.17.1` and
+`indexmap 2.14.2`, which both declare `1.85` outright and arrive through `toml`.
+
+⚠️ **1.85 is reasoned rather than measured.** No toolchain between 1.80 and 1.97 is
+installed here, so nothing has been built at the boundary. What is reproducible is that
+1.80 fails. Underneath all of it sits an independent 1.80 floor that moves for its own
+reason: the generated types use `std::sync::LazyLock`, which `cargo-typify` emits for
+every pattern-constrained string in Herdr's schema. `SCOPE.md` §11.8.1 carries both
+halves and says which is which.
 
 ⚠️ **One path does still compile**, and it is the reason the number above is written down
 at all: `bin/build` falls back to compiling from source when a fetch fails, so a user on
 that path with an old toolchain gets a compile error. It is loud and it names itself,
 which is why it does not justify a claim that was measurably false.
-
-The crate depends on `serde`, `serde_json`, `regress`, `toml`, and `interprocess`, and it
-carries no build script, no build dependencies, and no proc macro of its own. `regress`
-arrives with the generated types. `toml` is used only to parse `herdr-plugin.toml`, and
-all three donor plugins already depend on it directly, so it costs them nothing new.
 
 The crate depends on `serde`, `serde_json`, `regress`, `toml`, and `interprocess`, and it
 carries no build script, no build dependencies, and no proc macro of its own. `regress`
