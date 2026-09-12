@@ -380,6 +380,35 @@ name from `Cargo.toml`'s `[[bin]]` section, and the plugin's own name from
 > line-anchored read returns the wrong one in two of the three plugins, silently, and a
 > log prefix reading `picker` looks entirely plausible.
 
+### Building from source while you work on a plugin
+
+Create an empty `BUILD_FROM_SOURCE` file in the plugin root, and that checkout compiles
+instead of downloading:
+
+```sh
+touch BUILD_FROM_SOURCE     # this tree builds from source
+rm BUILD_FROM_SOURCE        # back to fetch-or-build
+```
+
+🔑 **A file rather than an environment variable, because Herdr runs as a launchd agent.**
+A shell export never reaches a script Herdr launches, a file works whoever started the
+process, and somebody who has never read the shim can still find it in a directory
+listing.
+
+⚠️ **Do not commit it.** Every install of that release would then compile from source,
+the plugin would still work, and the only signal would be one line in a server log during
+an install nobody is watching. `sync-bin` appends the entry to the plugin's root
+`.gitignore`, and `check-bin` fails when it is missing:
+
+```
+# The kit's developer override: its presence forces a source build.
+/BUILD_FROM_SOURCE
+```
+
+That `.gitignore` is the one file the sync task writes that the plugin owns rather than
+the kit, so the edit is append-only: nothing already in it is rewritten or reordered, and
+a second sync adds nothing.
+
 Two things the templates fix that the three plugins each got to separately:
 
 - **A Herdr `[[startup]]` command is handed no `$TERM` and no terminal.** Found once,

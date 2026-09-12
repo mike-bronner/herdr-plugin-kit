@@ -25,6 +25,13 @@ second parser here would be a second thing to keep in step with the shell one.
 plugin's CI runs, and it is what turns drift into a failing build instead of a
 discovery.
 
+One thing here is **not** a copy, and it is the only file this task touches that
+the plugin owns: the root ``.gitignore`` gains an entry for the developer
+override, appended when absent and never rewritten. Without it a developer who
+uses the override leaves an untracked marker in the plugin root, and one
+careless ``git add .`` commits it — after which every install of that release
+compiles from source and nothing says so above a line in a server log.
+
 Python 3.9 is the floor. This machine has no other interpreter.
 """
 
@@ -56,6 +63,27 @@ TEMPLATES = (
 #: Read by a `sh` that Herdr invokes, so these have to carry the bit.
 EXECUTABLE = ("build", "launcher", "find-cargo")
 
+#: The developer override the shims look for in the plugin root. It has to
+#: agree with ``OVERRIDE_FILE`` in ``templates/bin/common``, which is what
+#: reads it. See SCOPE.md section 9.4.2.
+OVERRIDE_FILE = "BUILD_FROM_SOURCE"
+
+#: What a plugin's root ``.gitignore`` has to carry, verbatim.
+#:
+#: 🚨 **Committing the override turns every install of that release into a
+#: source build**, and says so only in a line of a server log during an install
+#: nobody is watching. The plugin still works, which is why nothing complains.
+#: §12.2 and §11.4 exist for the same failure shape.
+IGNORE_BLOCK = (
+    "# The kit's developer override: its presence forces a source build.\n"
+    f"/{OVERRIDE_FILE}\n"
+)
+
+#: The file that carries it. ⚠️ The plugin **root**, not ``bin/``: the marker is
+#: meant to be findable in a directory listing, which is the whole reason
+#: ``bin/common`` made it a file rather than an environment variable.
+IGNORE_FILE = ".gitignore"
+
 
 class SyncError(Exception):
     """Something that stops the sync, with a message worth reading."""
@@ -86,6 +114,45 @@ def differences(target: Path) -> List[str]:
         elif not filecmp.cmp(TEMPLATE_DIR / name, landed, shallow=False):
             drifted.append(f"{name}: differs from the kit's template")
     return drifted
+
+
+def ignores_the_override(target: Path) -> bool:
+    """Whether the plugin's root ``.gitignore`` already ignores the override.
+
+    Either anchoring counts, because git ignores the root file under both. A
+    plugin that already handles it its own way is left alone rather than given
+    a second entry saying the same thing.
+    """
+    path = target / IGNORE_FILE
+    if not path.is_file():
+        return False
+    wanted = {OVERRIDE_FILE, "/" + OVERRIDE_FILE}
+    return any(line.strip() in wanted for line in path.read_text(encoding="utf-8").splitlines())
+
+
+def ignore_the_override(target: Path) -> bool:
+    """Append the entry when it is absent, and report whether it wrote.
+
+    🔑 **Append only.** This is the one file the sync touches that the plugin
+    owns and the kit does not, so nothing already in it is rewritten, reordered,
+    or reformatted — not even a missing trailing newline, which is completed
+    rather than corrected. A second run adds nothing.
+    """
+    if ignores_the_override(target):
+        return False
+
+    path = target / IGNORE_FILE
+    existing = path.read_text(encoding="utf-8") if path.is_file() else ""
+    if not existing:
+        text = IGNORE_BLOCK
+    elif existing.endswith("\n\n"):
+        text = existing + IGNORE_BLOCK
+    elif existing.endswith("\n"):
+        text = existing + "\n" + IGNORE_BLOCK
+    else:
+        text = existing + "\n\n" + IGNORE_BLOCK
+    path.write_text(text, encoding="utf-8")
+    return True
 
 
 def copy(target: Path) -> None:
@@ -161,6 +228,11 @@ def sync(target: Path, check_only: bool) -> int:
 
     if check_only:
         drifted = differences(target)
+        if not ignores_the_override(target):
+            drifted.append(
+                f"{IGNORE_FILE}: no /{OVERRIDE_FILE} entry, so a developer's "
+                f"override can be committed by accident"
+            )
         if drifted:
             print(f"sync-bin: {target} has drifted from the kit:", file=sys.stderr)
             for line in drifted:
@@ -172,12 +244,19 @@ def sync(target: Path, check_only: bool) -> int:
             return 1
         binary, slug = inferred_identity(target)
         print(f"sync-bin: {target} matches the kit ({len(TEMPLATES)} files)")
+        print(f"sync-bin: its {IGNORE_FILE} carries the {OVERRIDE_FILE} entry")
         print(f"sync-bin: it infers binary={binary} slug={slug}")
         return 0
 
     copy(target)
+    wrote_ignore = ignore_the_override(target)
     binary, slug = inferred_identity(target)
     print(f"sync-bin: wrote {len(TEMPLATES)} files to {target / 'bin'}")
+    print(
+        f"sync-bin: {IGNORE_FILE} "
+        + ("gained the" if wrote_ignore else "already carried the")
+        + f" {OVERRIDE_FILE} entry"
+    )
     print(f"sync-bin: they infer binary={binary} slug={slug}")
     print("sync-bin: review the diff before committing it in that repository")
     return 0

@@ -37,7 +37,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from sync_bin import EXECUTABLE, TEMPLATES, SyncError, main, sync  # noqa: E402
+from sync_bin import (  # noqa: E402
+    EXECUTABLE,
+    IGNORE_FILE,
+    OVERRIDE_FILE,
+    TEMPLATES,
+    SyncError,
+    ignore_the_override,
+    main,
+    sync,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_DIR = REPO_ROOT / "templates" / "bin"
@@ -84,6 +93,10 @@ class Plugin:
         (self.root / "bin").mkdir(exist_ok=True)
         for name in TEMPLATES:
             shutil.copy2(TEMPLATE_DIR / name, self.root / "bin" / name)
+        # A fixture plugin is a *synced* plugin, so it carries everything the
+        # sync task writes. Calling the task's own function rather than copying
+        # the literal keeps the fixture from drifting away from it.
+        ignore_the_override(self.root)
 
         self.binary = binary
         self.bin_path = self.root / "target" / "release" / binary
@@ -1141,6 +1154,125 @@ class Syncing(Fixture):
         (self.plugin.root / "bin" / "build").write_text("#!/bin/sh\n# edited locally\n")
         sync(self.plugin.root, check_only=True)
         self.assertIn("edited locally", (self.plugin.root / "bin" / "build").read_text())
+
+    def test_git_actually_ignores_the_override_afterwards(self):
+        # 🔑 The claim is that a developer cannot commit the marker by
+        # accident, so the test asks git rather than reading the file back. A
+        # text assertion would pass on an entry git does not honour.
+        plugin = self.make()
+        sync(plugin.root, check_only=False)
+        plugin.git_init()
+        (plugin.root / OVERRIDE_FILE).touch()
+
+        ignored = subprocess.run(
+            ["git", "-C", str(plugin.root), "check-ignore", OVERRIDE_FILE],
+            capture_output=True,
+            text=True,
+        )
+        staged = subprocess.run(
+            ["git", "-C", str(plugin.root), "add", "-A"], capture_output=True, text=True
+        )
+        tracked = subprocess.run(
+            ["git", "-C", str(plugin.root), "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(0, ignored.returncode, ignored.stderr)
+        self.assertEqual(0, staged.returncode, staged.stderr)
+        self.assertNotIn(OVERRIDE_FILE, tracked.stdout)
+
+    def test_a_plugin_with_no_gitignore_gets_one(self):
+        plugin = self.make()
+        (plugin.root / IGNORE_FILE).unlink()
+
+        sync(plugin.root, check_only=False)
+
+        text = (plugin.root / IGNORE_FILE).read_text()
+        self.assertEqual(
+            text,
+            "# The kit's developer override: its presence forces a source build.\n"
+            "/BUILD_FROM_SOURCE\n",
+        )
+
+    def test_an_existing_gitignore_survives_byte_for_byte(self):
+        # ⚠️ The one file this task touches that the plugin owns. Append only:
+        # nothing already there is rewritten, reordered, or reformatted.
+        plugin = self.make()
+        before = "# what this plugin ignores\n/target\n\n!keep/me\n*.log"
+        (plugin.root / IGNORE_FILE).write_text(before)
+
+        sync(plugin.root, check_only=False)
+
+        after = (plugin.root / IGNORE_FILE).read_text()
+        self.assertTrue(after.startswith(before), after)
+        self.assertEqual(
+            after[len(before):],
+            "\n\n# The kit's developer override: its presence forces a source build.\n"
+            "/BUILD_FROM_SOURCE\n",
+        )
+
+    def test_a_trailing_newline_is_not_doubled_into_two_blank_lines(self):
+        plugin = self.make()
+        (plugin.root / IGNORE_FILE).write_text("/target\n")
+
+        sync(plugin.root, check_only=False)
+
+        self.assertEqual(
+            (plugin.root / IGNORE_FILE).read_text(),
+            "/target\n\n# The kit's developer override: its presence forces a source build.\n"
+            "/BUILD_FROM_SOURCE\n",
+        )
+
+    def test_syncing_twice_adds_nothing(self):
+        plugin = self.make()
+        sync(plugin.root, check_only=False)
+        once = (plugin.root / IGNORE_FILE).read_text()
+
+        sync(plugin.root, check_only=False)
+
+        self.assertEqual(once, (plugin.root / IGNORE_FILE).read_text())
+
+    def test_an_entry_the_plugin_wrote_its_own_way_is_left_alone(self):
+        # Either anchoring ignores the root file, so a plugin that already
+        # handles it is not given a second entry saying the same thing.
+        for entry in ("/BUILD_FROM_SOURCE", "BUILD_FROM_SOURCE", "  /BUILD_FROM_SOURCE  "):
+            plugin = self.make()
+            (plugin.root / IGNORE_FILE).write_text(f"/target\n{entry}\n")
+
+            sync(plugin.root, check_only=False)
+
+            self.assertEqual(
+                (plugin.root / IGNORE_FILE).read_text(), f"/target\n{entry}\n", entry
+            )
+            self.assertEqual(0, sync(plugin.root, check_only=True), entry)
+
+    def test_check_notices_a_missing_override_entry(self):
+        # This is what a plugin's CI runs. A committed override is silent in
+        # production: the install still works and simply stops downloading.
+        plugin = self.make()
+        (plugin.root / IGNORE_FILE).unlink()
+
+        self.assertEqual(1, sync(plugin.root, check_only=True))
+
+    def test_check_writes_no_gitignore(self):
+        plugin = self.make()
+        (plugin.root / IGNORE_FILE).unlink()
+
+        sync(plugin.root, check_only=True)
+
+        self.assertFalse((plugin.root / IGNORE_FILE).exists())
+
+    def test_a_negated_entry_is_not_mistaken_for_an_ignore(self):
+        # `!BUILD_FROM_SOURCE` un-ignores the file, so the entry is appended
+        # after it, where git's last-match-wins puts it back in charge.
+        plugin = self.make()
+        (plugin.root / IGNORE_FILE).write_text("!BUILD_FROM_SOURCE\n")
+
+        sync(plugin.root, check_only=False)
+
+        self.assertIn("/BUILD_FROM_SOURCE\n", (plugin.root / IGNORE_FILE).read_text())
+        self.assertEqual(0, sync(plugin.root, check_only=True))
 
     def test_it_refuses_a_directory_that_is_not_a_plugin(self):
         # Fails closed. Writing eight shell scripts into the wrong directory is

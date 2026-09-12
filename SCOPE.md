@@ -1323,6 +1323,59 @@ pathspecs match whole path components, so `rust-toolchain` does not match
 built from committed source?", so letting them differ makes the stamp and the fetch
 disagree about the same tree.
 
+### 9.4.2 The developer override, and the one file the sync task writes
+
+➕ **Documented 2026-09-12, having shipped undocumented.** `BUILD_FROM_SOURCE` existed in
+three template files and in **zero** prose: not in this document, not in the README.
+Mike asked for a development-first override by name, it was built, and nothing told
+anybody it was there. 🚨 **A feature nobody can find has not shipped.**
+
+**Create an empty `BUILD_FROM_SOURCE` file in the plugin root, and that tree compiles.**
+`bin/build` checks for it at step 2 of §9.4, before any network call.
+
+```sh
+touch BUILD_FROM_SOURCE     # this checkout builds from source
+rm BUILD_FROM_SOURCE        # back to fetch-or-build
+```
+
+🔑 **A file rather than an environment variable, and that is not a style choice.** Herdr
+runs as a launchd agent, so a developer's shell export never reaches a script Herdr
+launches. A file works whoever started the process, and somebody who has never read the
+shim can still find it in a directory listing.
+
+#### ⚠️ Which is exactly why it can be committed by accident
+
+The marker is untracked, it sits in the plugin root, and one careless `git add .` commits
+it. Every install of that release then compiles from source. **The plugin still works**,
+which is why nothing complains: the only signal is a `note` line in a server log during
+an install nobody is watching. §12.2 and §11.4 exist for the same failure shape, and
+this one had no guard at all.
+
+So `templates/sync_bin.py` appends this to the plugin's **root** `.gitignore`, and
+`--check` fails when it is missing:
+
+```
+# The kit's developer override: its presence forces a source build.
+/BUILD_FROM_SOURCE
+```
+
+🚨 **This is the only file the sync task writes that the plugin owns.** Everything in
+`bin/` is byte-identical and replaceable; a `.gitignore` is not. So the edit is
+**append-only**: nothing already there is rewritten, reordered, or reformatted, a missing
+trailing newline is completed rather than corrected, an entry the plugin wrote its own
+way is left alone under either anchoring, and a second sync adds nothing.
+
+✅ **Tested by asking git rather than by reading the file back**: the suite creates the
+marker in a real repository, runs `git add -A`, and asserts it is not staged. A text
+assertion would pass on an entry git does not honour.
+
+✅ **No plugin's CI breaks on this, and the reason is worth knowing before adding any
+future check.** `plugin-ci.yml` checks the kit out at `github.job_workflow_sha`, which is
+the commit of that workflow file, so a plugin pinned at `@0.1.0` runs 0.1.0's sync task
+and never sees this check until it bumps its pin. **Opting in is an explicit act**, which
+is precisely what lets the check be a hard failure rather than a warning: no plugin can
+meet it by accident, and none is held to it without asking.
+
 ### 9.5 The fallback is loud, and failure classes differ
 
 | Cause | Falls back | Loudness |
