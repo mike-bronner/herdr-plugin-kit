@@ -1816,6 +1816,13 @@ decoration.** A wrong *sha* fails closed by itself. A wrong *ref name* does not:
 plugin against the kit's default branch and **pass**. That is the silent wrong-kit
 failure this whole clause exists to prevent, arriving through the fix for it.
 
+⚠️ **One constraint on the answer, recorded before the answer arrives.** ✅ Mike's
+machine sets `tag.gpgsign = true` globally, so a bare `git tag <name> <commit>` fails
+there and **every tag he makes is annotated by configuration rather than by choice**. All
+three releases are annotated for that reason. 🔑 So if the annotated form is the broken
+one, "use a lightweight tag" is not a fix available to him without changing global config,
+and the workflow has to take annotated tags.
+
 ⚠️ **Every candidate is printed on every run, not only on a refusal.** The next time this
 breaks it will be a different context being empty, and a guard that speaks only when it
 refuses teaches nothing about the run that worked. One red run has already cost a round

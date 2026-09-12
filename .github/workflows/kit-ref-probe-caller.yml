@@ -25,13 +25,33 @@
 # whoever tags the next release without knowing which they made. Fix the
 # workflow, or write the restriction into §12.3 where somebody will read it.
 #
-# The two probe tags have to exist before their runs, on a commit that carries
-# `kit-ref-probe.yml`:
+# 🚨 **Every ref in this file has to resolve before *any* form can run.**
+# GitHub validates each `uses:` at parse time, including jobs an `if` will
+# skip. ✅ Measured 2026-09-12: the `branch` form, which touches neither tag,
+# failed with `failed to fetch workflow: reference to workflow should be either
+# a valid branch, tag, or commit` naming the *annotated* job's stale ref.
+#
+# Two consequences, and the second is a trap:
+#
+# * both tags must exist before the first run, even the `branch` one.
+# * **delete the caller before the tags.** Deleting the tags first breaks this
+#   file for every form rather than for the two that use them.
+#
+# The tags, on a commit that carries `kit-ref-probe.yml`:
 #
 # ```sh
-# git tag ci-probe-lightweight <commit>          # lightweight
-# git tag -a -m probe ci-probe-annotated <commit>  # annotated
+# git -c tag.gpgsign=false tag 0.3.1-probe.lightweight <commit>
+# git tag -a -m probe 0.3.1-probe.annotated <commit>
 # ```
+#
+# ⚠️ **`-c tag.gpgsign=false` is not optional on Mike's machine**, where
+# `tag.gpgsign` is `true` globally: a bare `git tag <name> <commit>` fails with
+# "no tag message?" and every tag he makes is annotated by configuration rather
+# than by choice. 🔑 **So "use a lightweight tag" is not a fix available to him**
+# if the annotated form turns out to be the broken one. §11.2.1 carries that.
+#
+# The names are SemVer pre-release identifiers because GitHub refused
+# `ci-probe-*`. They sort below any real 0.3.1 and still read as disposable.
 
 name: Kit ref probe caller
 
@@ -58,8 +78,8 @@ jobs:
 
   lightweight:
     if: inputs.form == 'lightweight'
-    uses: mike-bronner/herdr-plugin-kit/.github/workflows/kit-ref-probe.yml@ci-probe-lightweight
+    uses: mike-bronner/herdr-plugin-kit/.github/workflows/kit-ref-probe.yml@0.3.1-probe.lightweight
 
   annotated:
     if: inputs.form == 'annotated'
-    uses: mike-bronner/herdr-plugin-kit/.github/workflows/kit-ref-probe.yml@ci-probe-annotated
+    uses: mike-bronner/herdr-plugin-kit/.github/workflows/kit-ref-probe.yml@0.3.1-probe.annotated
