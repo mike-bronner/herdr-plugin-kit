@@ -80,6 +80,15 @@ def minimal_instance(schema: Any, defs: Dict[str, Any], stack: Tuple[str, ...] =
     self-referential type such as ``LayoutNode`` takes its terminating branch
     instead of recursing forever.
     """
+    # A bare boolean is a schema in its own right: ``true`` accepts every
+    # value, and ``false`` accepts none. ✅ Herdr writes ``true`` once, for
+    # ``agent_explain``'s ``explain``, which typify generates as
+    # ``serde_json::Value``. ``null`` is the smallest thing that satisfies it.
+    if isinstance(schema, bool):
+        if schema:
+            return None
+        raise Unsatisfiable("the schema `false` accepts no value at all")
+
     reference = schema.get("$ref")
     if reference is not None:
         name = reference[len("#/$defs/"):]

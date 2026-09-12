@@ -28,6 +28,7 @@
 
 pub mod client;
 mod envelope;
+mod response;
 
 // `large_enum_variant` fires twice inside the generated types, and its fix is
 // to box a field. That cannot be applied: the file is machine-written, and the
@@ -40,3 +41,4 @@ pub mod generated;
 
 pub use envelope::Request;
 pub use generated::{GENERATED_FOR_HERDR_TAG, GENERATED_PROTOCOL, GENERATED_SCHEMA_VERSION};
+pub use response::ResponseVariant;

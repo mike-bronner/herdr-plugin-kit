@@ -301,6 +301,19 @@ class MinimalInstances(unittest.TestCase):
         self.assertEqual(minimal_instance({"type": "boolean"}, {}), False)
         self.assertEqual(minimal_instance({"type": "array"}, {}), [])
 
+    def test_a_bare_true_schema_is_smallest_as_null(self):
+        # ✅ Herdr writes one, for `agent_explain`'s `explain`, which typify
+        # generates as `serde_json::Value`.
+        self.assertIsNone(minimal_instance(True, {}))
+        self.assertEqual(
+            minimal_instance({"type": "object", "properties": {"x": True}, "required": ["x"]}, {}),
+            {"x": None},
+        )
+
+    def test_a_bare_false_schema_has_no_instance_at_all(self):
+        with self.assertRaises(Unsatisfiable):
+            minimal_instance(False, {})
+
     def test_a_const_and_an_enum_take_the_declared_value(self):
         self.assertEqual(minimal_instance({"const": "pane"}, {}), "pane")
         self.assertEqual(minimal_instance({"enum": ["a", "b"]}, {}), "a")

@@ -16,6 +16,65 @@
 #![allow(clippy::match_single_binding)]
 #![allow(clippy::clone_on_copy)]
 
+#[doc = "`AgentExplainAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct AgentExplainAnswer {
+    pub explain: ::serde_json::Value,
+    #[serde(rename = "type")]
+    pub type_: AgentExplainAnswerType,
+}
+impl AgentExplainAnswer {
+    pub fn builder() -> builder::AgentExplainAnswer {
+        Default::default()
+    }
+}
+#[doc = "`AgentExplainAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum AgentExplainAnswerType {
+    #[serde(rename = "agent_explain")]
+    AgentExplain,
+}
+impl ::std::fmt::Display for AgentExplainAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::AgentExplain => f.write_str("agent_explain"),
+        }
+    }
+}
+impl ::std::str::FromStr for AgentExplainAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "agent_explain" => Ok(Self::AgentExplain),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for AgentExplainAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for AgentExplainAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`AgentInfo`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct AgentInfo {
@@ -66,6 +125,65 @@ pub struct AgentInfo {
 impl AgentInfo {
     pub fn builder() -> builder::AgentInfo {
         Default::default()
+    }
+}
+#[doc = "`AgentInfoAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct AgentInfoAnswer {
+    pub agent: AgentInfo,
+    #[serde(rename = "type")]
+    pub type_: AgentInfoAnswerType,
+}
+impl AgentInfoAnswer {
+    pub fn builder() -> builder::AgentInfoAnswer {
+        Default::default()
+    }
+}
+#[doc = "`AgentInfoAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum AgentInfoAnswerType {
+    #[serde(rename = "agent_info")]
+    AgentInfo,
+}
+impl ::std::fmt::Display for AgentInfoAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::AgentInfo => f.write_str("agent_info"),
+        }
+    }
+}
+impl ::std::str::FromStr for AgentInfoAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "agent_info" => Ok(Self::AgentInfo),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for AgentInfoAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for AgentInfoAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`AgentInfoTokensKey`"]
@@ -120,6 +238,65 @@ impl<'de> ::serde::Deserialize<'de> for AgentInfoTokensKey {
             })
     }
 }
+#[doc = "`AgentListAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct AgentListAnswer {
+    pub agents: ::std::vec::Vec<AgentInfo>,
+    #[serde(rename = "type")]
+    pub type_: AgentListAnswerType,
+}
+impl AgentListAnswer {
+    pub fn builder() -> builder::AgentListAnswer {
+        Default::default()
+    }
+}
+#[doc = "`AgentListAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum AgentListAnswerType {
+    #[serde(rename = "agent_list")]
+    AgentList,
+}
+impl ::std::fmt::Display for AgentListAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::AgentList => f.write_str("agent_list"),
+        }
+    }
+}
+impl ::std::str::FromStr for AgentListAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "agent_list" => Ok(Self::AgentList),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for AgentListAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for AgentListAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`AgentManifestInfo`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct AgentManifestInfo {
@@ -143,6 +320,128 @@ pub struct AgentManifestInfo {
 impl AgentManifestInfo {
     pub fn builder() -> builder::AgentManifestInfo {
         Default::default()
+    }
+}
+#[doc = "`AgentManifestReloadAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct AgentManifestReloadAnswer {
+    pub manifests: ::std::vec::Vec<AgentManifestInfo>,
+    #[serde(rename = "type")]
+    pub type_: AgentManifestReloadAnswerType,
+}
+impl AgentManifestReloadAnswer {
+    pub fn builder() -> builder::AgentManifestReloadAnswer {
+        Default::default()
+    }
+}
+#[doc = "`AgentManifestReloadAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum AgentManifestReloadAnswerType {
+    #[serde(rename = "agent_manifest_reload")]
+    AgentManifestReload,
+}
+impl ::std::fmt::Display for AgentManifestReloadAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::AgentManifestReload => f.write_str("agent_manifest_reload"),
+        }
+    }
+}
+impl ::std::str::FromStr for AgentManifestReloadAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "agent_manifest_reload" => Ok(Self::AgentManifestReload),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for AgentManifestReloadAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for AgentManifestReloadAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+#[doc = "`AgentManifestStatusAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct AgentManifestStatusAnswer {
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub last_check_unix: ::std::option::Option<u64>,
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub last_result: ::std::option::Option<::std::string::String>,
+    pub manifests: ::std::vec::Vec<AgentManifestInfo>,
+    #[serde(rename = "type")]
+    pub type_: AgentManifestStatusAnswerType,
+}
+impl AgentManifestStatusAnswer {
+    pub fn builder() -> builder::AgentManifestStatusAnswer {
+        Default::default()
+    }
+}
+#[doc = "`AgentManifestStatusAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum AgentManifestStatusAnswerType {
+    #[serde(rename = "agent_manifest_status")]
+    AgentManifestStatus,
+}
+impl ::std::fmt::Display for AgentManifestStatusAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::AgentManifestStatus => f.write_str("agent_manifest_status"),
+        }
+    }
+}
+impl ::std::str::FromStr for AgentManifestStatusAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "agent_manifest_status" => Ok(Self::AgentManifestStatus),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for AgentManifestStatusAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for AgentManifestStatusAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`AgentPromptParams`"]
@@ -169,6 +468,65 @@ pub struct AgentPromptWaitOptions {
 impl AgentPromptWaitOptions {
     pub fn builder() -> builder::AgentPromptWaitOptions {
         Default::default()
+    }
+}
+#[doc = "`AgentPromptedAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct AgentPromptedAnswer {
+    pub agent: AgentInfo,
+    #[serde(rename = "type")]
+    pub type_: AgentPromptedAnswerType,
+}
+impl AgentPromptedAnswer {
+    pub fn builder() -> builder::AgentPromptedAnswer {
+        Default::default()
+    }
+}
+#[doc = "`AgentPromptedAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum AgentPromptedAnswerType {
+    #[serde(rename = "agent_prompted")]
+    AgentPrompted,
+}
+impl ::std::fmt::Display for AgentPromptedAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::AgentPrompted => f.write_str("agent_prompted"),
+        }
+    }
+}
+impl ::std::str::FromStr for AgentPromptedAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "agent_prompted" => Ok(Self::AgentPrompted),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for AgentPromptedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for AgentPromptedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`AgentReadParams`"]
@@ -292,6 +650,66 @@ impl AgentStartParams {
         Default::default()
     }
 }
+#[doc = "`AgentStartedAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct AgentStartedAnswer {
+    pub agent: AgentInfo,
+    pub argv: ::std::vec::Vec<::std::string::String>,
+    #[serde(rename = "type")]
+    pub type_: AgentStartedAnswerType,
+}
+impl AgentStartedAnswer {
+    pub fn builder() -> builder::AgentStartedAnswer {
+        Default::default()
+    }
+}
+#[doc = "`AgentStartedAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum AgentStartedAnswerType {
+    #[serde(rename = "agent_started")]
+    AgentStarted,
+}
+impl ::std::fmt::Display for AgentStartedAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::AgentStarted => f.write_str("agent_started"),
+        }
+    }
+}
+impl ::std::str::FromStr for AgentStartedAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "agent_started" => Ok(Self::AgentStarted),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for AgentStartedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for AgentStartedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`AgentStatus`"]
 #[derive(
     :: serde :: Deserialize,
@@ -363,6 +781,69 @@ pub struct AgentTarget {
 impl AgentTarget {
     pub fn builder() -> builder::AgentTarget {
         Default::default()
+    }
+}
+#[doc = "`AgentViewAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct AgentViewAnswer {
+    pub active: bool,
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub label: ::std::option::Option<::std::string::String>,
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub source: ::std::option::Option<::std::string::String>,
+    #[serde(rename = "type")]
+    pub type_: AgentViewAnswerType,
+}
+impl AgentViewAnswer {
+    pub fn builder() -> builder::AgentViewAnswer {
+        Default::default()
+    }
+}
+#[doc = "`AgentViewAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum AgentViewAnswerType {
+    #[serde(rename = "agent_view")]
+    AgentView,
+}
+impl ::std::fmt::Display for AgentViewAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::AgentView => f.write_str("agent_view"),
+        }
+    }
+}
+impl ::std::str::FromStr for AgentViewAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "agent_view" => Ok(Self::AgentView),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for AgentViewAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for AgentViewAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`AgentViewBuiltinField`"]
@@ -738,6 +1219,66 @@ impl AgentWaitParams {
         Default::default()
     }
 }
+#[doc = "Acknowledgement for the client-shell surface interest lease. This method is new on the\nendpoint protocol, so its revision-bearing result can establish an activation floor."]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct ClientShellSurfaceSetAnswer {
+    pub active: bool,
+    pub projection_revision: u64,
+    #[serde(rename = "type")]
+    pub type_: ClientShellSurfaceSetAnswerType,
+}
+impl ClientShellSurfaceSetAnswer {
+    pub fn builder() -> builder::ClientShellSurfaceSetAnswer {
+        Default::default()
+    }
+}
+#[doc = "`ClientShellSurfaceSetAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum ClientShellSurfaceSetAnswerType {
+    #[serde(rename = "client_shell_surface_set")]
+    ClientShellSurfaceSet,
+}
+impl ::std::fmt::Display for ClientShellSurfaceSetAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::ClientShellSurfaceSet => f.write_str("client_shell_surface_set"),
+        }
+    }
+}
+impl ::std::str::FromStr for ClientShellSurfaceSetAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "client_shell_surface_set" => Ok(Self::ClientShellSurfaceSet),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for ClientShellSurfaceSetAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for ClientShellSurfaceSetAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "Updates whether the requesting client shell receives and controls pane presentation."]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ClientShellSurfaceSetParams {
@@ -746,6 +1287,66 @@ pub struct ClientShellSurfaceSetParams {
 impl ClientShellSurfaceSetParams {
     pub fn builder() -> builder::ClientShellSurfaceSetParams {
         Default::default()
+    }
+}
+#[doc = "`ClientWindowTitleAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct ClientWindowTitleAnswer {
+    pub changed: bool,
+    pub reason: ClientWindowTitleReason,
+    #[serde(rename = "type")]
+    pub type_: ClientWindowTitleAnswerType,
+}
+impl ClientWindowTitleAnswer {
+    pub fn builder() -> builder::ClientWindowTitleAnswer {
+        Default::default()
+    }
+}
+#[doc = "`ClientWindowTitleAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum ClientWindowTitleAnswerType {
+    #[serde(rename = "client_window_title")]
+    ClientWindowTitle,
+}
+impl ::std::fmt::Display for ClientWindowTitleAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::ClientWindowTitle => f.write_str("client_window_title"),
+        }
+    }
+}
+impl ::std::str::FromStr for ClientWindowTitleAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "client_window_title" => Ok(Self::ClientWindowTitle),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for ClientWindowTitleAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for ClientWindowTitleAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`ClientWindowTitleReason`"]
@@ -831,6 +1432,66 @@ pub struct CommandInvokeParams {
 impl CommandInvokeParams {
     pub fn builder() -> builder::CommandInvokeParams {
         Default::default()
+    }
+}
+#[doc = "`ConfigReloadAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct ConfigReloadAnswer {
+    pub diagnostics: ::std::vec::Vec<::std::string::String>,
+    pub status: ConfigReloadStatus,
+    #[serde(rename = "type")]
+    pub type_: ConfigReloadAnswerType,
+}
+impl ConfigReloadAnswer {
+    pub fn builder() -> builder::ConfigReloadAnswer {
+        Default::default()
+    }
+}
+#[doc = "`ConfigReloadAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum ConfigReloadAnswerType {
+    #[serde(rename = "config_reload")]
+    ConfigReload,
+}
+impl ::std::fmt::Display for ConfigReloadAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::ConfigReload => f.write_str("config_reload"),
+        }
+    }
+}
+impl ::std::str::FromStr for ConfigReloadAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "config_reload" => Ok(Self::ConfigReload),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for ConfigReloadAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for ConfigReloadAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`ConfigReloadStatus`"]
@@ -1392,6 +2053,66 @@ impl IntegrationInfo {
         Default::default()
     }
 }
+#[doc = "`IntegrationInstallAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct IntegrationInstallAnswer {
+    pub details: IntegrationInstallResult,
+    pub target: IntegrationTarget,
+    #[serde(rename = "type")]
+    pub type_: IntegrationInstallAnswerType,
+}
+impl IntegrationInstallAnswer {
+    pub fn builder() -> builder::IntegrationInstallAnswer {
+        Default::default()
+    }
+}
+#[doc = "`IntegrationInstallAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum IntegrationInstallAnswerType {
+    #[serde(rename = "integration_install")]
+    IntegrationInstall,
+}
+impl ::std::fmt::Display for IntegrationInstallAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::IntegrationInstall => f.write_str("integration_install"),
+        }
+    }
+}
+impl ::std::str::FromStr for IntegrationInstallAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "integration_install" => Ok(Self::IntegrationInstall),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for IntegrationInstallAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for IntegrationInstallAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`IntegrationInstallParams`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct IntegrationInstallParams {
@@ -1410,6 +2131,65 @@ pub struct IntegrationInstallResult {
 impl IntegrationInstallResult {
     pub fn builder() -> builder::IntegrationInstallResult {
         Default::default()
+    }
+}
+#[doc = "`IntegrationListAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct IntegrationListAnswer {
+    pub integrations: ::std::vec::Vec<IntegrationInfo>,
+    #[serde(rename = "type")]
+    pub type_: IntegrationListAnswerType,
+}
+impl IntegrationListAnswer {
+    pub fn builder() -> builder::IntegrationListAnswer {
+        Default::default()
+    }
+}
+#[doc = "`IntegrationListAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum IntegrationListAnswerType {
+    #[serde(rename = "integration_list")]
+    IntegrationList,
+}
+impl ::std::fmt::Display for IntegrationListAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::IntegrationList => f.write_str("integration_list"),
+        }
+    }
+}
+impl ::std::str::FromStr for IntegrationListAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "integration_list" => Ok(Self::IntegrationList),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for IntegrationListAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for IntegrationListAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`IntegrationState`"]
@@ -1578,6 +2358,66 @@ impl ::std::convert::TryFrom<::std::string::String> for IntegrationTarget {
         value.parse()
     }
 }
+#[doc = "`IntegrationUninstallAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct IntegrationUninstallAnswer {
+    pub details: IntegrationUninstallResult,
+    pub target: IntegrationTarget,
+    #[serde(rename = "type")]
+    pub type_: IntegrationUninstallAnswerType,
+}
+impl IntegrationUninstallAnswer {
+    pub fn builder() -> builder::IntegrationUninstallAnswer {
+        Default::default()
+    }
+}
+#[doc = "`IntegrationUninstallAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum IntegrationUninstallAnswerType {
+    #[serde(rename = "integration_uninstall")]
+    IntegrationUninstall,
+}
+impl ::std::fmt::Display for IntegrationUninstallAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::IntegrationUninstall => f.write_str("integration_uninstall"),
+        }
+    }
+}
+impl ::std::str::FromStr for IntegrationUninstallAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "integration_uninstall" => Ok(Self::IntegrationUninstall),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for IntegrationUninstallAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for IntegrationUninstallAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`IntegrationUninstallParams`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct IntegrationUninstallParams {
@@ -1596,6 +2436,65 @@ pub struct IntegrationUninstallResult {
 impl IntegrationUninstallResult {
     pub fn builder() -> builder::IntegrationUninstallResult {
         Default::default()
+    }
+}
+#[doc = "`LayoutApplyAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct LayoutApplyAnswer {
+    pub layout: LayoutDescription,
+    #[serde(rename = "type")]
+    pub type_: LayoutApplyAnswerType,
+}
+impl LayoutApplyAnswer {
+    pub fn builder() -> builder::LayoutApplyAnswer {
+        Default::default()
+    }
+}
+#[doc = "`LayoutApplyAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum LayoutApplyAnswerType {
+    #[serde(rename = "layout_apply")]
+    LayoutApply,
+}
+impl ::std::fmt::Display for LayoutApplyAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::LayoutApply => f.write_str("layout_apply"),
+        }
+    }
+}
+impl ::std::str::FromStr for LayoutApplyAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "layout_apply" => Ok(Self::LayoutApply),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for LayoutApplyAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for LayoutApplyAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`LayoutApplyParams`"]
@@ -1628,6 +2527,65 @@ pub struct LayoutDescription {
 impl LayoutDescription {
     pub fn builder() -> builder::LayoutDescription {
         Default::default()
+    }
+}
+#[doc = "`LayoutExportAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct LayoutExportAnswer {
+    pub layout: LayoutDescription,
+    #[serde(rename = "type")]
+    pub type_: LayoutExportAnswerType,
+}
+impl LayoutExportAnswer {
+    pub fn builder() -> builder::LayoutExportAnswer {
+        Default::default()
+    }
+}
+#[doc = "`LayoutExportAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum LayoutExportAnswerType {
+    #[serde(rename = "layout_export")]
+    LayoutExport,
+}
+impl ::std::fmt::Display for LayoutExportAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::LayoutExport => f.write_str("layout_export"),
+        }
+    }
+}
+impl ::std::str::FromStr for LayoutExportAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "layout_export" => Ok(Self::LayoutExport),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for LayoutExportAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for LayoutExportAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`LayoutExportParams`"]
@@ -1684,6 +2642,125 @@ pub struct LayoutSetSplitRatioParams {
 impl LayoutSetSplitRatioParams {
     pub fn builder() -> builder::LayoutSetSplitRatioParams {
         Default::default()
+    }
+}
+#[doc = "`LayoutSplitRatioSetAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct LayoutSplitRatioSetAnswer {
+    pub layout: LayoutDescription,
+    #[serde(rename = "type")]
+    pub type_: LayoutSplitRatioSetAnswerType,
+}
+impl LayoutSplitRatioSetAnswer {
+    pub fn builder() -> builder::LayoutSplitRatioSetAnswer {
+        Default::default()
+    }
+}
+#[doc = "`LayoutSplitRatioSetAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum LayoutSplitRatioSetAnswerType {
+    #[serde(rename = "layout_split_ratio_set")]
+    LayoutSplitRatioSet,
+}
+impl ::std::fmt::Display for LayoutSplitRatioSetAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::LayoutSplitRatioSet => f.write_str("layout_split_ratio_set"),
+        }
+    }
+}
+impl ::std::str::FromStr for LayoutSplitRatioSetAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "layout_split_ratio_set" => Ok(Self::LayoutSplitRatioSet),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for LayoutSplitRatioSetAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for LayoutSplitRatioSetAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+#[doc = "`NotificationShowAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct NotificationShowAnswer {
+    pub reason: NotificationShowReason,
+    pub shown: bool,
+    #[serde(rename = "type")]
+    pub type_: NotificationShowAnswerType,
+}
+impl NotificationShowAnswer {
+    pub fn builder() -> builder::NotificationShowAnswer {
+        Default::default()
+    }
+}
+#[doc = "`NotificationShowAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum NotificationShowAnswerType {
+    #[serde(rename = "notification_show")]
+    NotificationShow,
+}
+impl ::std::fmt::Display for NotificationShowAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::NotificationShow => f.write_str("notification_show"),
+        }
+    }
+}
+impl ::std::str::FromStr for NotificationShowAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "notification_show" => Ok(Self::NotificationShow),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for NotificationShowAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for NotificationShowAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`NotificationShowParams`"]
@@ -1820,6 +2897,64 @@ impl ::std::convert::TryFrom<::std::string::String> for NotificationShowSound {
         value.parse()
     }
 }
+#[doc = "`OkAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct OkAnswer {
+    #[serde(rename = "type")]
+    pub type_: OkAnswerType,
+}
+impl OkAnswer {
+    pub fn builder() -> builder::OkAnswer {
+        Default::default()
+    }
+}
+#[doc = "`OkAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum OkAnswerType {
+    #[serde(rename = "ok")]
+    Ok,
+}
+impl ::std::fmt::Display for OkAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::Ok => f.write_str("ok"),
+        }
+    }
+}
+impl ::std::str::FromStr for OkAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "ok" => Ok(Self::Ok),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for OkAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for OkAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`OutputMatch`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 #[serde(tag = "type", content = "value")]
@@ -1828,6 +2963,69 @@ pub enum OutputMatch {
     Substring(::std::string::String),
     #[serde(rename = "regex")]
     Regex(::std::string::String),
+}
+#[doc = "`OutputMatchedAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct OutputMatchedAnswer {
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub matched_line: ::std::option::Option<::std::string::String>,
+    pub pane_id: ::std::string::String,
+    pub read: PaneReadResult,
+    pub revision: u64,
+    #[serde(rename = "type")]
+    pub type_: OutputMatchedAnswerType,
+}
+impl OutputMatchedAnswer {
+    pub fn builder() -> builder::OutputMatchedAnswer {
+        Default::default()
+    }
+}
+#[doc = "`OutputMatchedAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum OutputMatchedAnswerType {
+    #[serde(rename = "output_matched")]
+    OutputMatched,
+}
+impl ::std::fmt::Display for OutputMatchedAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::OutputMatched => f.write_str("output_matched"),
+        }
+    }
+}
+impl ::std::str::FromStr for OutputMatchedAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "output_matched" => Ok(Self::OutputMatched),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for OutputMatchedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for OutputMatchedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
 }
 #[doc = "`PaneAgentState`"]
 #[derive(
@@ -2008,6 +3206,67 @@ impl ::std::convert::TryFrom<::std::string::String> for PaneCopyMotion {
         value.parse()
     }
 }
+#[doc = "`PaneCopyMotionAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PaneCopyMotionAnswer {
+    pub content_revision: u64,
+    pub cursor: PaneTextPoint,
+    pub pane_id: ::std::string::String,
+    #[serde(rename = "type")]
+    pub type_: PaneCopyMotionAnswerType,
+}
+impl PaneCopyMotionAnswer {
+    pub fn builder() -> builder::PaneCopyMotionAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PaneCopyMotionAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PaneCopyMotionAnswerType {
+    #[serde(rename = "pane_copy_motion")]
+    PaneCopyMotion,
+}
+impl ::std::fmt::Display for PaneCopyMotionAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PaneCopyMotion => f.write_str("pane_copy_motion"),
+        }
+    }
+}
+impl ::std::str::FromStr for PaneCopyMotionAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pane_copy_motion" => Ok(Self::PaneCopyMotion),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PaneCopyMotionAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PaneCopyMotionAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`PaneCopyMotionParams`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct PaneCopyMotionParams {
@@ -2020,6 +3279,72 @@ pub struct PaneCopyMotionParams {
 impl PaneCopyMotionParams {
     pub fn builder() -> builder::PaneCopyMotionParams {
         Default::default()
+    }
+}
+#[doc = "`PaneCopySearchAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PaneCopySearchAnswer {
+    pub content_revision: u64,
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub current: ::std::option::Option<u32>,
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub current_global: ::std::option::Option<u64>,
+    pub matches: ::std::vec::Vec<PaneTextRange>,
+    pub pane_id: ::std::string::String,
+    pub total: u64,
+    #[serde(rename = "type")]
+    pub type_: PaneCopySearchAnswerType,
+}
+impl PaneCopySearchAnswer {
+    pub fn builder() -> builder::PaneCopySearchAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PaneCopySearchAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PaneCopySearchAnswerType {
+    #[serde(rename = "pane_copy_search")]
+    PaneCopySearch,
+}
+impl ::std::fmt::Display for PaneCopySearchAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PaneCopySearch => f.write_str("pane_copy_search"),
+        }
+    }
+}
+impl ::std::str::FromStr for PaneCopySearchAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pane_copy_search" => Ok(Self::PaneCopySearch),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PaneCopySearchAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PaneCopySearchAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`PaneCopySearchDirection`"]
@@ -2087,6 +3412,65 @@ pub struct PaneCopySearchParams {
 impl PaneCopySearchParams {
     pub fn builder() -> builder::PaneCopySearchParams {
         Default::default()
+    }
+}
+#[doc = "`PaneCurrentAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PaneCurrentAnswer {
+    pub pane: PaneInfo,
+    #[serde(rename = "type")]
+    pub type_: PaneCurrentAnswerType,
+}
+impl PaneCurrentAnswer {
+    pub fn builder() -> builder::PaneCurrentAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PaneCurrentAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PaneCurrentAnswerType {
+    #[serde(rename = "pane_current")]
+    PaneCurrent,
+}
+impl ::std::fmt::Display for PaneCurrentAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PaneCurrent => f.write_str("pane_current"),
+        }
+    }
+}
+impl ::std::str::FromStr for PaneCurrentAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pane_current" => Ok(Self::PaneCurrent),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PaneCurrentAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PaneCurrentAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`PaneCurrentParams`"]
@@ -2159,6 +3543,65 @@ impl ::std::convert::TryFrom<::std::string::String> for PaneDirection {
         value.parse()
     }
 }
+#[doc = "`PaneEdgesAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PaneEdgesAnswer {
+    pub edges: PaneEdgesResult,
+    #[serde(rename = "type")]
+    pub type_: PaneEdgesAnswerType,
+}
+impl PaneEdgesAnswer {
+    pub fn builder() -> builder::PaneEdgesAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PaneEdgesAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PaneEdgesAnswerType {
+    #[serde(rename = "pane_edges")]
+    PaneEdges,
+}
+impl ::std::fmt::Display for PaneEdgesAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PaneEdges => f.write_str("pane_edges"),
+        }
+    }
+}
+impl ::std::str::FromStr for PaneEdgesAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pane_edges" => Ok(Self::PaneEdges),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PaneEdgesAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PaneEdgesAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`PaneEdgesParams`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug, Default)]
 pub struct PaneEdgesParams {
@@ -2183,6 +3626,65 @@ pub struct PaneEdgesResult {
 impl PaneEdgesResult {
     pub fn builder() -> builder::PaneEdgesResult {
         Default::default()
+    }
+}
+#[doc = "`PaneFocusDirectionAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PaneFocusDirectionAnswer {
+    pub focus: PaneFocusDirectionResult,
+    #[serde(rename = "type")]
+    pub type_: PaneFocusDirectionAnswerType,
+}
+impl PaneFocusDirectionAnswer {
+    pub fn builder() -> builder::PaneFocusDirectionAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PaneFocusDirectionAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PaneFocusDirectionAnswerType {
+    #[serde(rename = "pane_focus_direction")]
+    PaneFocusDirection,
+}
+impl ::std::fmt::Display for PaneFocusDirectionAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PaneFocusDirection => f.write_str("pane_focus_direction"),
+        }
+    }
+}
+impl ::std::str::FromStr for PaneFocusDirectionAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pane_focus_direction" => Ok(Self::PaneFocusDirection),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PaneFocusDirectionAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PaneFocusDirectionAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`PaneFocusDirectionParams`"]
@@ -2331,6 +3833,145 @@ impl ::std::convert::TryFrom<::std::string::String> for PaneGraphicsFormat {
         value.parse()
     }
 }
+#[doc = "`PaneGraphicsFrameAckAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PaneGraphicsFrameAckAnswer {
+    pub revision: u64,
+    pub sequence: u64,
+    #[serde(rename = "type")]
+    pub type_: PaneGraphicsFrameAckAnswerType,
+}
+impl PaneGraphicsFrameAckAnswer {
+    pub fn builder() -> builder::PaneGraphicsFrameAckAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PaneGraphicsFrameAckAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PaneGraphicsFrameAckAnswerType {
+    #[serde(rename = "pane_graphics_frame_ack")]
+    PaneGraphicsFrameAck,
+}
+impl ::std::fmt::Display for PaneGraphicsFrameAckAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PaneGraphicsFrameAck => f.write_str("pane_graphics_frame_ack"),
+        }
+    }
+}
+impl ::std::str::FromStr for PaneGraphicsFrameAckAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pane_graphics_frame_ack" => Ok(Self::PaneGraphicsFrameAck),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PaneGraphicsFrameAckAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PaneGraphicsFrameAckAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+#[doc = "`PaneGraphicsInfoAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PaneGraphicsInfoAnswer {
+    pub cell_height_px: u32,
+    pub cell_width_px: u32,
+    #[doc = "Accepts damage metadata while still consuming a complete canonical file."]
+    #[serde(default)]
+    pub file_frame_damage: bool,
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub file_frame_direct_max_bytes: ::std::option::Option<u32>,
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub file_frame_directory: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+    pub file_frame_formats: ::std::vec::Vec<::std::string::String>,
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub file_frame_max_bytes: ::std::option::Option<u32>,
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub file_frame_transport: ::std::option::Option<::std::string::String>,
+    #[serde(default)]
+    pub max_layers_per_pane: u32,
+    #[doc = "True only when this pane is on the currently rendered terminal surface."]
+    pub pane_visible: bool,
+    #[serde(default)]
+    pub pixel_mouse: bool,
+    #[serde(rename = "type")]
+    pub type_: PaneGraphicsInfoAnswerType,
+}
+impl PaneGraphicsInfoAnswer {
+    pub fn builder() -> builder::PaneGraphicsInfoAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PaneGraphicsInfoAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PaneGraphicsInfoAnswerType {
+    #[serde(rename = "pane_graphics_info")]
+    PaneGraphicsInfo,
+}
+impl ::std::fmt::Display for PaneGraphicsInfoAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PaneGraphicsInfo => f.write_str("pane_graphics_info"),
+        }
+    }
+}
+impl ::std::str::FromStr for PaneGraphicsInfoAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pane_graphics_info" => Ok(Self::PaneGraphicsInfo),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PaneGraphicsInfoAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PaneGraphicsInfoAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`PaneGraphicsPlacementParams`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug, Default)]
 pub struct PaneGraphicsPlacementParams {
@@ -2415,6 +4056,65 @@ impl PaneInfo {
         Default::default()
     }
 }
+#[doc = "`PaneInfoAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PaneInfoAnswer {
+    pub pane: PaneInfo,
+    #[serde(rename = "type")]
+    pub type_: PaneInfoAnswerType,
+}
+impl PaneInfoAnswer {
+    pub fn builder() -> builder::PaneInfoAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PaneInfoAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PaneInfoAnswerType {
+    #[serde(rename = "pane_info")]
+    PaneInfo,
+}
+impl ::std::fmt::Display for PaneInfoAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PaneInfo => f.write_str("pane_info"),
+        }
+    }
+}
+impl ::std::str::FromStr for PaneInfoAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pane_info" => Ok(Self::PaneInfo),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PaneInfoAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PaneInfoAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`PaneInfoTokensKey`"]
 #[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[serde(transparent)]
@@ -2476,6 +4176,65 @@ pub struct PaneInputSetParams {
 impl PaneInputSetParams {
     pub fn builder() -> builder::PaneInputSetParams {
         Default::default()
+    }
+}
+#[doc = "`PaneLayoutAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PaneLayoutAnswer {
+    pub layout: PaneLayoutSnapshot,
+    #[serde(rename = "type")]
+    pub type_: PaneLayoutAnswerType,
+}
+impl PaneLayoutAnswer {
+    pub fn builder() -> builder::PaneLayoutAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PaneLayoutAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PaneLayoutAnswerType {
+    #[serde(rename = "pane_layout")]
+    PaneLayout,
+}
+impl ::std::fmt::Display for PaneLayoutAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PaneLayout => f.write_str("pane_layout"),
+        }
+    }
+}
+impl ::std::str::FromStr for PaneLayoutAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pane_layout" => Ok(Self::PaneLayout),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PaneLayoutAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PaneLayoutAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`PaneLayoutPane`"]
@@ -2559,6 +4318,126 @@ impl PaneLinkActivateParams {
         Default::default()
     }
 }
+#[doc = "`PaneLinkActivatedAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PaneLinkActivatedAnswer {
+    pub handled: bool,
+    #[serde(rename = "type")]
+    pub type_: PaneLinkActivatedAnswerType,
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub url: ::std::option::Option<::std::string::String>,
+}
+impl PaneLinkActivatedAnswer {
+    pub fn builder() -> builder::PaneLinkActivatedAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PaneLinkActivatedAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PaneLinkActivatedAnswerType {
+    #[serde(rename = "pane_link_activated")]
+    PaneLinkActivated,
+}
+impl ::std::fmt::Display for PaneLinkActivatedAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PaneLinkActivated => f.write_str("pane_link_activated"),
+        }
+    }
+}
+impl ::std::str::FromStr for PaneLinkActivatedAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pane_link_activated" => Ok(Self::PaneLinkActivated),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PaneLinkActivatedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PaneLinkActivatedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+#[doc = "`PaneListAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PaneListAnswer {
+    pub panes: ::std::vec::Vec<PaneInfo>,
+    #[serde(rename = "type")]
+    pub type_: PaneListAnswerType,
+}
+impl PaneListAnswer {
+    pub fn builder() -> builder::PaneListAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PaneListAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PaneListAnswerType {
+    #[serde(rename = "pane_list")]
+    PaneList,
+}
+impl ::std::fmt::Display for PaneListAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PaneList => f.write_str("pane_list"),
+        }
+    }
+}
+impl ::std::str::FromStr for PaneListAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pane_list" => Ok(Self::PaneList),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PaneListAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PaneListAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`PaneListParams`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug, Default)]
 pub struct PaneListParams {
@@ -2568,6 +4447,65 @@ pub struct PaneListParams {
 impl PaneListParams {
     pub fn builder() -> builder::PaneListParams {
         Default::default()
+    }
+}
+#[doc = "`PaneMoveAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PaneMoveAnswer {
+    pub move_result: PaneMoveResult,
+    #[serde(rename = "type")]
+    pub type_: PaneMoveAnswerType,
+}
+impl PaneMoveAnswer {
+    pub fn builder() -> builder::PaneMoveAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PaneMoveAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PaneMoveAnswerType {
+    #[serde(rename = "pane_move")]
+    PaneMove,
+}
+impl ::std::fmt::Display for PaneMoveAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PaneMove => f.write_str("pane_move"),
+        }
+    }
+}
+impl ::std::str::FromStr for PaneMoveAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pane_move" => Ok(Self::PaneMove),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PaneMoveAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PaneMoveAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`PaneMoveDestination`"]
@@ -2690,6 +4628,65 @@ impl PaneMoveResult {
         Default::default()
     }
 }
+#[doc = "`PaneNeighborAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PaneNeighborAnswer {
+    pub neighbor: PaneNeighborResult,
+    #[serde(rename = "type")]
+    pub type_: PaneNeighborAnswerType,
+}
+impl PaneNeighborAnswer {
+    pub fn builder() -> builder::PaneNeighborAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PaneNeighborAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PaneNeighborAnswerType {
+    #[serde(rename = "pane_neighbor")]
+    PaneNeighbor,
+}
+impl ::std::fmt::Display for PaneNeighborAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PaneNeighbor => f.write_str("pane_neighbor"),
+        }
+    }
+}
+impl ::std::str::FromStr for PaneNeighborAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pane_neighbor" => Ok(Self::PaneNeighbor),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PaneNeighborAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PaneNeighborAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`PaneNeighborParams`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct PaneNeighborParams {
@@ -2746,6 +4743,65 @@ impl PaneProcessInfo {
         Default::default()
     }
 }
+#[doc = "`PaneProcessInfoAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PaneProcessInfoAnswer {
+    pub process_info: PaneProcessInfo,
+    #[serde(rename = "type")]
+    pub type_: PaneProcessInfoAnswerType,
+}
+impl PaneProcessInfoAnswer {
+    pub fn builder() -> builder::PaneProcessInfoAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PaneProcessInfoAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PaneProcessInfoAnswerType {
+    #[serde(rename = "pane_process_info")]
+    PaneProcessInfo,
+}
+impl ::std::fmt::Display for PaneProcessInfoAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PaneProcessInfo => f.write_str("pane_process_info"),
+        }
+    }
+}
+impl ::std::str::FromStr for PaneProcessInfoAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pane_process_info" => Ok(Self::PaneProcessInfo),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PaneProcessInfoAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PaneProcessInfoAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`PaneProcessInfoParams`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug, Default)]
 pub struct PaneProcessInfoParams {
@@ -2774,6 +4830,65 @@ pub struct PaneProcessInfoProcess {
 impl PaneProcessInfoProcess {
     pub fn builder() -> builder::PaneProcessInfoProcess {
         Default::default()
+    }
+}
+#[doc = "`PaneReadAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PaneReadAnswer {
+    pub read: PaneReadResult,
+    #[serde(rename = "type")]
+    pub type_: PaneReadAnswerType,
+}
+impl PaneReadAnswer {
+    pub fn builder() -> builder::PaneReadAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PaneReadAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PaneReadAnswerType {
+    #[serde(rename = "pane_read")]
+    PaneRead,
+}
+impl ::std::fmt::Display for PaneReadAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PaneRead => f.write_str("pane_read"),
+        }
+    }
+}
+impl ::std::str::FromStr for PaneReadAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pane_read" => Ok(Self::PaneRead),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PaneReadAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PaneReadAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`PaneReadParams`"]
@@ -2971,6 +5086,65 @@ impl<'de> ::serde::Deserialize<'de> for PaneReportMetadataParamsTokensKey {
             })
     }
 }
+#[doc = "`PaneResizeAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PaneResizeAnswer {
+    pub resize: PaneResizeResult,
+    #[serde(rename = "type")]
+    pub type_: PaneResizeAnswerType,
+}
+impl PaneResizeAnswer {
+    pub fn builder() -> builder::PaneResizeAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PaneResizeAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PaneResizeAnswerType {
+    #[serde(rename = "pane_resize")]
+    PaneResize,
+}
+impl ::std::fmt::Display for PaneResizeAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PaneResize => f.write_str("pane_resize"),
+        }
+    }
+}
+impl ::std::str::FromStr for PaneResizeAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pane_resize" => Ok(Self::PaneResize),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PaneResizeAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PaneResizeAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`PaneResizeParams`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct PaneResizeParams {
@@ -3133,6 +5307,66 @@ impl PaneScrollParams {
         Default::default()
     }
 }
+#[doc = "`PaneSelectionAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PaneSelectionAnswer {
+    pub pane_id: ::std::string::String,
+    pub text: ::std::string::String,
+    #[serde(rename = "type")]
+    pub type_: PaneSelectionAnswerType,
+}
+impl PaneSelectionAnswer {
+    pub fn builder() -> builder::PaneSelectionAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PaneSelectionAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PaneSelectionAnswerType {
+    #[serde(rename = "pane_selection")]
+    PaneSelection,
+}
+impl ::std::fmt::Display for PaneSelectionAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PaneSelection => f.write_str("pane_selection"),
+        }
+    }
+}
+impl ::std::str::FromStr for PaneSelectionAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pane_selection" => Ok(Self::PaneSelection),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PaneSelectionAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PaneSelectionAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`PaneSelectionReadParams`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct PaneSelectionReadParams {
@@ -3208,6 +5442,65 @@ pub struct PaneSplitParams {
 impl PaneSplitParams {
     pub fn builder() -> builder::PaneSplitParams {
         Default::default()
+    }
+}
+#[doc = "`PaneSwapAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PaneSwapAnswer {
+    pub swap: PaneSwapResult,
+    #[serde(rename = "type")]
+    pub type_: PaneSwapAnswerType,
+}
+impl PaneSwapAnswer {
+    pub fn builder() -> builder::PaneSwapAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PaneSwapAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PaneSwapAnswerType {
+    #[serde(rename = "pane_swap")]
+    PaneSwap,
+}
+impl ::std::fmt::Display for PaneSwapAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PaneSwap => f.write_str("pane_swap"),
+        }
+    }
+}
+impl ::std::str::FromStr for PaneSwapAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pane_swap" => Ok(Self::PaneSwap),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PaneSwapAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PaneSwapAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`PaneSwapParams`"]
@@ -3352,6 +5645,65 @@ pub struct PaneWaitForOutputParams {
 impl PaneWaitForOutputParams {
     pub fn builder() -> builder::PaneWaitForOutputParams {
         Default::default()
+    }
+}
+#[doc = "`PaneZoomAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PaneZoomAnswer {
+    #[serde(rename = "type")]
+    pub type_: PaneZoomAnswerType,
+    pub zoom: PaneZoomResult,
+}
+impl PaneZoomAnswer {
+    pub fn builder() -> builder::PaneZoomAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PaneZoomAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PaneZoomAnswerType {
+    #[serde(rename = "pane_zoom")]
+    PaneZoom,
+}
+impl ::std::fmt::Display for PaneZoomAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PaneZoom => f.write_str("pane_zoom"),
+        }
+    }
+}
+impl ::std::str::FromStr for PaneZoomAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pane_zoom" => Ok(Self::PaneZoom),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PaneZoomAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PaneZoomAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`PaneZoomMode`"]
@@ -3623,6 +5975,126 @@ impl PluginActionInvokeParams {
         Default::default()
     }
 }
+#[doc = "`PluginActionInvokedAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PluginActionInvokedAnswer {
+    pub action: PluginActionInfo,
+    pub context: PluginInvocationContext,
+    pub log: PluginCommandLogInfo,
+    #[serde(rename = "type")]
+    pub type_: PluginActionInvokedAnswerType,
+}
+impl PluginActionInvokedAnswer {
+    pub fn builder() -> builder::PluginActionInvokedAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PluginActionInvokedAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PluginActionInvokedAnswerType {
+    #[serde(rename = "plugin_action_invoked")]
+    PluginActionInvoked,
+}
+impl ::std::fmt::Display for PluginActionInvokedAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PluginActionInvoked => f.write_str("plugin_action_invoked"),
+        }
+    }
+}
+impl ::std::str::FromStr for PluginActionInvokedAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "plugin_action_invoked" => Ok(Self::PluginActionInvoked),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PluginActionInvokedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PluginActionInvokedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+#[doc = "`PluginActionListAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PluginActionListAnswer {
+    pub actions: ::std::vec::Vec<PluginActionInfo>,
+    #[serde(rename = "type")]
+    pub type_: PluginActionListAnswerType,
+}
+impl PluginActionListAnswer {
+    pub fn builder() -> builder::PluginActionListAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PluginActionListAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PluginActionListAnswerType {
+    #[serde(rename = "plugin_action_list")]
+    PluginActionList,
+}
+impl ::std::fmt::Display for PluginActionListAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PluginActionList => f.write_str("plugin_action_list"),
+        }
+    }
+}
+impl ::std::str::FromStr for PluginActionListAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "plugin_action_list" => Ok(Self::PluginActionList),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PluginActionListAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PluginActionListAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`PluginActionListParams`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug, Default)]
 pub struct PluginActionListParams {
@@ -3717,6 +6189,124 @@ impl ::std::convert::TryFrom<::std::string::String> for PluginCommandStatus {
         value.parse()
     }
 }
+#[doc = "`PluginDisabledAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PluginDisabledAnswer {
+    pub plugin: InstalledPluginInfo,
+    #[serde(rename = "type")]
+    pub type_: PluginDisabledAnswerType,
+}
+impl PluginDisabledAnswer {
+    pub fn builder() -> builder::PluginDisabledAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PluginDisabledAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PluginDisabledAnswerType {
+    #[serde(rename = "plugin_disabled")]
+    PluginDisabled,
+}
+impl ::std::fmt::Display for PluginDisabledAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PluginDisabled => f.write_str("plugin_disabled"),
+        }
+    }
+}
+impl ::std::str::FromStr for PluginDisabledAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "plugin_disabled" => Ok(Self::PluginDisabled),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PluginDisabledAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PluginDisabledAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+#[doc = "`PluginEnabledAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PluginEnabledAnswer {
+    pub plugin: InstalledPluginInfo,
+    #[serde(rename = "type")]
+    pub type_: PluginEnabledAnswerType,
+}
+impl PluginEnabledAnswer {
+    pub fn builder() -> builder::PluginEnabledAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PluginEnabledAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PluginEnabledAnswerType {
+    #[serde(rename = "plugin_enabled")]
+    PluginEnabled,
+}
+impl ::std::fmt::Display for PluginEnabledAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PluginEnabled => f.write_str("plugin_enabled"),
+        }
+    }
+}
+impl ::std::str::FromStr for PluginEnabledAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "plugin_enabled" => Ok(Self::PluginEnabled),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PluginEnabledAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PluginEnabledAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`PluginInvocationContext`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug, Default)]
 pub struct PluginInvocationContext {
@@ -3770,6 +6360,124 @@ impl PluginLinkParams {
         Default::default()
     }
 }
+#[doc = "`PluginLinkedAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PluginLinkedAnswer {
+    pub plugin: InstalledPluginInfo,
+    #[serde(rename = "type")]
+    pub type_: PluginLinkedAnswerType,
+}
+impl PluginLinkedAnswer {
+    pub fn builder() -> builder::PluginLinkedAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PluginLinkedAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PluginLinkedAnswerType {
+    #[serde(rename = "plugin_linked")]
+    PluginLinked,
+}
+impl ::std::fmt::Display for PluginLinkedAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PluginLinked => f.write_str("plugin_linked"),
+        }
+    }
+}
+impl ::std::str::FromStr for PluginLinkedAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "plugin_linked" => Ok(Self::PluginLinked),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PluginLinkedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PluginLinkedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+#[doc = "`PluginListAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PluginListAnswer {
+    pub plugins: ::std::vec::Vec<InstalledPluginInfo>,
+    #[serde(rename = "type")]
+    pub type_: PluginListAnswerType,
+}
+impl PluginListAnswer {
+    pub fn builder() -> builder::PluginListAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PluginListAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PluginListAnswerType {
+    #[serde(rename = "plugin_list")]
+    PluginList,
+}
+impl ::std::fmt::Display for PluginListAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PluginList => f.write_str("plugin_list"),
+        }
+    }
+}
+impl ::std::str::FromStr for PluginListAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "plugin_list" => Ok(Self::PluginList),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PluginListAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PluginListAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`PluginListParams`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug, Default)]
 pub struct PluginListParams {
@@ -3779,6 +6487,65 @@ pub struct PluginListParams {
 impl PluginListParams {
     pub fn builder() -> builder::PluginListParams {
         Default::default()
+    }
+}
+#[doc = "`PluginLogListAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PluginLogListAnswer {
+    pub logs: ::std::vec::Vec<PluginCommandLogInfo>,
+    #[serde(rename = "type")]
+    pub type_: PluginLogListAnswerType,
+}
+impl PluginLogListAnswer {
+    pub fn builder() -> builder::PluginLogListAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PluginLogListAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PluginLogListAnswerType {
+    #[serde(rename = "plugin_log_list")]
+    PluginLogList,
+}
+impl ::std::fmt::Display for PluginLogListAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PluginLogList => f.write_str("plugin_log_list"),
+        }
+    }
+}
+impl ::std::str::FromStr for PluginLogListAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "plugin_log_list" => Ok(Self::PluginLogList),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PluginLogListAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PluginLogListAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`PluginLogListParams`"]
@@ -3896,6 +6663,65 @@ impl PluginPaneCloseParams {
         Default::default()
     }
 }
+#[doc = "`PluginPaneClosedAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PluginPaneClosedAnswer {
+    pub pane_id: ::std::string::String,
+    #[serde(rename = "type")]
+    pub type_: PluginPaneClosedAnswerType,
+}
+impl PluginPaneClosedAnswer {
+    pub fn builder() -> builder::PluginPaneClosedAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PluginPaneClosedAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PluginPaneClosedAnswerType {
+    #[serde(rename = "plugin_pane_closed")]
+    PluginPaneClosed,
+}
+impl ::std::fmt::Display for PluginPaneClosedAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PluginPaneClosed => f.write_str("plugin_pane_closed"),
+        }
+    }
+}
+impl ::std::str::FromStr for PluginPaneClosedAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "plugin_pane_closed" => Ok(Self::PluginPaneClosed),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PluginPaneClosedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PluginPaneClosedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`PluginPaneFocusParams`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct PluginPaneFocusParams {
@@ -3904,6 +6730,65 @@ pub struct PluginPaneFocusParams {
 impl PluginPaneFocusParams {
     pub fn builder() -> builder::PluginPaneFocusParams {
         Default::default()
+    }
+}
+#[doc = "`PluginPaneFocusedAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PluginPaneFocusedAnswer {
+    pub plugin_pane: PluginPaneInfo,
+    #[serde(rename = "type")]
+    pub type_: PluginPaneFocusedAnswerType,
+}
+impl PluginPaneFocusedAnswer {
+    pub fn builder() -> builder::PluginPaneFocusedAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PluginPaneFocusedAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PluginPaneFocusedAnswerType {
+    #[serde(rename = "plugin_pane_focused")]
+    PluginPaneFocused,
+}
+impl ::std::fmt::Display for PluginPaneFocusedAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PluginPaneFocused => f.write_str("plugin_pane_focused"),
+        }
+    }
+}
+impl ::std::str::FromStr for PluginPaneFocusedAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "plugin_pane_focused" => Ok(Self::PluginPaneFocused),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PluginPaneFocusedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PluginPaneFocusedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`PluginPaneInfo`"]
@@ -3948,6 +6833,65 @@ pub struct PluginPaneOpenParams {
 impl PluginPaneOpenParams {
     pub fn builder() -> builder::PluginPaneOpenParams {
         Default::default()
+    }
+}
+#[doc = "`PluginPaneOpenedAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PluginPaneOpenedAnswer {
+    pub plugin_pane: PluginPaneInfo,
+    #[serde(rename = "type")]
+    pub type_: PluginPaneOpenedAnswerType,
+}
+impl PluginPaneOpenedAnswer {
+    pub fn builder() -> builder::PluginPaneOpenedAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PluginPaneOpenedAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PluginPaneOpenedAnswerType {
+    #[serde(rename = "plugin_pane_opened")]
+    PluginPaneOpened,
+}
+impl ::std::fmt::Display for PluginPaneOpenedAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PluginPaneOpened => f.write_str("plugin_pane_opened"),
+        }
+    }
+}
+impl ::std::str::FromStr for PluginPaneOpenedAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "plugin_pane_opened" => Ok(Self::PluginPaneOpened),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PluginPaneOpenedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PluginPaneOpenedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`PluginPanePlacement`"]
@@ -4176,6 +7120,128 @@ pub struct PluginUnlinkParams {
 impl PluginUnlinkParams {
     pub fn builder() -> builder::PluginUnlinkParams {
         Default::default()
+    }
+}
+#[doc = "`PluginUnlinkedAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PluginUnlinkedAnswer {
+    pub plugin_id: ::std::string::String,
+    pub removed: bool,
+    #[serde(rename = "type")]
+    pub type_: PluginUnlinkedAnswerType,
+}
+impl PluginUnlinkedAnswer {
+    pub fn builder() -> builder::PluginUnlinkedAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PluginUnlinkedAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PluginUnlinkedAnswerType {
+    #[serde(rename = "plugin_unlinked")]
+    PluginUnlinked,
+}
+impl ::std::fmt::Display for PluginUnlinkedAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::PluginUnlinked => f.write_str("plugin_unlinked"),
+        }
+    }
+}
+impl ::std::str::FromStr for PluginUnlinkedAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "plugin_unlinked" => Ok(Self::PluginUnlinked),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PluginUnlinkedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PluginUnlinkedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+#[doc = "`PongAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct PongAnswer {
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub capabilities: ::std::option::Option<ServerCapabilities>,
+    pub protocol: u32,
+    #[serde(rename = "type")]
+    pub type_: PongAnswerType,
+    pub version: ::std::string::String,
+}
+impl PongAnswer {
+    pub fn builder() -> builder::PongAnswer {
+        Default::default()
+    }
+}
+#[doc = "`PongAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum PongAnswerType {
+    #[serde(rename = "pong")]
+    Pong,
+}
+impl ::std::fmt::Display for PongAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::Pong => f.write_str("pong"),
+        }
+    }
+}
+impl ::std::str::FromStr for PongAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "pong" => Ok(Self::Pong),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for PongAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for PongAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`PopupSize`"]
@@ -5325,6 +8391,65 @@ impl SessionSnapshot {
         Default::default()
     }
 }
+#[doc = "`SessionSnapshotAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct SessionSnapshotAnswer {
+    pub snapshot: SessionSnapshot,
+    #[serde(rename = "type")]
+    pub type_: SessionSnapshotAnswerType,
+}
+impl SessionSnapshotAnswer {
+    pub fn builder() -> builder::SessionSnapshotAnswer {
+        Default::default()
+    }
+}
+#[doc = "`SessionSnapshotAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum SessionSnapshotAnswerType {
+    #[serde(rename = "session_snapshot")]
+    SessionSnapshot,
+}
+impl ::std::fmt::Display for SessionSnapshotAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::SessionSnapshot => f.write_str("session_snapshot"),
+        }
+    }
+}
+impl ::std::str::FromStr for SessionSnapshotAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "session_snapshot" => Ok(Self::SessionSnapshot),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for SessionSnapshotAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for SessionSnapshotAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`SplitDirection`"]
 #[derive(
     :: serde :: Deserialize,
@@ -5537,6 +8662,64 @@ impl ::std::convert::TryFrom<::std::string::String> for SubscriptionEventKind {
         value.parse()
     }
 }
+#[doc = "`SubscriptionStartedAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct SubscriptionStartedAnswer {
+    #[serde(rename = "type")]
+    pub type_: SubscriptionStartedAnswerType,
+}
+impl SubscriptionStartedAnswer {
+    pub fn builder() -> builder::SubscriptionStartedAnswer {
+        Default::default()
+    }
+}
+#[doc = "`SubscriptionStartedAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum SubscriptionStartedAnswerType {
+    #[serde(rename = "subscription_started")]
+    SubscriptionStarted,
+}
+impl ::std::fmt::Display for SubscriptionStartedAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::SubscriptionStarted => f.write_str("subscription_started"),
+        }
+    }
+}
+impl ::std::str::FromStr for SubscriptionStartedAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "subscription_started" => Ok(Self::SubscriptionStarted),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for SubscriptionStartedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for SubscriptionStartedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`SuccessResponse`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct SuccessResponse {
@@ -5570,6 +8753,66 @@ impl TabCreateParams {
         Default::default()
     }
 }
+#[doc = "`TabCreatedAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct TabCreatedAnswer {
+    pub root_pane: PaneInfo,
+    pub tab: TabInfo,
+    #[serde(rename = "type")]
+    pub type_: TabCreatedAnswerType,
+}
+impl TabCreatedAnswer {
+    pub fn builder() -> builder::TabCreatedAnswer {
+        Default::default()
+    }
+}
+#[doc = "`TabCreatedAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum TabCreatedAnswerType {
+    #[serde(rename = "tab_created")]
+    TabCreated,
+}
+impl ::std::fmt::Display for TabCreatedAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::TabCreated => f.write_str("tab_created"),
+        }
+    }
+}
+impl ::std::str::FromStr for TabCreatedAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "tab_created" => Ok(Self::TabCreated),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for TabCreatedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for TabCreatedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`TabInfo`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct TabInfo {
@@ -5584,6 +8827,124 @@ pub struct TabInfo {
 impl TabInfo {
     pub fn builder() -> builder::TabInfo {
         Default::default()
+    }
+}
+#[doc = "`TabInfoAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct TabInfoAnswer {
+    pub tab: TabInfo,
+    #[serde(rename = "type")]
+    pub type_: TabInfoAnswerType,
+}
+impl TabInfoAnswer {
+    pub fn builder() -> builder::TabInfoAnswer {
+        Default::default()
+    }
+}
+#[doc = "`TabInfoAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum TabInfoAnswerType {
+    #[serde(rename = "tab_info")]
+    TabInfo,
+}
+impl ::std::fmt::Display for TabInfoAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::TabInfo => f.write_str("tab_info"),
+        }
+    }
+}
+impl ::std::str::FromStr for TabInfoAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "tab_info" => Ok(Self::TabInfo),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for TabInfoAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for TabInfoAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+#[doc = "`TabListAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct TabListAnswer {
+    pub tabs: ::std::vec::Vec<TabInfo>,
+    #[serde(rename = "type")]
+    pub type_: TabListAnswerType,
+}
+impl TabListAnswer {
+    pub fn builder() -> builder::TabListAnswer {
+        Default::default()
+    }
+}
+#[doc = "`TabListAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum TabListAnswerType {
+    #[serde(rename = "tab_list")]
+    TabList,
+}
+impl ::std::fmt::Display for TabListAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::TabList => f.write_str("tab_list"),
+        }
+    }
+}
+impl ::std::str::FromStr for TabListAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "tab_list" => Ok(Self::TabList),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for TabListAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for TabListAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`TabListParams`"]
@@ -5688,6 +9049,65 @@ impl ::std::convert::TryFrom<::std::string::String> for ToastHerdrPosition {
         value.parse()
     }
 }
+#[doc = "`WaitMatchedAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct WaitMatchedAnswer {
+    pub event: EventEnvelope,
+    #[serde(rename = "type")]
+    pub type_: WaitMatchedAnswerType,
+}
+impl WaitMatchedAnswer {
+    pub fn builder() -> builder::WaitMatchedAnswer {
+        Default::default()
+    }
+}
+#[doc = "`WaitMatchedAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum WaitMatchedAnswerType {
+    #[serde(rename = "wait_matched")]
+    WaitMatched,
+}
+impl ::std::fmt::Display for WaitMatchedAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::WaitMatched => f.write_str("wait_matched"),
+        }
+    }
+}
+impl ::std::str::FromStr for WaitMatchedAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "wait_matched" => Ok(Self::WaitMatched),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for WaitMatchedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for WaitMatchedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`WorkspaceCloseParams`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct WorkspaceCloseParams {
@@ -5723,6 +9143,67 @@ impl WorkspaceCreateParams {
         Default::default()
     }
 }
+#[doc = "`WorkspaceCreatedAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct WorkspaceCreatedAnswer {
+    pub root_pane: PaneInfo,
+    pub tab: TabInfo,
+    #[serde(rename = "type")]
+    pub type_: WorkspaceCreatedAnswerType,
+    pub workspace: WorkspaceInfo,
+}
+impl WorkspaceCreatedAnswer {
+    pub fn builder() -> builder::WorkspaceCreatedAnswer {
+        Default::default()
+    }
+}
+#[doc = "`WorkspaceCreatedAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum WorkspaceCreatedAnswerType {
+    #[serde(rename = "workspace_created")]
+    WorkspaceCreated,
+}
+impl ::std::fmt::Display for WorkspaceCreatedAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::WorkspaceCreated => f.write_str("workspace_created"),
+        }
+    }
+}
+impl ::std::str::FromStr for WorkspaceCreatedAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "workspace_created" => Ok(Self::WorkspaceCreated),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for WorkspaceCreatedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for WorkspaceCreatedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`WorkspaceInfo`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct WorkspaceInfo {
@@ -5745,6 +9226,65 @@ pub struct WorkspaceInfo {
 impl WorkspaceInfo {
     pub fn builder() -> builder::WorkspaceInfo {
         Default::default()
+    }
+}
+#[doc = "`WorkspaceInfoAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct WorkspaceInfoAnswer {
+    #[serde(rename = "type")]
+    pub type_: WorkspaceInfoAnswerType,
+    pub workspace: WorkspaceInfo,
+}
+impl WorkspaceInfoAnswer {
+    pub fn builder() -> builder::WorkspaceInfoAnswer {
+        Default::default()
+    }
+}
+#[doc = "`WorkspaceInfoAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum WorkspaceInfoAnswerType {
+    #[serde(rename = "workspace_info")]
+    WorkspaceInfo,
+}
+impl ::std::fmt::Display for WorkspaceInfoAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::WorkspaceInfo => f.write_str("workspace_info"),
+        }
+    }
+}
+impl ::std::str::FromStr for WorkspaceInfoAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "workspace_info" => Ok(Self::WorkspaceInfo),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for WorkspaceInfoAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for WorkspaceInfoAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`WorkspaceInfoTokensKey`"]
@@ -5797,6 +9337,65 @@ impl<'de> ::serde::Deserialize<'de> for WorkspaceInfoTokensKey {
             .map_err(|e: self::error::ConversionError| {
                 <D::Error as ::serde::de::Error>::custom(e.to_string())
             })
+    }
+}
+#[doc = "`WorkspaceListAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct WorkspaceListAnswer {
+    #[serde(rename = "type")]
+    pub type_: WorkspaceListAnswerType,
+    pub workspaces: ::std::vec::Vec<WorkspaceInfo>,
+}
+impl WorkspaceListAnswer {
+    pub fn builder() -> builder::WorkspaceListAnswer {
+        Default::default()
+    }
+}
+#[doc = "`WorkspaceListAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum WorkspaceListAnswerType {
+    #[serde(rename = "workspace_list")]
+    WorkspaceList,
+}
+impl ::std::fmt::Display for WorkspaceListAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::WorkspaceList => f.write_str("workspace_list"),
+        }
+    }
+}
+impl ::std::str::FromStr for WorkspaceListAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "workspace_list" => Ok(Self::WorkspaceList),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for WorkspaceListAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for WorkspaceListAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`WorkspaceMoveBlockParams`"]
@@ -5953,6 +9552,68 @@ impl WorktreeCreateParams {
         Default::default()
     }
 }
+#[doc = "`WorktreeCreatedAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct WorktreeCreatedAnswer {
+    pub root_pane: PaneInfo,
+    pub tab: TabInfo,
+    #[serde(rename = "type")]
+    pub type_: WorktreeCreatedAnswerType,
+    pub workspace: WorkspaceInfo,
+    pub worktree: WorktreeInfo,
+}
+impl WorktreeCreatedAnswer {
+    pub fn builder() -> builder::WorktreeCreatedAnswer {
+        Default::default()
+    }
+}
+#[doc = "`WorktreeCreatedAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum WorktreeCreatedAnswerType {
+    #[serde(rename = "worktree_created")]
+    WorktreeCreated,
+}
+impl ::std::fmt::Display for WorktreeCreatedAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::WorktreeCreated => f.write_str("worktree_created"),
+        }
+    }
+}
+impl ::std::str::FromStr for WorktreeCreatedAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "worktree_created" => Ok(Self::WorktreeCreated),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for WorktreeCreatedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for WorktreeCreatedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`WorktreeInfo`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct WorktreeInfo {
@@ -5970,6 +9631,66 @@ pub struct WorktreeInfo {
 impl WorktreeInfo {
     pub fn builder() -> builder::WorktreeInfo {
         Default::default()
+    }
+}
+#[doc = "`WorktreeListAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct WorktreeListAnswer {
+    pub source: WorktreeSourceInfo,
+    #[serde(rename = "type")]
+    pub type_: WorktreeListAnswerType,
+    pub worktrees: ::std::vec::Vec<WorktreeInfo>,
+}
+impl WorktreeListAnswer {
+    pub fn builder() -> builder::WorktreeListAnswer {
+        Default::default()
+    }
+}
+#[doc = "`WorktreeListAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum WorktreeListAnswerType {
+    #[serde(rename = "worktree_list")]
+    WorktreeList,
+}
+impl ::std::fmt::Display for WorktreeListAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::WorktreeList => f.write_str("worktree_list"),
+        }
+    }
+}
+impl ::std::str::FromStr for WorktreeListAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "worktree_list" => Ok(Self::WorktreeList),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for WorktreeListAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for WorktreeListAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`WorktreeListParams`"]
@@ -6010,6 +9731,69 @@ impl WorktreeOpenParams {
         Default::default()
     }
 }
+#[doc = "`WorktreeOpenedAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct WorktreeOpenedAnswer {
+    pub already_open: bool,
+    pub root_pane: PaneInfo,
+    pub tab: TabInfo,
+    #[serde(rename = "type")]
+    pub type_: WorktreeOpenedAnswerType,
+    pub workspace: WorkspaceInfo,
+    pub worktree: WorktreeInfo,
+}
+impl WorktreeOpenedAnswer {
+    pub fn builder() -> builder::WorktreeOpenedAnswer {
+        Default::default()
+    }
+}
+#[doc = "`WorktreeOpenedAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum WorktreeOpenedAnswerType {
+    #[serde(rename = "worktree_opened")]
+    WorktreeOpened,
+}
+impl ::std::fmt::Display for WorktreeOpenedAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::WorktreeOpened => f.write_str("worktree_opened"),
+        }
+    }
+}
+impl ::std::str::FromStr for WorktreeOpenedAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "worktree_opened" => Ok(Self::WorktreeOpened),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for WorktreeOpenedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for WorktreeOpenedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`WorktreeRemoveParams`"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct WorktreeRemoveParams {
@@ -6022,6 +9806,67 @@ pub struct WorktreeRemoveParams {
 impl WorktreeRemoveParams {
     pub fn builder() -> builder::WorktreeRemoveParams {
         Default::default()
+    }
+}
+#[doc = "`WorktreeRemovedAnswer`"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct WorktreeRemovedAnswer {
+    pub forced: bool,
+    pub path: ::std::string::String,
+    #[serde(rename = "type")]
+    pub type_: WorktreeRemovedAnswerType,
+    pub workspace_id: ::std::string::String,
+}
+impl WorktreeRemovedAnswer {
+    pub fn builder() -> builder::WorktreeRemovedAnswer {
+        Default::default()
+    }
+}
+#[doc = "`WorktreeRemovedAnswerType`"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum WorktreeRemovedAnswerType {
+    #[serde(rename = "worktree_removed")]
+    WorktreeRemoved,
+}
+impl ::std::fmt::Display for WorktreeRemovedAnswerType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::WorktreeRemoved => f.write_str("worktree_removed"),
+        }
+    }
+}
+impl ::std::str::FromStr for WorktreeRemovedAnswerType {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "worktree_removed" => Ok(Self::WorktreeRemoved),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for WorktreeRemovedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for WorktreeRemovedAnswerType {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
     }
 }
 #[doc = "`WorktreeSourceInfo`"]
@@ -6041,6 +9886,60 @@ impl WorktreeSourceInfo {
 }
 #[doc = " Types for composing complex structures."]
 pub mod builder {
+    #[derive(Clone, Debug)]
+    pub struct AgentExplainAnswer {
+        explain: ::std::result::Result<::serde_json::Value, ::std::string::String>,
+        type_: ::std::result::Result<super::AgentExplainAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for AgentExplainAnswer {
+        fn default() -> Self {
+            Self {
+                explain: Err("no value supplied for explain".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl AgentExplainAnswer {
+        pub fn explain<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::serde_json::Value>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.explain = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for explain: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::AgentExplainAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<AgentExplainAnswer> for super::AgentExplainAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: AgentExplainAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                explain: value.explain?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::AgentExplainAnswer> for AgentExplainAnswer {
+        fn from(value: super::AgentExplainAnswer) -> Self {
+            Self {
+                explain: Ok(value.explain),
+                type_: Ok(value.type_),
+            }
+        }
+    }
     #[derive(Clone, Debug)]
     pub struct AgentInfo {
         agent: ::std::result::Result<
@@ -6415,6 +10314,114 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct AgentInfoAnswer {
+        agent: ::std::result::Result<super::AgentInfo, ::std::string::String>,
+        type_: ::std::result::Result<super::AgentInfoAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for AgentInfoAnswer {
+        fn default() -> Self {
+            Self {
+                agent: Err("no value supplied for agent".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl AgentInfoAnswer {
+        pub fn agent<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::AgentInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.agent = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for agent: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::AgentInfoAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<AgentInfoAnswer> for super::AgentInfoAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: AgentInfoAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                agent: value.agent?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::AgentInfoAnswer> for AgentInfoAnswer {
+        fn from(value: super::AgentInfoAnswer) -> Self {
+            Self {
+                agent: Ok(value.agent),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct AgentListAnswer {
+        agents: ::std::result::Result<::std::vec::Vec<super::AgentInfo>, ::std::string::String>,
+        type_: ::std::result::Result<super::AgentListAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for AgentListAnswer {
+        fn default() -> Self {
+            Self {
+                agents: Err("no value supplied for agents".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl AgentListAnswer {
+        pub fn agents<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::vec::Vec<super::AgentInfo>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.agents = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for agents: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::AgentListAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<AgentListAnswer> for super::AgentListAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: AgentListAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                agents: value.agents?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::AgentListAnswer> for AgentListAnswer {
+        fn from(value: super::AgentListAnswer) -> Self {
+            Self {
+                agents: Ok(value.agents),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct AgentManifestInfo {
         active_version: ::std::result::Result<
             ::std::option::Option<::std::string::String>,
@@ -6599,6 +10606,147 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct AgentManifestReloadAnswer {
+        manifests:
+            ::std::result::Result<::std::vec::Vec<super::AgentManifestInfo>, ::std::string::String>,
+        type_: ::std::result::Result<super::AgentManifestReloadAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for AgentManifestReloadAnswer {
+        fn default() -> Self {
+            Self {
+                manifests: Err("no value supplied for manifests".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl AgentManifestReloadAnswer {
+        pub fn manifests<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::vec::Vec<super::AgentManifestInfo>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.manifests = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for manifests: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::AgentManifestReloadAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<AgentManifestReloadAnswer> for super::AgentManifestReloadAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: AgentManifestReloadAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                manifests: value.manifests?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::AgentManifestReloadAnswer> for AgentManifestReloadAnswer {
+        fn from(value: super::AgentManifestReloadAnswer) -> Self {
+            Self {
+                manifests: Ok(value.manifests),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct AgentManifestStatusAnswer {
+        last_check_unix: ::std::result::Result<::std::option::Option<u64>, ::std::string::String>,
+        last_result: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        manifests:
+            ::std::result::Result<::std::vec::Vec<super::AgentManifestInfo>, ::std::string::String>,
+        type_: ::std::result::Result<super::AgentManifestStatusAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for AgentManifestStatusAnswer {
+        fn default() -> Self {
+            Self {
+                last_check_unix: Ok(Default::default()),
+                last_result: Ok(Default::default()),
+                manifests: Err("no value supplied for manifests".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl AgentManifestStatusAnswer {
+        pub fn last_check_unix<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::option::Option<u64>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.last_check_unix = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for last_check_unix: {e}"));
+            self
+        }
+        pub fn last_result<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::option::Option<::std::string::String>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.last_result = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for last_result: {e}"));
+            self
+        }
+        pub fn manifests<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::vec::Vec<super::AgentManifestInfo>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.manifests = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for manifests: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::AgentManifestStatusAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<AgentManifestStatusAnswer> for super::AgentManifestStatusAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: AgentManifestStatusAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                last_check_unix: value.last_check_unix?,
+                last_result: value.last_result?,
+                manifests: value.manifests?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::AgentManifestStatusAnswer> for AgentManifestStatusAnswer {
+        fn from(value: super::AgentManifestStatusAnswer) -> Self {
+            Self {
+                last_check_unix: Ok(value.last_check_unix),
+                last_result: Ok(value.last_result),
+                manifests: Ok(value.manifests),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct AgentPromptParams {
         target: ::std::result::Result<::std::string::String, ::std::string::String>,
         text: ::std::result::Result<::std::string::String, ::std::string::String>,
@@ -6720,6 +10868,60 @@ pub mod builder {
             Self {
                 timeout_ms: Ok(value.timeout_ms),
                 until: Ok(value.until),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct AgentPromptedAnswer {
+        agent: ::std::result::Result<super::AgentInfo, ::std::string::String>,
+        type_: ::std::result::Result<super::AgentPromptedAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for AgentPromptedAnswer {
+        fn default() -> Self {
+            Self {
+                agent: Err("no value supplied for agent".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl AgentPromptedAnswer {
+        pub fn agent<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::AgentInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.agent = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for agent: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::AgentPromptedAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<AgentPromptedAnswer> for super::AgentPromptedAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: AgentPromptedAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                agent: value.agent?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::AgentPromptedAnswer> for AgentPromptedAnswer {
+        fn from(value: super::AgentPromptedAnswer) -> Self {
+            Self {
+                agent: Ok(value.agent),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -7109,6 +11311,74 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct AgentStartedAnswer {
+        agent: ::std::result::Result<super::AgentInfo, ::std::string::String>,
+        argv: ::std::result::Result<::std::vec::Vec<::std::string::String>, ::std::string::String>,
+        type_: ::std::result::Result<super::AgentStartedAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for AgentStartedAnswer {
+        fn default() -> Self {
+            Self {
+                agent: Err("no value supplied for agent".to_string()),
+                argv: Err("no value supplied for argv".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl AgentStartedAnswer {
+        pub fn agent<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::AgentInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.agent = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for agent: {e}"));
+            self
+        }
+        pub fn argv<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::vec::Vec<::std::string::String>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.argv = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for argv: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::AgentStartedAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<AgentStartedAnswer> for super::AgentStartedAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: AgentStartedAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                agent: value.agent?,
+                argv: value.argv?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::AgentStartedAnswer> for AgentStartedAnswer {
+        fn from(value: super::AgentStartedAnswer) -> Self {
+            Self {
+                agent: Ok(value.agent),
+                argv: Ok(value.argv),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct AgentTarget {
         target: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
@@ -7145,6 +11415,94 @@ pub mod builder {
         fn from(value: super::AgentTarget) -> Self {
             Self {
                 target: Ok(value.target),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct AgentViewAnswer {
+        active: ::std::result::Result<bool, ::std::string::String>,
+        label: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        source: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        type_: ::std::result::Result<super::AgentViewAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for AgentViewAnswer {
+        fn default() -> Self {
+            Self {
+                active: Err("no value supplied for active".to_string()),
+                label: Ok(Default::default()),
+                source: Ok(Default::default()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl AgentViewAnswer {
+        pub fn active<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<bool>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.active = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for active: {e}"));
+            self
+        }
+        pub fn label<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::option::Option<::std::string::String>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.label = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for label: {e}"));
+            self
+        }
+        pub fn source<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::option::Option<::std::string::String>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.source = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for source: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::AgentViewAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<AgentViewAnswer> for super::AgentViewAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: AgentViewAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                active: value.active?,
+                label: value.label?,
+                source: value.source?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::AgentViewAnswer> for AgentViewAnswer {
+        fn from(value: super::AgentViewAnswer) -> Self {
+            Self {
+                active: Ok(value.active),
+                label: Ok(value.label),
+                source: Ok(value.source),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -7402,6 +11760,74 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct ClientShellSurfaceSetAnswer {
+        active: ::std::result::Result<bool, ::std::string::String>,
+        projection_revision: ::std::result::Result<u64, ::std::string::String>,
+        type_: ::std::result::Result<super::ClientShellSurfaceSetAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for ClientShellSurfaceSetAnswer {
+        fn default() -> Self {
+            Self {
+                active: Err("no value supplied for active".to_string()),
+                projection_revision: Err("no value supplied for projection_revision".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl ClientShellSurfaceSetAnswer {
+        pub fn active<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<bool>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.active = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for active: {e}"));
+            self
+        }
+        pub fn projection_revision<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<u64>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.projection_revision = value.try_into().map_err(|e| {
+                format!("error converting supplied value for projection_revision: {e}")
+            });
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::ClientShellSurfaceSetAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<ClientShellSurfaceSetAnswer> for super::ClientShellSurfaceSetAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: ClientShellSurfaceSetAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                active: value.active?,
+                projection_revision: value.projection_revision?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::ClientShellSurfaceSetAnswer> for ClientShellSurfaceSetAnswer {
+        fn from(value: super::ClientShellSurfaceSetAnswer) -> Self {
+            Self {
+                active: Ok(value.active),
+                projection_revision: Ok(value.projection_revision),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct ClientShellSurfaceSetParams {
         active: ::std::result::Result<bool, ::std::string::String>,
     }
@@ -7438,6 +11864,74 @@ pub mod builder {
         fn from(value: super::ClientShellSurfaceSetParams) -> Self {
             Self {
                 active: Ok(value.active),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct ClientWindowTitleAnswer {
+        changed: ::std::result::Result<bool, ::std::string::String>,
+        reason: ::std::result::Result<super::ClientWindowTitleReason, ::std::string::String>,
+        type_: ::std::result::Result<super::ClientWindowTitleAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for ClientWindowTitleAnswer {
+        fn default() -> Self {
+            Self {
+                changed: Err("no value supplied for changed".to_string()),
+                reason: Err("no value supplied for reason".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl ClientWindowTitleAnswer {
+        pub fn changed<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<bool>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.changed = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for changed: {e}"));
+            self
+        }
+        pub fn reason<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::ClientWindowTitleReason>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.reason = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for reason: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::ClientWindowTitleAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<ClientWindowTitleAnswer> for super::ClientWindowTitleAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: ClientWindowTitleAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                changed: value.changed?,
+                reason: value.reason?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::ClientWindowTitleAnswer> for ClientWindowTitleAnswer {
+        fn from(value: super::ClientWindowTitleAnswer) -> Self {
+            Self {
+                changed: Ok(value.changed),
+                reason: Ok(value.reason),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -7586,6 +12080,75 @@ pub mod builder {
                 selection: Ok(value.selection),
                 tab_id: Ok(value.tab_id),
                 workspace_id: Ok(value.workspace_id),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct ConfigReloadAnswer {
+        diagnostics:
+            ::std::result::Result<::std::vec::Vec<::std::string::String>, ::std::string::String>,
+        status: ::std::result::Result<super::ConfigReloadStatus, ::std::string::String>,
+        type_: ::std::result::Result<super::ConfigReloadAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for ConfigReloadAnswer {
+        fn default() -> Self {
+            Self {
+                diagnostics: Err("no value supplied for diagnostics".to_string()),
+                status: Err("no value supplied for status".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl ConfigReloadAnswer {
+        pub fn diagnostics<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::vec::Vec<::std::string::String>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.diagnostics = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for diagnostics: {e}"));
+            self
+        }
+        pub fn status<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::ConfigReloadStatus>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.status = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for status: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::ConfigReloadAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<ConfigReloadAnswer> for super::ConfigReloadAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: ConfigReloadAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                diagnostics: value.diagnostics?,
+                status: value.status?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::ConfigReloadAnswer> for ConfigReloadAnswer {
+        fn from(value: super::ConfigReloadAnswer) -> Self {
+            Self {
+                diagnostics: Ok(value.diagnostics),
+                status: Ok(value.status),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -8234,6 +12797,74 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct IntegrationInstallAnswer {
+        details: ::std::result::Result<super::IntegrationInstallResult, ::std::string::String>,
+        target: ::std::result::Result<super::IntegrationTarget, ::std::string::String>,
+        type_: ::std::result::Result<super::IntegrationInstallAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for IntegrationInstallAnswer {
+        fn default() -> Self {
+            Self {
+                details: Err("no value supplied for details".to_string()),
+                target: Err("no value supplied for target".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl IntegrationInstallAnswer {
+        pub fn details<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::IntegrationInstallResult>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.details = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for details: {e}"));
+            self
+        }
+        pub fn target<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::IntegrationTarget>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.target = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for target: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::IntegrationInstallAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<IntegrationInstallAnswer> for super::IntegrationInstallAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: IntegrationInstallAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                details: value.details?,
+                target: value.target?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::IntegrationInstallAnswer> for IntegrationInstallAnswer {
+        fn from(value: super::IntegrationInstallAnswer) -> Self {
+            Self {
+                details: Ok(value.details),
+                target: Ok(value.target),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct IntegrationInstallParams {
         target: ::std::result::Result<super::IntegrationTarget, ::std::string::String>,
     }
@@ -8315,6 +12946,129 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct IntegrationListAnswer {
+        integrations:
+            ::std::result::Result<::std::vec::Vec<super::IntegrationInfo>, ::std::string::String>,
+        type_: ::std::result::Result<super::IntegrationListAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for IntegrationListAnswer {
+        fn default() -> Self {
+            Self {
+                integrations: Err("no value supplied for integrations".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl IntegrationListAnswer {
+        pub fn integrations<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::vec::Vec<super::IntegrationInfo>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.integrations = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for integrations: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::IntegrationListAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<IntegrationListAnswer> for super::IntegrationListAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: IntegrationListAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                integrations: value.integrations?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::IntegrationListAnswer> for IntegrationListAnswer {
+        fn from(value: super::IntegrationListAnswer) -> Self {
+            Self {
+                integrations: Ok(value.integrations),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct IntegrationUninstallAnswer {
+        details: ::std::result::Result<super::IntegrationUninstallResult, ::std::string::String>,
+        target: ::std::result::Result<super::IntegrationTarget, ::std::string::String>,
+        type_: ::std::result::Result<super::IntegrationUninstallAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for IntegrationUninstallAnswer {
+        fn default() -> Self {
+            Self {
+                details: Err("no value supplied for details".to_string()),
+                target: Err("no value supplied for target".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl IntegrationUninstallAnswer {
+        pub fn details<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::IntegrationUninstallResult>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.details = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for details: {e}"));
+            self
+        }
+        pub fn target<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::IntegrationTarget>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.target = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for target: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::IntegrationUninstallAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<IntegrationUninstallAnswer> for super::IntegrationUninstallAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: IntegrationUninstallAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                details: value.details?,
+                target: value.target?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::IntegrationUninstallAnswer> for IntegrationUninstallAnswer {
+        fn from(value: super::IntegrationUninstallAnswer) -> Self {
+            Self {
+                details: Ok(value.details),
+                target: Ok(value.target),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct IntegrationUninstallParams {
         target: ::std::result::Result<super::IntegrationTarget, ::std::string::String>,
     }
@@ -8392,6 +13146,60 @@ pub mod builder {
         fn from(value: super::IntegrationUninstallResult) -> Self {
             Self {
                 messages: Ok(value.messages),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct LayoutApplyAnswer {
+        layout: ::std::result::Result<super::LayoutDescription, ::std::string::String>,
+        type_: ::std::result::Result<super::LayoutApplyAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for LayoutApplyAnswer {
+        fn default() -> Self {
+            Self {
+                layout: Err("no value supplied for layout".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl LayoutApplyAnswer {
+        pub fn layout<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::LayoutDescription>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.layout = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for layout: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::LayoutApplyAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<LayoutApplyAnswer> for super::LayoutApplyAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: LayoutApplyAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                layout: value.layout?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::LayoutApplyAnswer> for LayoutApplyAnswer {
+        fn from(value: super::LayoutApplyAnswer) -> Self {
+            Self {
+                layout: Ok(value.layout),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -8597,6 +13405,60 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct LayoutExportAnswer {
+        layout: ::std::result::Result<super::LayoutDescription, ::std::string::String>,
+        type_: ::std::result::Result<super::LayoutExportAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for LayoutExportAnswer {
+        fn default() -> Self {
+            Self {
+                layout: Err("no value supplied for layout".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl LayoutExportAnswer {
+        pub fn layout<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::LayoutDescription>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.layout = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for layout: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::LayoutExportAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<LayoutExportAnswer> for super::LayoutExportAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: LayoutExportAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                layout: value.layout?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::LayoutExportAnswer> for LayoutExportAnswer {
+        fn from(value: super::LayoutExportAnswer) -> Self {
+            Self {
+                layout: Ok(value.layout),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct LayoutExportParams {
         pane_id: ::std::result::Result<
             ::std::option::Option<::std::string::String>,
@@ -8745,6 +13607,128 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct LayoutSplitRatioSetAnswer {
+        layout: ::std::result::Result<super::LayoutDescription, ::std::string::String>,
+        type_: ::std::result::Result<super::LayoutSplitRatioSetAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for LayoutSplitRatioSetAnswer {
+        fn default() -> Self {
+            Self {
+                layout: Err("no value supplied for layout".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl LayoutSplitRatioSetAnswer {
+        pub fn layout<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::LayoutDescription>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.layout = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for layout: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::LayoutSplitRatioSetAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<LayoutSplitRatioSetAnswer> for super::LayoutSplitRatioSetAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: LayoutSplitRatioSetAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                layout: value.layout?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::LayoutSplitRatioSetAnswer> for LayoutSplitRatioSetAnswer {
+        fn from(value: super::LayoutSplitRatioSetAnswer) -> Self {
+            Self {
+                layout: Ok(value.layout),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct NotificationShowAnswer {
+        reason: ::std::result::Result<super::NotificationShowReason, ::std::string::String>,
+        shown: ::std::result::Result<bool, ::std::string::String>,
+        type_: ::std::result::Result<super::NotificationShowAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for NotificationShowAnswer {
+        fn default() -> Self {
+            Self {
+                reason: Err("no value supplied for reason".to_string()),
+                shown: Err("no value supplied for shown".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl NotificationShowAnswer {
+        pub fn reason<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::NotificationShowReason>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.reason = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for reason: {e}"));
+            self
+        }
+        pub fn shown<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<bool>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.shown = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for shown: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::NotificationShowAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<NotificationShowAnswer> for super::NotificationShowAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: NotificationShowAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                reason: value.reason?,
+                shown: value.shown?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::NotificationShowAnswer> for NotificationShowAnswer {
+        fn from(value: super::NotificationShowAnswer) -> Self {
+            Self {
+                reason: Ok(value.reason),
+                shown: Ok(value.shown),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct NotificationShowParams {
         body: ::std::result::Result<
             ::std::option::Option<::std::string::String>,
@@ -8832,6 +13816,143 @@ pub mod builder {
                 position: Ok(value.position),
                 sound: Ok(value.sound),
                 title: Ok(value.title),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct OkAnswer {
+        type_: ::std::result::Result<super::OkAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for OkAnswer {
+        fn default() -> Self {
+            Self {
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl OkAnswer {
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::OkAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<OkAnswer> for super::OkAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(value: OkAnswer) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::OkAnswer> for OkAnswer {
+        fn from(value: super::OkAnswer) -> Self {
+            Self {
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct OutputMatchedAnswer {
+        matched_line: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        pane_id: ::std::result::Result<::std::string::String, ::std::string::String>,
+        read: ::std::result::Result<super::PaneReadResult, ::std::string::String>,
+        revision: ::std::result::Result<u64, ::std::string::String>,
+        type_: ::std::result::Result<super::OutputMatchedAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for OutputMatchedAnswer {
+        fn default() -> Self {
+            Self {
+                matched_line: Ok(Default::default()),
+                pane_id: Err("no value supplied for pane_id".to_string()),
+                read: Err("no value supplied for read".to_string()),
+                revision: Err("no value supplied for revision".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl OutputMatchedAnswer {
+        pub fn matched_line<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::option::Option<::std::string::String>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.matched_line = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for matched_line: {e}"));
+            self
+        }
+        pub fn pane_id<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::string::String>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.pane_id = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for pane_id: {e}"));
+            self
+        }
+        pub fn read<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneReadResult>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.read = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for read: {e}"));
+            self
+        }
+        pub fn revision<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<u64>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.revision = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for revision: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::OutputMatchedAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<OutputMatchedAnswer> for super::OutputMatchedAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: OutputMatchedAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                matched_line: value.matched_line?,
+                pane_id: value.pane_id?,
+                read: value.read?,
+                revision: value.revision?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::OutputMatchedAnswer> for OutputMatchedAnswer {
+        fn from(value: super::OutputMatchedAnswer) -> Self {
+            Self {
+                matched_line: Ok(value.matched_line),
+                pane_id: Ok(value.pane_id),
+                read: Ok(value.read),
+                revision: Ok(value.revision),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -9047,6 +14168,88 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct PaneCopyMotionAnswer {
+        content_revision: ::std::result::Result<u64, ::std::string::String>,
+        cursor: ::std::result::Result<super::PaneTextPoint, ::std::string::String>,
+        pane_id: ::std::result::Result<::std::string::String, ::std::string::String>,
+        type_: ::std::result::Result<super::PaneCopyMotionAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PaneCopyMotionAnswer {
+        fn default() -> Self {
+            Self {
+                content_revision: Err("no value supplied for content_revision".to_string()),
+                cursor: Err("no value supplied for cursor".to_string()),
+                pane_id: Err("no value supplied for pane_id".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PaneCopyMotionAnswer {
+        pub fn content_revision<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<u64>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.content_revision = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for content_revision: {e}"));
+            self
+        }
+        pub fn cursor<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneTextPoint>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.cursor = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for cursor: {e}"));
+            self
+        }
+        pub fn pane_id<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::string::String>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.pane_id = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for pane_id: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneCopyMotionAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PaneCopyMotionAnswer> for super::PaneCopyMotionAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PaneCopyMotionAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                content_revision: value.content_revision?,
+                cursor: value.cursor?,
+                pane_id: value.pane_id?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PaneCopyMotionAnswer> for PaneCopyMotionAnswer {
+        fn from(value: super::PaneCopyMotionAnswer) -> Self {
+            Self {
+                content_revision: Ok(value.content_revision),
+                cursor: Ok(value.cursor),
+                pane_id: Ok(value.pane_id),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct PaneCopyMotionParams {
         content_revision: ::std::result::Result<::std::option::Option<u64>, ::std::string::String>,
         cursor: ::std::result::Result<super::PaneTextPoint, ::std::string::String>,
@@ -9125,6 +14328,131 @@ pub mod builder {
                 cursor: Ok(value.cursor),
                 motion: Ok(value.motion),
                 pane_id: Ok(value.pane_id),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PaneCopySearchAnswer {
+        content_revision: ::std::result::Result<u64, ::std::string::String>,
+        current: ::std::result::Result<::std::option::Option<u32>, ::std::string::String>,
+        current_global: ::std::result::Result<::std::option::Option<u64>, ::std::string::String>,
+        matches:
+            ::std::result::Result<::std::vec::Vec<super::PaneTextRange>, ::std::string::String>,
+        pane_id: ::std::result::Result<::std::string::String, ::std::string::String>,
+        total: ::std::result::Result<u64, ::std::string::String>,
+        type_: ::std::result::Result<super::PaneCopySearchAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PaneCopySearchAnswer {
+        fn default() -> Self {
+            Self {
+                content_revision: Err("no value supplied for content_revision".to_string()),
+                current: Ok(Default::default()),
+                current_global: Ok(Default::default()),
+                matches: Err("no value supplied for matches".to_string()),
+                pane_id: Err("no value supplied for pane_id".to_string()),
+                total: Err("no value supplied for total".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PaneCopySearchAnswer {
+        pub fn content_revision<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<u64>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.content_revision = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for content_revision: {e}"));
+            self
+        }
+        pub fn current<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::option::Option<u32>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.current = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for current: {e}"));
+            self
+        }
+        pub fn current_global<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::option::Option<u64>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.current_global = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for current_global: {e}"));
+            self
+        }
+        pub fn matches<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::vec::Vec<super::PaneTextRange>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.matches = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for matches: {e}"));
+            self
+        }
+        pub fn pane_id<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::string::String>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.pane_id = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for pane_id: {e}"));
+            self
+        }
+        pub fn total<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<u64>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.total = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for total: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneCopySearchAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PaneCopySearchAnswer> for super::PaneCopySearchAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PaneCopySearchAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                content_revision: value.content_revision?,
+                current: value.current?,
+                current_global: value.current_global?,
+                matches: value.matches?,
+                pane_id: value.pane_id?,
+                total: value.total?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PaneCopySearchAnswer> for PaneCopySearchAnswer {
+        fn from(value: super::PaneCopySearchAnswer) -> Self {
+            Self {
+                content_revision: Ok(value.content_revision),
+                current: Ok(value.current),
+                current_global: Ok(value.current_global),
+                matches: Ok(value.matches),
+                pane_id: Ok(value.pane_id),
+                total: Ok(value.total),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -9242,6 +14570,60 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct PaneCurrentAnswer {
+        pane: ::std::result::Result<super::PaneInfo, ::std::string::String>,
+        type_: ::std::result::Result<super::PaneCurrentAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PaneCurrentAnswer {
+        fn default() -> Self {
+            Self {
+                pane: Err("no value supplied for pane".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PaneCurrentAnswer {
+        pub fn pane<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.pane = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for pane: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneCurrentAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PaneCurrentAnswer> for super::PaneCurrentAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PaneCurrentAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                pane: value.pane?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PaneCurrentAnswer> for PaneCurrentAnswer {
+        fn from(value: super::PaneCurrentAnswer) -> Self {
+            Self {
+                pane: Ok(value.pane),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct PaneCurrentParams {
         caller_pane_id: ::std::result::Result<
             ::std::option::Option<::std::string::String>,
@@ -9281,6 +14663,60 @@ pub mod builder {
         fn from(value: super::PaneCurrentParams) -> Self {
             Self {
                 caller_pane_id: Ok(value.caller_pane_id),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PaneEdgesAnswer {
+        edges: ::std::result::Result<super::PaneEdgesResult, ::std::string::String>,
+        type_: ::std::result::Result<super::PaneEdgesAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PaneEdgesAnswer {
+        fn default() -> Self {
+            Self {
+                edges: Err("no value supplied for edges".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PaneEdgesAnswer {
+        pub fn edges<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneEdgesResult>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.edges = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for edges: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneEdgesAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PaneEdgesAnswer> for super::PaneEdgesAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PaneEdgesAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                edges: value.edges?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PaneEdgesAnswer> for PaneEdgesAnswer {
+        fn from(value: super::PaneEdgesAnswer) -> Self {
+            Self {
+                edges: Ok(value.edges),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -9434,6 +14870,60 @@ pub mod builder {
                 pane_id: Ok(value.pane_id),
                 right: Ok(value.right),
                 up: Ok(value.up),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PaneFocusDirectionAnswer {
+        focus: ::std::result::Result<super::PaneFocusDirectionResult, ::std::string::String>,
+        type_: ::std::result::Result<super::PaneFocusDirectionAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PaneFocusDirectionAnswer {
+        fn default() -> Self {
+            Self {
+                focus: Err("no value supplied for focus".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PaneFocusDirectionAnswer {
+        pub fn focus<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneFocusDirectionResult>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.focus = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for focus: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneFocusDirectionAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PaneFocusDirectionAnswer> for super::PaneFocusDirectionAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PaneFocusDirectionAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                focus: value.focus?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PaneFocusDirectionAnswer> for PaneFocusDirectionAnswer {
+        fn from(value: super::PaneFocusDirectionAnswer) -> Self {
+            Self {
+                focus: Ok(value.focus),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -9650,6 +15140,277 @@ pub mod builder {
             Self {
                 layer_id: Ok(value.layer_id),
                 pane_id: Ok(value.pane_id),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PaneGraphicsFrameAckAnswer {
+        revision: ::std::result::Result<u64, ::std::string::String>,
+        sequence: ::std::result::Result<u64, ::std::string::String>,
+        type_: ::std::result::Result<super::PaneGraphicsFrameAckAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PaneGraphicsFrameAckAnswer {
+        fn default() -> Self {
+            Self {
+                revision: Err("no value supplied for revision".to_string()),
+                sequence: Err("no value supplied for sequence".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PaneGraphicsFrameAckAnswer {
+        pub fn revision<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<u64>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.revision = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for revision: {e}"));
+            self
+        }
+        pub fn sequence<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<u64>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.sequence = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for sequence: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneGraphicsFrameAckAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PaneGraphicsFrameAckAnswer> for super::PaneGraphicsFrameAckAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PaneGraphicsFrameAckAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                revision: value.revision?,
+                sequence: value.sequence?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PaneGraphicsFrameAckAnswer> for PaneGraphicsFrameAckAnswer {
+        fn from(value: super::PaneGraphicsFrameAckAnswer) -> Self {
+            Self {
+                revision: Ok(value.revision),
+                sequence: Ok(value.sequence),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PaneGraphicsInfoAnswer {
+        cell_height_px: ::std::result::Result<u32, ::std::string::String>,
+        cell_width_px: ::std::result::Result<u32, ::std::string::String>,
+        file_frame_damage: ::std::result::Result<bool, ::std::string::String>,
+        file_frame_direct_max_bytes:
+            ::std::result::Result<::std::option::Option<u32>, ::std::string::String>,
+        file_frame_directory: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        file_frame_formats:
+            ::std::result::Result<::std::vec::Vec<::std::string::String>, ::std::string::String>,
+        file_frame_max_bytes:
+            ::std::result::Result<::std::option::Option<u32>, ::std::string::String>,
+        file_frame_transport: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        max_layers_per_pane: ::std::result::Result<u32, ::std::string::String>,
+        pane_visible: ::std::result::Result<bool, ::std::string::String>,
+        pixel_mouse: ::std::result::Result<bool, ::std::string::String>,
+        type_: ::std::result::Result<super::PaneGraphicsInfoAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PaneGraphicsInfoAnswer {
+        fn default() -> Self {
+            Self {
+                cell_height_px: Err("no value supplied for cell_height_px".to_string()),
+                cell_width_px: Err("no value supplied for cell_width_px".to_string()),
+                file_frame_damage: Ok(Default::default()),
+                file_frame_direct_max_bytes: Ok(Default::default()),
+                file_frame_directory: Ok(Default::default()),
+                file_frame_formats: Ok(Default::default()),
+                file_frame_max_bytes: Ok(Default::default()),
+                file_frame_transport: Ok(Default::default()),
+                max_layers_per_pane: Ok(Default::default()),
+                pane_visible: Err("no value supplied for pane_visible".to_string()),
+                pixel_mouse: Ok(Default::default()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PaneGraphicsInfoAnswer {
+        pub fn cell_height_px<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<u32>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.cell_height_px = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for cell_height_px: {e}"));
+            self
+        }
+        pub fn cell_width_px<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<u32>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.cell_width_px = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for cell_width_px: {e}"));
+            self
+        }
+        pub fn file_frame_damage<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<bool>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.file_frame_damage = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for file_frame_damage: {e}"));
+            self
+        }
+        pub fn file_frame_direct_max_bytes<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::option::Option<u32>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.file_frame_direct_max_bytes = value.try_into().map_err(|e| {
+                format!("error converting supplied value for file_frame_direct_max_bytes: {e}")
+            });
+            self
+        }
+        pub fn file_frame_directory<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::option::Option<::std::string::String>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.file_frame_directory = value.try_into().map_err(|e| {
+                format!("error converting supplied value for file_frame_directory: {e}")
+            });
+            self
+        }
+        pub fn file_frame_formats<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::vec::Vec<::std::string::String>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.file_frame_formats = value.try_into().map_err(|e| {
+                format!("error converting supplied value for file_frame_formats: {e}")
+            });
+            self
+        }
+        pub fn file_frame_max_bytes<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::option::Option<u32>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.file_frame_max_bytes = value.try_into().map_err(|e| {
+                format!("error converting supplied value for file_frame_max_bytes: {e}")
+            });
+            self
+        }
+        pub fn file_frame_transport<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::option::Option<::std::string::String>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.file_frame_transport = value.try_into().map_err(|e| {
+                format!("error converting supplied value for file_frame_transport: {e}")
+            });
+            self
+        }
+        pub fn max_layers_per_pane<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<u32>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.max_layers_per_pane = value.try_into().map_err(|e| {
+                format!("error converting supplied value for max_layers_per_pane: {e}")
+            });
+            self
+        }
+        pub fn pane_visible<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<bool>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.pane_visible = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for pane_visible: {e}"));
+            self
+        }
+        pub fn pixel_mouse<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<bool>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.pixel_mouse = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for pixel_mouse: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneGraphicsInfoAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PaneGraphicsInfoAnswer> for super::PaneGraphicsInfoAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PaneGraphicsInfoAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                cell_height_px: value.cell_height_px?,
+                cell_width_px: value.cell_width_px?,
+                file_frame_damage: value.file_frame_damage?,
+                file_frame_direct_max_bytes: value.file_frame_direct_max_bytes?,
+                file_frame_directory: value.file_frame_directory?,
+                file_frame_formats: value.file_frame_formats?,
+                file_frame_max_bytes: value.file_frame_max_bytes?,
+                file_frame_transport: value.file_frame_transport?,
+                max_layers_per_pane: value.max_layers_per_pane?,
+                pane_visible: value.pane_visible?,
+                pixel_mouse: value.pixel_mouse?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PaneGraphicsInfoAnswer> for PaneGraphicsInfoAnswer {
+        fn from(value: super::PaneGraphicsInfoAnswer) -> Self {
+            Self {
+                cell_height_px: Ok(value.cell_height_px),
+                cell_width_px: Ok(value.cell_width_px),
+                file_frame_damage: Ok(value.file_frame_damage),
+                file_frame_direct_max_bytes: Ok(value.file_frame_direct_max_bytes),
+                file_frame_directory: Ok(value.file_frame_directory),
+                file_frame_formats: Ok(value.file_frame_formats),
+                file_frame_max_bytes: Ok(value.file_frame_max_bytes),
+                file_frame_transport: Ok(value.file_frame_transport),
+                max_layers_per_pane: Ok(value.max_layers_per_pane),
+                pane_visible: Ok(value.pane_visible),
+                pixel_mouse: Ok(value.pixel_mouse),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -10207,6 +15968,60 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct PaneInfoAnswer {
+        pane: ::std::result::Result<super::PaneInfo, ::std::string::String>,
+        type_: ::std::result::Result<super::PaneInfoAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PaneInfoAnswer {
+        fn default() -> Self {
+            Self {
+                pane: Err("no value supplied for pane".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PaneInfoAnswer {
+        pub fn pane<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.pane = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for pane: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneInfoAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PaneInfoAnswer> for super::PaneInfoAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PaneInfoAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                pane: value.pane?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PaneInfoAnswer> for PaneInfoAnswer {
+        fn from(value: super::PaneInfoAnswer) -> Self {
+            Self {
+                pane: Ok(value.pane),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct PaneInputSetParams {
         pane_id: ::std::result::Result<::std::string::String, ::std::string::String>,
         right_click: ::std::result::Result<super::PaneRightClickTarget, ::std::string::String>,
@@ -10257,6 +16072,60 @@ pub mod builder {
             Self {
                 pane_id: Ok(value.pane_id),
                 right_click: Ok(value.right_click),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PaneLayoutAnswer {
+        layout: ::std::result::Result<super::PaneLayoutSnapshot, ::std::string::String>,
+        type_: ::std::result::Result<super::PaneLayoutAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PaneLayoutAnswer {
+        fn default() -> Self {
+            Self {
+                layout: Err("no value supplied for layout".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PaneLayoutAnswer {
+        pub fn layout<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneLayoutSnapshot>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.layout = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for layout: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneLayoutAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PaneLayoutAnswer> for super::PaneLayoutAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PaneLayoutAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                layout: value.layout?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PaneLayoutAnswer> for PaneLayoutAnswer {
+        fn from(value: super::PaneLayoutAnswer) -> Self {
+            Self {
+                layout: Ok(value.layout),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -10758,6 +16627,131 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct PaneLinkActivatedAnswer {
+        handled: ::std::result::Result<bool, ::std::string::String>,
+        type_: ::std::result::Result<super::PaneLinkActivatedAnswerType, ::std::string::String>,
+        url: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+    }
+    impl ::std::default::Default for PaneLinkActivatedAnswer {
+        fn default() -> Self {
+            Self {
+                handled: Err("no value supplied for handled".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+                url: Ok(Default::default()),
+            }
+        }
+    }
+    impl PaneLinkActivatedAnswer {
+        pub fn handled<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<bool>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.handled = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for handled: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneLinkActivatedAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+        pub fn url<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::option::Option<::std::string::String>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.url = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for url: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PaneLinkActivatedAnswer> for super::PaneLinkActivatedAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PaneLinkActivatedAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                handled: value.handled?,
+                type_: value.type_?,
+                url: value.url?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PaneLinkActivatedAnswer> for PaneLinkActivatedAnswer {
+        fn from(value: super::PaneLinkActivatedAnswer) -> Self {
+            Self {
+                handled: Ok(value.handled),
+                type_: Ok(value.type_),
+                url: Ok(value.url),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PaneListAnswer {
+        panes: ::std::result::Result<::std::vec::Vec<super::PaneInfo>, ::std::string::String>,
+        type_: ::std::result::Result<super::PaneListAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PaneListAnswer {
+        fn default() -> Self {
+            Self {
+                panes: Err("no value supplied for panes".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PaneListAnswer {
+        pub fn panes<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::vec::Vec<super::PaneInfo>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.panes = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for panes: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneListAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PaneListAnswer> for super::PaneListAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PaneListAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                panes: value.panes?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PaneListAnswer> for PaneListAnswer {
+        fn from(value: super::PaneListAnswer) -> Self {
+            Self {
+                panes: Ok(value.panes),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct PaneListParams {
         workspace_id: ::std::result::Result<
             ::std::option::Option<::std::string::String>,
@@ -10797,6 +16791,60 @@ pub mod builder {
         fn from(value: super::PaneListParams) -> Self {
             Self {
                 workspace_id: Ok(value.workspace_id),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PaneMoveAnswer {
+        move_result: ::std::result::Result<super::PaneMoveResult, ::std::string::String>,
+        type_: ::std::result::Result<super::PaneMoveAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PaneMoveAnswer {
+        fn default() -> Self {
+            Self {
+                move_result: Err("no value supplied for move_result".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PaneMoveAnswer {
+        pub fn move_result<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneMoveResult>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.move_result = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for move_result: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneMoveAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PaneMoveAnswer> for super::PaneMoveAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PaneMoveAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                move_result: value.move_result?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PaneMoveAnswer> for PaneMoveAnswer {
+        fn from(value: super::PaneMoveAnswer) -> Self {
+            Self {
+                move_result: Ok(value.move_result),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -11091,6 +17139,60 @@ pub mod builder {
                 reason: Ok(value.reason),
                 source_layout: Ok(value.source_layout),
                 target_layout: Ok(value.target_layout),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PaneNeighborAnswer {
+        neighbor: ::std::result::Result<super::PaneNeighborResult, ::std::string::String>,
+        type_: ::std::result::Result<super::PaneNeighborAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PaneNeighborAnswer {
+        fn default() -> Self {
+            Self {
+                neighbor: Err("no value supplied for neighbor".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PaneNeighborAnswer {
+        pub fn neighbor<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneNeighborResult>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.neighbor = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for neighbor: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneNeighborAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PaneNeighborAnswer> for super::PaneNeighborAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PaneNeighborAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                neighbor: value.neighbor?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PaneNeighborAnswer> for PaneNeighborAnswer {
+        fn from(value: super::PaneNeighborAnswer) -> Self {
+            Self {
+                neighbor: Ok(value.neighbor),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -11408,6 +17510,60 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct PaneProcessInfoAnswer {
+        process_info: ::std::result::Result<super::PaneProcessInfo, ::std::string::String>,
+        type_: ::std::result::Result<super::PaneProcessInfoAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PaneProcessInfoAnswer {
+        fn default() -> Self {
+            Self {
+                process_info: Err("no value supplied for process_info".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PaneProcessInfoAnswer {
+        pub fn process_info<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneProcessInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.process_info = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for process_info: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneProcessInfoAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PaneProcessInfoAnswer> for super::PaneProcessInfoAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PaneProcessInfoAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                process_info: value.process_info?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PaneProcessInfoAnswer> for PaneProcessInfoAnswer {
+        fn from(value: super::PaneProcessInfoAnswer) -> Self {
+            Self {
+                process_info: Ok(value.process_info),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct PaneProcessInfoParams {
         pane_id: ::std::result::Result<
             ::std::option::Option<::std::string::String>,
@@ -11571,6 +17727,60 @@ pub mod builder {
                 cwd: Ok(value.cwd),
                 name: Ok(value.name),
                 pid: Ok(value.pid),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PaneReadAnswer {
+        read: ::std::result::Result<super::PaneReadResult, ::std::string::String>,
+        type_: ::std::result::Result<super::PaneReadAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PaneReadAnswer {
+        fn default() -> Self {
+            Self {
+                read: Err("no value supplied for read".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PaneReadAnswer {
+        pub fn read<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneReadResult>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.read = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for read: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneReadAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PaneReadAnswer> for super::PaneReadAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PaneReadAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                read: value.read?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PaneReadAnswer> for PaneReadAnswer {
+        fn from(value: super::PaneReadAnswer) -> Self {
+            Self {
+                read: Ok(value.read),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -12467,6 +18677,60 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct PaneResizeAnswer {
+        resize: ::std::result::Result<super::PaneResizeResult, ::std::string::String>,
+        type_: ::std::result::Result<super::PaneResizeAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PaneResizeAnswer {
+        fn default() -> Self {
+            Self {
+                resize: Err("no value supplied for resize".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PaneResizeAnswer {
+        pub fn resize<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneResizeResult>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.resize = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for resize: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneResizeAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PaneResizeAnswer> for super::PaneResizeAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PaneResizeAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                resize: value.resize?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PaneResizeAnswer> for PaneResizeAnswer {
+        fn from(value: super::PaneResizeAnswer) -> Self {
+            Self {
+                resize: Ok(value.resize),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct PaneResizeParams {
         amount: ::std::result::Result<::std::option::Option<f32>, ::std::string::String>,
         direction: ::std::result::Result<super::PaneDirection, ::std::string::String>,
@@ -12825,6 +19089,74 @@ pub mod builder {
             Self {
                 offset_from_bottom: Ok(value.offset_from_bottom),
                 pane_id: Ok(value.pane_id),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PaneSelectionAnswer {
+        pane_id: ::std::result::Result<::std::string::String, ::std::string::String>,
+        text: ::std::result::Result<::std::string::String, ::std::string::String>,
+        type_: ::std::result::Result<super::PaneSelectionAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PaneSelectionAnswer {
+        fn default() -> Self {
+            Self {
+                pane_id: Err("no value supplied for pane_id".to_string()),
+                text: Err("no value supplied for text".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PaneSelectionAnswer {
+        pub fn pane_id<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::string::String>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.pane_id = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for pane_id: {e}"));
+            self
+        }
+        pub fn text<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::string::String>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.text = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for text: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneSelectionAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PaneSelectionAnswer> for super::PaneSelectionAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PaneSelectionAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                pane_id: value.pane_id?,
+                text: value.text?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PaneSelectionAnswer> for PaneSelectionAnswer {
+        fn from(value: super::PaneSelectionAnswer) -> Self {
+            Self {
+                pane_id: Ok(value.pane_id),
+                text: Ok(value.text),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -13238,6 +19570,60 @@ pub mod builder {
                 right_click: Ok(value.right_click),
                 target_pane_id: Ok(value.target_pane_id),
                 workspace_id: Ok(value.workspace_id),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PaneSwapAnswer {
+        swap: ::std::result::Result<super::PaneSwapResult, ::std::string::String>,
+        type_: ::std::result::Result<super::PaneSwapAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PaneSwapAnswer {
+        fn default() -> Self {
+            Self {
+                swap: Err("no value supplied for swap".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PaneSwapAnswer {
+        pub fn swap<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneSwapResult>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.swap = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for swap: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneSwapAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PaneSwapAnswer> for super::PaneSwapAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PaneSwapAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                swap: value.swap?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PaneSwapAnswer> for PaneSwapAnswer {
+        fn from(value: super::PaneSwapAnswer) -> Self {
+            Self {
+                swap: Ok(value.swap),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -13710,6 +20096,60 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct PaneZoomAnswer {
+        type_: ::std::result::Result<super::PaneZoomAnswerType, ::std::string::String>,
+        zoom: ::std::result::Result<super::PaneZoomResult, ::std::string::String>,
+    }
+    impl ::std::default::Default for PaneZoomAnswer {
+        fn default() -> Self {
+            Self {
+                type_: Err("no value supplied for type_".to_string()),
+                zoom: Err("no value supplied for zoom".to_string()),
+            }
+        }
+    }
+    impl PaneZoomAnswer {
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneZoomAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+        pub fn zoom<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneZoomResult>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.zoom = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for zoom: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PaneZoomAnswer> for super::PaneZoomAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PaneZoomAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                type_: value.type_?,
+                zoom: value.zoom?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PaneZoomAnswer> for PaneZoomAnswer {
+        fn from(value: super::PaneZoomAnswer) -> Self {
+            Self {
+                type_: Ok(value.type_),
+                zoom: Ok(value.zoom),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct PaneZoomParams {
         mode: ::std::result::Result<super::PaneZoomMode, ::std::string::String>,
         pane_id: ::std::result::Result<
@@ -14118,6 +20558,143 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct PluginActionInvokedAnswer {
+        action: ::std::result::Result<super::PluginActionInfo, ::std::string::String>,
+        context: ::std::result::Result<super::PluginInvocationContext, ::std::string::String>,
+        log: ::std::result::Result<super::PluginCommandLogInfo, ::std::string::String>,
+        type_: ::std::result::Result<super::PluginActionInvokedAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PluginActionInvokedAnswer {
+        fn default() -> Self {
+            Self {
+                action: Err("no value supplied for action".to_string()),
+                context: Err("no value supplied for context".to_string()),
+                log: Err("no value supplied for log".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PluginActionInvokedAnswer {
+        pub fn action<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PluginActionInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.action = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for action: {e}"));
+            self
+        }
+        pub fn context<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PluginInvocationContext>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.context = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for context: {e}"));
+            self
+        }
+        pub fn log<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PluginCommandLogInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.log = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for log: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PluginActionInvokedAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PluginActionInvokedAnswer> for super::PluginActionInvokedAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PluginActionInvokedAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                action: value.action?,
+                context: value.context?,
+                log: value.log?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PluginActionInvokedAnswer> for PluginActionInvokedAnswer {
+        fn from(value: super::PluginActionInvokedAnswer) -> Self {
+            Self {
+                action: Ok(value.action),
+                context: Ok(value.context),
+                log: Ok(value.log),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PluginActionListAnswer {
+        actions:
+            ::std::result::Result<::std::vec::Vec<super::PluginActionInfo>, ::std::string::String>,
+        type_: ::std::result::Result<super::PluginActionListAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PluginActionListAnswer {
+        fn default() -> Self {
+            Self {
+                actions: Err("no value supplied for actions".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PluginActionListAnswer {
+        pub fn actions<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::vec::Vec<super::PluginActionInfo>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.actions = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for actions: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PluginActionListAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PluginActionListAnswer> for super::PluginActionListAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PluginActionListAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                actions: value.actions?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PluginActionListAnswer> for PluginActionListAnswer {
+        fn from(value: super::PluginActionListAnswer) -> Self {
+            Self {
+                actions: Ok(value.actions),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct PluginActionListParams {
         plugin_id: ::std::result::Result<
             ::std::option::Option<::std::string::String>,
@@ -14367,6 +20944,114 @@ pub mod builder {
                 status: Ok(value.status),
                 stderr: Ok(value.stderr),
                 stdout: Ok(value.stdout),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PluginDisabledAnswer {
+        plugin: ::std::result::Result<super::InstalledPluginInfo, ::std::string::String>,
+        type_: ::std::result::Result<super::PluginDisabledAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PluginDisabledAnswer {
+        fn default() -> Self {
+            Self {
+                plugin: Err("no value supplied for plugin".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PluginDisabledAnswer {
+        pub fn plugin<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::InstalledPluginInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.plugin = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for plugin: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PluginDisabledAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PluginDisabledAnswer> for super::PluginDisabledAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PluginDisabledAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                plugin: value.plugin?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PluginDisabledAnswer> for PluginDisabledAnswer {
+        fn from(value: super::PluginDisabledAnswer) -> Self {
+            Self {
+                plugin: Ok(value.plugin),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PluginEnabledAnswer {
+        plugin: ::std::result::Result<super::InstalledPluginInfo, ::std::string::String>,
+        type_: ::std::result::Result<super::PluginEnabledAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PluginEnabledAnswer {
+        fn default() -> Self {
+            Self {
+                plugin: Err("no value supplied for plugin".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PluginEnabledAnswer {
+        pub fn plugin<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::InstalledPluginInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.plugin = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for plugin: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PluginEnabledAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PluginEnabledAnswer> for super::PluginEnabledAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PluginEnabledAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                plugin: value.plugin?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PluginEnabledAnswer> for PluginEnabledAnswer {
+        fn from(value: super::PluginEnabledAnswer) -> Self {
+            Self {
+                plugin: Ok(value.plugin),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -14721,6 +21406,117 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct PluginLinkedAnswer {
+        plugin: ::std::result::Result<super::InstalledPluginInfo, ::std::string::String>,
+        type_: ::std::result::Result<super::PluginLinkedAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PluginLinkedAnswer {
+        fn default() -> Self {
+            Self {
+                plugin: Err("no value supplied for plugin".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PluginLinkedAnswer {
+        pub fn plugin<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::InstalledPluginInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.plugin = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for plugin: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PluginLinkedAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PluginLinkedAnswer> for super::PluginLinkedAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PluginLinkedAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                plugin: value.plugin?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PluginLinkedAnswer> for PluginLinkedAnswer {
+        fn from(value: super::PluginLinkedAnswer) -> Self {
+            Self {
+                plugin: Ok(value.plugin),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PluginListAnswer {
+        plugins: ::std::result::Result<
+            ::std::vec::Vec<super::InstalledPluginInfo>,
+            ::std::string::String,
+        >,
+        type_: ::std::result::Result<super::PluginListAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PluginListAnswer {
+        fn default() -> Self {
+            Self {
+                plugins: Err("no value supplied for plugins".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PluginListAnswer {
+        pub fn plugins<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::vec::Vec<super::InstalledPluginInfo>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.plugins = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for plugins: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PluginListAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PluginListAnswer> for super::PluginListAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PluginListAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                plugins: value.plugins?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PluginListAnswer> for PluginListAnswer {
+        fn from(value: super::PluginListAnswer) -> Self {
+            Self {
+                plugins: Ok(value.plugins),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct PluginListParams {
         plugin_id: ::std::result::Result<
             ::std::option::Option<::std::string::String>,
@@ -14760,6 +21556,63 @@ pub mod builder {
         fn from(value: super::PluginListParams) -> Self {
             Self {
                 plugin_id: Ok(value.plugin_id),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PluginLogListAnswer {
+        logs: ::std::result::Result<
+            ::std::vec::Vec<super::PluginCommandLogInfo>,
+            ::std::string::String,
+        >,
+        type_: ::std::result::Result<super::PluginLogListAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PluginLogListAnswer {
+        fn default() -> Self {
+            Self {
+                logs: Err("no value supplied for logs".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PluginLogListAnswer {
+        pub fn logs<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::vec::Vec<super::PluginCommandLogInfo>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.logs = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for logs: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PluginLogListAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PluginLogListAnswer> for super::PluginLogListAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PluginLogListAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                logs: value.logs?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PluginLogListAnswer> for PluginLogListAnswer {
+        fn from(value: super::PluginLogListAnswer) -> Self {
+            Self {
+                logs: Ok(value.logs),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -15427,6 +22280,60 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct PluginPaneClosedAnswer {
+        pane_id: ::std::result::Result<::std::string::String, ::std::string::String>,
+        type_: ::std::result::Result<super::PluginPaneClosedAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PluginPaneClosedAnswer {
+        fn default() -> Self {
+            Self {
+                pane_id: Err("no value supplied for pane_id".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PluginPaneClosedAnswer {
+        pub fn pane_id<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::string::String>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.pane_id = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for pane_id: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PluginPaneClosedAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PluginPaneClosedAnswer> for super::PluginPaneClosedAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PluginPaneClosedAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                pane_id: value.pane_id?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PluginPaneClosedAnswer> for PluginPaneClosedAnswer {
+        fn from(value: super::PluginPaneClosedAnswer) -> Self {
+            Self {
+                pane_id: Ok(value.pane_id),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct PluginPaneFocusParams {
         pane_id: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
@@ -15463,6 +22370,60 @@ pub mod builder {
         fn from(value: super::PluginPaneFocusParams) -> Self {
             Self {
                 pane_id: Ok(value.pane_id),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PluginPaneFocusedAnswer {
+        plugin_pane: ::std::result::Result<super::PluginPaneInfo, ::std::string::String>,
+        type_: ::std::result::Result<super::PluginPaneFocusedAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PluginPaneFocusedAnswer {
+        fn default() -> Self {
+            Self {
+                plugin_pane: Err("no value supplied for plugin_pane".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PluginPaneFocusedAnswer {
+        pub fn plugin_pane<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PluginPaneInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.plugin_pane = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for plugin_pane: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PluginPaneFocusedAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PluginPaneFocusedAnswer> for super::PluginPaneFocusedAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PluginPaneFocusedAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                plugin_pane: value.plugin_pane?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PluginPaneFocusedAnswer> for PluginPaneFocusedAnswer {
+        fn from(value: super::PluginPaneFocusedAnswer) -> Self {
+            Self {
+                plugin_pane: Ok(value.plugin_pane),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -15737,6 +22698,60 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct PluginPaneOpenedAnswer {
+        plugin_pane: ::std::result::Result<super::PluginPaneInfo, ::std::string::String>,
+        type_: ::std::result::Result<super::PluginPaneOpenedAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PluginPaneOpenedAnswer {
+        fn default() -> Self {
+            Self {
+                plugin_pane: Err("no value supplied for plugin_pane".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PluginPaneOpenedAnswer {
+        pub fn plugin_pane<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PluginPaneInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.plugin_pane = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for plugin_pane: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PluginPaneOpenedAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PluginPaneOpenedAnswer> for super::PluginPaneOpenedAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PluginPaneOpenedAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                plugin_pane: value.plugin_pane?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PluginPaneOpenedAnswer> for PluginPaneOpenedAnswer {
+        fn from(value: super::PluginPaneOpenedAnswer) -> Self {
+            Self {
+                plugin_pane: Ok(value.plugin_pane),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct PluginSetEnabledParams {
         plugin_id: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
@@ -15969,6 +22984,159 @@ pub mod builder {
         fn from(value: super::PluginUnlinkParams) -> Self {
             Self {
                 plugin_id: Ok(value.plugin_id),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PluginUnlinkedAnswer {
+        plugin_id: ::std::result::Result<::std::string::String, ::std::string::String>,
+        removed: ::std::result::Result<bool, ::std::string::String>,
+        type_: ::std::result::Result<super::PluginUnlinkedAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for PluginUnlinkedAnswer {
+        fn default() -> Self {
+            Self {
+                plugin_id: Err("no value supplied for plugin_id".to_string()),
+                removed: Err("no value supplied for removed".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl PluginUnlinkedAnswer {
+        pub fn plugin_id<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::string::String>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.plugin_id = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for plugin_id: {e}"));
+            self
+        }
+        pub fn removed<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<bool>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.removed = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for removed: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PluginUnlinkedAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PluginUnlinkedAnswer> for super::PluginUnlinkedAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PluginUnlinkedAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                plugin_id: value.plugin_id?,
+                removed: value.removed?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PluginUnlinkedAnswer> for PluginUnlinkedAnswer {
+        fn from(value: super::PluginUnlinkedAnswer) -> Self {
+            Self {
+                plugin_id: Ok(value.plugin_id),
+                removed: Ok(value.removed),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct PongAnswer {
+        capabilities: ::std::result::Result<
+            ::std::option::Option<super::ServerCapabilities>,
+            ::std::string::String,
+        >,
+        protocol: ::std::result::Result<u32, ::std::string::String>,
+        type_: ::std::result::Result<super::PongAnswerType, ::std::string::String>,
+        version: ::std::result::Result<::std::string::String, ::std::string::String>,
+    }
+    impl ::std::default::Default for PongAnswer {
+        fn default() -> Self {
+            Self {
+                capabilities: Ok(Default::default()),
+                protocol: Err("no value supplied for protocol".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+                version: Err("no value supplied for version".to_string()),
+            }
+        }
+    }
+    impl PongAnswer {
+        pub fn capabilities<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::option::Option<super::ServerCapabilities>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.capabilities = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for capabilities: {e}"));
+            self
+        }
+        pub fn protocol<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<u32>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.protocol = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for protocol: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PongAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+        pub fn version<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::string::String>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.version = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for version: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<PongAnswer> for super::PongAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: PongAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                capabilities: value.capabilities?,
+                protocol: value.protocol?,
+                type_: value.type_?,
+                version: value.version?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::PongAnswer> for PongAnswer {
+        fn from(value: super::PongAnswer) -> Self {
+            Self {
+                capabilities: Ok(value.capabilities),
+                protocol: Ok(value.protocol),
+                type_: Ok(value.type_),
+                version: Ok(value.version),
             }
         }
     }
@@ -16421,6 +23589,60 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct SessionSnapshotAnswer {
+        snapshot: ::std::result::Result<super::SessionSnapshot, ::std::string::String>,
+        type_: ::std::result::Result<super::SessionSnapshotAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for SessionSnapshotAnswer {
+        fn default() -> Self {
+            Self {
+                snapshot: Err("no value supplied for snapshot".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl SessionSnapshotAnswer {
+        pub fn snapshot<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::SessionSnapshot>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.snapshot = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for snapshot: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::SessionSnapshotAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<SessionSnapshotAnswer> for super::SessionSnapshotAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: SessionSnapshotAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                snapshot: value.snapshot?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::SessionSnapshotAnswer> for SessionSnapshotAnswer {
+        fn from(value: super::SessionSnapshotAnswer) -> Self {
+            Self {
+                snapshot: Ok(value.snapshot),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct SubscriptionEventEnvelope {
         data: ::std::result::Result<super::SubscriptionEventData, ::std::string::String>,
         event: ::std::result::Result<super::SubscriptionEventKind, ::std::string::String>,
@@ -16471,6 +23693,46 @@ pub mod builder {
             Self {
                 data: Ok(value.data),
                 event: Ok(value.event),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct SubscriptionStartedAnswer {
+        type_: ::std::result::Result<super::SubscriptionStartedAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for SubscriptionStartedAnswer {
+        fn default() -> Self {
+            Self {
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl SubscriptionStartedAnswer {
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::SubscriptionStartedAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<SubscriptionStartedAnswer> for super::SubscriptionStartedAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: SubscriptionStartedAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::SubscriptionStartedAnswer> for SubscriptionStartedAnswer {
+        fn from(value: super::SubscriptionStartedAnswer) -> Self {
+            Self {
+                type_: Ok(value.type_),
             }
         }
     }
@@ -16639,6 +23901,74 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct TabCreatedAnswer {
+        root_pane: ::std::result::Result<super::PaneInfo, ::std::string::String>,
+        tab: ::std::result::Result<super::TabInfo, ::std::string::String>,
+        type_: ::std::result::Result<super::TabCreatedAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for TabCreatedAnswer {
+        fn default() -> Self {
+            Self {
+                root_pane: Err("no value supplied for root_pane".to_string()),
+                tab: Err("no value supplied for tab".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl TabCreatedAnswer {
+        pub fn root_pane<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.root_pane = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for root_pane: {e}"));
+            self
+        }
+        pub fn tab<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::TabInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.tab = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for tab: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::TabCreatedAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<TabCreatedAnswer> for super::TabCreatedAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: TabCreatedAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                root_pane: value.root_pane?,
+                tab: value.tab?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::TabCreatedAnswer> for TabCreatedAnswer {
+        fn from(value: super::TabCreatedAnswer) -> Self {
+            Self {
+                root_pane: Ok(value.root_pane),
+                tab: Ok(value.tab),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct TabInfo {
         agent_status: ::std::result::Result<super::AgentStatus, ::std::string::String>,
         focused: ::std::result::Result<bool, ::std::string::String>,
@@ -16757,6 +24087,114 @@ pub mod builder {
                 pane_count: Ok(value.pane_count),
                 tab_id: Ok(value.tab_id),
                 workspace_id: Ok(value.workspace_id),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct TabInfoAnswer {
+        tab: ::std::result::Result<super::TabInfo, ::std::string::String>,
+        type_: ::std::result::Result<super::TabInfoAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for TabInfoAnswer {
+        fn default() -> Self {
+            Self {
+                tab: Err("no value supplied for tab".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl TabInfoAnswer {
+        pub fn tab<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::TabInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.tab = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for tab: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::TabInfoAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<TabInfoAnswer> for super::TabInfoAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: TabInfoAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                tab: value.tab?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::TabInfoAnswer> for TabInfoAnswer {
+        fn from(value: super::TabInfoAnswer) -> Self {
+            Self {
+                tab: Ok(value.tab),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct TabListAnswer {
+        tabs: ::std::result::Result<::std::vec::Vec<super::TabInfo>, ::std::string::String>,
+        type_: ::std::result::Result<super::TabListAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for TabListAnswer {
+        fn default() -> Self {
+            Self {
+                tabs: Err("no value supplied for tabs".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl TabListAnswer {
+        pub fn tabs<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::vec::Vec<super::TabInfo>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.tabs = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for tabs: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::TabListAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<TabListAnswer> for super::TabListAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: TabListAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                tabs: value.tabs?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::TabListAnswer> for TabListAnswer {
+        fn from(value: super::TabListAnswer) -> Self {
+            Self {
+                tabs: Ok(value.tabs),
+                type_: Ok(value.type_),
             }
         }
     }
@@ -16952,6 +24390,60 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct WaitMatchedAnswer {
+        event: ::std::result::Result<super::EventEnvelope, ::std::string::String>,
+        type_: ::std::result::Result<super::WaitMatchedAnswerType, ::std::string::String>,
+    }
+    impl ::std::default::Default for WaitMatchedAnswer {
+        fn default() -> Self {
+            Self {
+                event: Err("no value supplied for event".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+            }
+        }
+    }
+    impl WaitMatchedAnswer {
+        pub fn event<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::EventEnvelope>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.event = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for event: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::WaitMatchedAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<WaitMatchedAnswer> for super::WaitMatchedAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: WaitMatchedAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                event: value.event?,
+                type_: value.type_?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::WaitMatchedAnswer> for WaitMatchedAnswer {
+        fn from(value: super::WaitMatchedAnswer) -> Self {
+            Self {
+                event: Ok(value.event),
+                type_: Ok(value.type_),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct WorkspaceCloseParams {
         close_group: ::std::result::Result<::std::option::Option<bool>, ::std::string::String>,
         workspace_id: ::std::result::Result<::std::string::String, ::std::string::String>,
@@ -17112,6 +24604,88 @@ pub mod builder {
                 focus: Ok(value.focus),
                 label: Ok(value.label),
                 source_workspace_id: Ok(value.source_workspace_id),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct WorkspaceCreatedAnswer {
+        root_pane: ::std::result::Result<super::PaneInfo, ::std::string::String>,
+        tab: ::std::result::Result<super::TabInfo, ::std::string::String>,
+        type_: ::std::result::Result<super::WorkspaceCreatedAnswerType, ::std::string::String>,
+        workspace: ::std::result::Result<super::WorkspaceInfo, ::std::string::String>,
+    }
+    impl ::std::default::Default for WorkspaceCreatedAnswer {
+        fn default() -> Self {
+            Self {
+                root_pane: Err("no value supplied for root_pane".to_string()),
+                tab: Err("no value supplied for tab".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+                workspace: Err("no value supplied for workspace".to_string()),
+            }
+        }
+    }
+    impl WorkspaceCreatedAnswer {
+        pub fn root_pane<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.root_pane = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for root_pane: {e}"));
+            self
+        }
+        pub fn tab<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::TabInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.tab = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for tab: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::WorkspaceCreatedAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+        pub fn workspace<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::WorkspaceInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.workspace = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for workspace: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<WorkspaceCreatedAnswer> for super::WorkspaceCreatedAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: WorkspaceCreatedAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                root_pane: value.root_pane?,
+                tab: value.tab?,
+                type_: value.type_?,
+                workspace: value.workspace?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::WorkspaceCreatedAnswer> for WorkspaceCreatedAnswer {
+        fn from(value: super::WorkspaceCreatedAnswer) -> Self {
+            Self {
+                root_pane: Ok(value.root_pane),
+                tab: Ok(value.tab),
+                type_: Ok(value.type_),
+                workspace: Ok(value.workspace),
             }
         }
     }
@@ -17286,6 +24860,115 @@ pub mod builder {
                 tokens: Ok(value.tokens),
                 workspace_id: Ok(value.workspace_id),
                 worktree: Ok(value.worktree),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct WorkspaceInfoAnswer {
+        type_: ::std::result::Result<super::WorkspaceInfoAnswerType, ::std::string::String>,
+        workspace: ::std::result::Result<super::WorkspaceInfo, ::std::string::String>,
+    }
+    impl ::std::default::Default for WorkspaceInfoAnswer {
+        fn default() -> Self {
+            Self {
+                type_: Err("no value supplied for type_".to_string()),
+                workspace: Err("no value supplied for workspace".to_string()),
+            }
+        }
+    }
+    impl WorkspaceInfoAnswer {
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::WorkspaceInfoAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+        pub fn workspace<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::WorkspaceInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.workspace = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for workspace: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<WorkspaceInfoAnswer> for super::WorkspaceInfoAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: WorkspaceInfoAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                type_: value.type_?,
+                workspace: value.workspace?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::WorkspaceInfoAnswer> for WorkspaceInfoAnswer {
+        fn from(value: super::WorkspaceInfoAnswer) -> Self {
+            Self {
+                type_: Ok(value.type_),
+                workspace: Ok(value.workspace),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct WorkspaceListAnswer {
+        type_: ::std::result::Result<super::WorkspaceListAnswerType, ::std::string::String>,
+        workspaces:
+            ::std::result::Result<::std::vec::Vec<super::WorkspaceInfo>, ::std::string::String>,
+    }
+    impl ::std::default::Default for WorkspaceListAnswer {
+        fn default() -> Self {
+            Self {
+                type_: Err("no value supplied for type_".to_string()),
+                workspaces: Err("no value supplied for workspaces".to_string()),
+            }
+        }
+    }
+    impl WorkspaceListAnswer {
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::WorkspaceListAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+        pub fn workspaces<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::vec::Vec<super::WorkspaceInfo>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.workspaces = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for workspaces: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<WorkspaceListAnswer> for super::WorkspaceListAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: WorkspaceListAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                type_: value.type_?,
+                workspaces: value.workspaces?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::WorkspaceListAnswer> for WorkspaceListAnswer {
+        fn from(value: super::WorkspaceListAnswer) -> Self {
+            Self {
+                type_: Ok(value.type_),
+                workspaces: Ok(value.workspaces),
             }
         }
     }
@@ -17860,6 +25543,102 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct WorktreeCreatedAnswer {
+        root_pane: ::std::result::Result<super::PaneInfo, ::std::string::String>,
+        tab: ::std::result::Result<super::TabInfo, ::std::string::String>,
+        type_: ::std::result::Result<super::WorktreeCreatedAnswerType, ::std::string::String>,
+        workspace: ::std::result::Result<super::WorkspaceInfo, ::std::string::String>,
+        worktree: ::std::result::Result<super::WorktreeInfo, ::std::string::String>,
+    }
+    impl ::std::default::Default for WorktreeCreatedAnswer {
+        fn default() -> Self {
+            Self {
+                root_pane: Err("no value supplied for root_pane".to_string()),
+                tab: Err("no value supplied for tab".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+                workspace: Err("no value supplied for workspace".to_string()),
+                worktree: Err("no value supplied for worktree".to_string()),
+            }
+        }
+    }
+    impl WorktreeCreatedAnswer {
+        pub fn root_pane<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.root_pane = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for root_pane: {e}"));
+            self
+        }
+        pub fn tab<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::TabInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.tab = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for tab: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::WorktreeCreatedAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+        pub fn workspace<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::WorkspaceInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.workspace = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for workspace: {e}"));
+            self
+        }
+        pub fn worktree<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::WorktreeInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.worktree = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for worktree: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<WorktreeCreatedAnswer> for super::WorktreeCreatedAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: WorktreeCreatedAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                root_pane: value.root_pane?,
+                tab: value.tab?,
+                type_: value.type_?,
+                workspace: value.workspace?,
+                worktree: value.worktree?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::WorktreeCreatedAnswer> for WorktreeCreatedAnswer {
+        fn from(value: super::WorktreeCreatedAnswer) -> Self {
+            Self {
+                root_pane: Ok(value.root_pane),
+                tab: Ok(value.tab),
+                type_: Ok(value.type_),
+                workspace: Ok(value.workspace),
+                worktree: Ok(value.worktree),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct WorktreeInfo {
         branch: ::std::result::Result<
             ::std::option::Option<::std::string::String>,
@@ -18000,6 +25779,75 @@ pub mod builder {
                 label: Ok(value.label),
                 open_workspace_id: Ok(value.open_workspace_id),
                 path: Ok(value.path),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct WorktreeListAnswer {
+        source: ::std::result::Result<super::WorktreeSourceInfo, ::std::string::String>,
+        type_: ::std::result::Result<super::WorktreeListAnswerType, ::std::string::String>,
+        worktrees:
+            ::std::result::Result<::std::vec::Vec<super::WorktreeInfo>, ::std::string::String>,
+    }
+    impl ::std::default::Default for WorktreeListAnswer {
+        fn default() -> Self {
+            Self {
+                source: Err("no value supplied for source".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+                worktrees: Err("no value supplied for worktrees".to_string()),
+            }
+        }
+    }
+    impl WorktreeListAnswer {
+        pub fn source<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::WorktreeSourceInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.source = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for source: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::WorktreeListAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+        pub fn worktrees<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::vec::Vec<super::WorktreeInfo>>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.worktrees = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for worktrees: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<WorktreeListAnswer> for super::WorktreeListAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: WorktreeListAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                source: value.source?,
+                type_: value.type_?,
+                worktrees: value.worktrees?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::WorktreeListAnswer> for WorktreeListAnswer {
+        fn from(value: super::WorktreeListAnswer) -> Self {
+            Self {
+                source: Ok(value.source),
+                type_: Ok(value.type_),
+                worktrees: Ok(value.worktrees),
             }
         }
     }
@@ -18217,6 +26065,116 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    pub struct WorktreeOpenedAnswer {
+        already_open: ::std::result::Result<bool, ::std::string::String>,
+        root_pane: ::std::result::Result<super::PaneInfo, ::std::string::String>,
+        tab: ::std::result::Result<super::TabInfo, ::std::string::String>,
+        type_: ::std::result::Result<super::WorktreeOpenedAnswerType, ::std::string::String>,
+        workspace: ::std::result::Result<super::WorkspaceInfo, ::std::string::String>,
+        worktree: ::std::result::Result<super::WorktreeInfo, ::std::string::String>,
+    }
+    impl ::std::default::Default for WorktreeOpenedAnswer {
+        fn default() -> Self {
+            Self {
+                already_open: Err("no value supplied for already_open".to_string()),
+                root_pane: Err("no value supplied for root_pane".to_string()),
+                tab: Err("no value supplied for tab".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+                workspace: Err("no value supplied for workspace".to_string()),
+                worktree: Err("no value supplied for worktree".to_string()),
+            }
+        }
+    }
+    impl WorktreeOpenedAnswer {
+        pub fn already_open<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<bool>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.already_open = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for already_open: {e}"));
+            self
+        }
+        pub fn root_pane<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::PaneInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.root_pane = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for root_pane: {e}"));
+            self
+        }
+        pub fn tab<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::TabInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.tab = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for tab: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::WorktreeOpenedAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+        pub fn workspace<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::WorkspaceInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.workspace = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for workspace: {e}"));
+            self
+        }
+        pub fn worktree<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::WorktreeInfo>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.worktree = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for worktree: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<WorktreeOpenedAnswer> for super::WorktreeOpenedAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: WorktreeOpenedAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                already_open: value.already_open?,
+                root_pane: value.root_pane?,
+                tab: value.tab?,
+                type_: value.type_?,
+                workspace: value.workspace?,
+                worktree: value.worktree?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::WorktreeOpenedAnswer> for WorktreeOpenedAnswer {
+        fn from(value: super::WorktreeOpenedAnswer) -> Self {
+            Self {
+                already_open: Ok(value.already_open),
+                root_pane: Ok(value.root_pane),
+                tab: Ok(value.tab),
+                type_: Ok(value.type_),
+                workspace: Ok(value.workspace),
+                worktree: Ok(value.worktree),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     pub struct WorktreeRemoveParams {
         force: ::std::result::Result<bool, ::std::string::String>,
         trust_repository: ::std::result::Result<::std::option::Option<bool>, ::std::string::String>,
@@ -18280,6 +26238,88 @@ pub mod builder {
             Self {
                 force: Ok(value.force),
                 trust_repository: Ok(value.trust_repository),
+                workspace_id: Ok(value.workspace_id),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct WorktreeRemovedAnswer {
+        forced: ::std::result::Result<bool, ::std::string::String>,
+        path: ::std::result::Result<::std::string::String, ::std::string::String>,
+        type_: ::std::result::Result<super::WorktreeRemovedAnswerType, ::std::string::String>,
+        workspace_id: ::std::result::Result<::std::string::String, ::std::string::String>,
+    }
+    impl ::std::default::Default for WorktreeRemovedAnswer {
+        fn default() -> Self {
+            Self {
+                forced: Err("no value supplied for forced".to_string()),
+                path: Err("no value supplied for path".to_string()),
+                type_: Err("no value supplied for type_".to_string()),
+                workspace_id: Err("no value supplied for workspace_id".to_string()),
+            }
+        }
+    }
+    impl WorktreeRemovedAnswer {
+        pub fn forced<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<bool>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.forced = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for forced: {e}"));
+            self
+        }
+        pub fn path<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::string::String>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.path = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for path: {e}"));
+            self
+        }
+        pub fn type_<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<super::WorktreeRemovedAnswerType>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.type_ = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for type_: {e}"));
+            self
+        }
+        pub fn workspace_id<T>(mut self, value: T) -> Self
+        where
+            T: ::std::convert::TryInto<::std::string::String>,
+            T::Error: ::std::fmt::Display,
+        {
+            self.workspace_id = value
+                .try_into()
+                .map_err(|e| format!("error converting supplied value for workspace_id: {e}"));
+            self
+        }
+    }
+    impl ::std::convert::TryFrom<WorktreeRemovedAnswer> for super::WorktreeRemovedAnswer {
+        type Error = super::error::ConversionError;
+        fn try_from(
+            value: WorktreeRemovedAnswer,
+        ) -> ::std::result::Result<Self, super::error::ConversionError> {
+            Ok(Self {
+                forced: value.forced?,
+                path: value.path?,
+                type_: value.type_?,
+                workspace_id: value.workspace_id?,
+            })
+        }
+    }
+    impl ::std::convert::From<super::WorktreeRemovedAnswer> for WorktreeRemovedAnswer {
+        fn from(value: super::WorktreeRemovedAnswer) -> Self {
+            Self {
+                forced: Ok(value.forced),
+                path: Ok(value.path),
+                type_: Ok(value.type_),
                 workspace_id: Ok(value.workspace_id),
             }
         }
@@ -18457,6 +26497,80 @@ pub mod error {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Response variants. One `impl` per branch of `success_response`, from the
+// same pass that emitted the types above.
+//
+// The union is here too: naming it asks for any response Herdr can send, and
+// pays for parsing code for all of them. Naming one type pays for one.
+// ---------------------------------------------------------------------------
+
+impl crate::api::ResponseVariant for ResponseResult {}
+impl crate::api::ResponseVariant for PongAnswer {}
+impl crate::api::ResponseVariant for SessionSnapshotAnswer {}
+impl crate::api::ResponseVariant for WorkspaceInfoAnswer {}
+impl crate::api::ResponseVariant for WorkspaceCreatedAnswer {}
+impl crate::api::ResponseVariant for WorkspaceListAnswer {}
+impl crate::api::ResponseVariant for WorktreeListAnswer {}
+impl crate::api::ResponseVariant for WorktreeCreatedAnswer {}
+impl crate::api::ResponseVariant for WorktreeOpenedAnswer {}
+impl crate::api::ResponseVariant for WorktreeRemovedAnswer {}
+impl crate::api::ResponseVariant for TabInfoAnswer {}
+impl crate::api::ResponseVariant for TabCreatedAnswer {}
+impl crate::api::ResponseVariant for TabListAnswer {}
+impl crate::api::ResponseVariant for AgentInfoAnswer {}
+impl crate::api::ResponseVariant for AgentStartedAnswer {}
+impl crate::api::ResponseVariant for AgentPromptedAnswer {}
+impl crate::api::ResponseVariant for AgentListAnswer {}
+impl crate::api::ResponseVariant for AgentViewAnswer {}
+impl crate::api::ResponseVariant for PaneInfoAnswer {}
+impl crate::api::ResponseVariant for PaneListAnswer {}
+impl crate::api::ResponseVariant for PaneCurrentAnswer {}
+impl crate::api::ResponseVariant for PaneSwapAnswer {}
+impl crate::api::ResponseVariant for PaneMoveAnswer {}
+impl crate::api::ResponseVariant for PaneZoomAnswer {}
+impl crate::api::ResponseVariant for PaneLayoutAnswer {}
+impl crate::api::ResponseVariant for PaneProcessInfoAnswer {}
+impl crate::api::ResponseVariant for LayoutExportAnswer {}
+impl crate::api::ResponseVariant for LayoutApplyAnswer {}
+impl crate::api::ResponseVariant for LayoutSplitRatioSetAnswer {}
+impl crate::api::ResponseVariant for PaneNeighborAnswer {}
+impl crate::api::ResponseVariant for PaneEdgesAnswer {}
+impl crate::api::ResponseVariant for PaneFocusDirectionAnswer {}
+impl crate::api::ResponseVariant for PaneResizeAnswer {}
+impl crate::api::ResponseVariant for PaneReadAnswer {}
+impl crate::api::ResponseVariant for PaneSelectionAnswer {}
+impl crate::api::ResponseVariant for PaneCopyMotionAnswer {}
+impl crate::api::ResponseVariant for PaneCopySearchAnswer {}
+impl crate::api::ResponseVariant for PaneGraphicsFrameAckAnswer {}
+impl crate::api::ResponseVariant for PaneGraphicsInfoAnswer {}
+impl crate::api::ResponseVariant for AgentExplainAnswer {}
+impl crate::api::ResponseVariant for SubscriptionStartedAnswer {}
+impl crate::api::ResponseVariant for WaitMatchedAnswer {}
+impl crate::api::ResponseVariant for OutputMatchedAnswer {}
+impl crate::api::ResponseVariant for NotificationShowAnswer {}
+impl crate::api::ResponseVariant for ClientWindowTitleAnswer {}
+impl crate::api::ResponseVariant for IntegrationListAnswer {}
+impl crate::api::ResponseVariant for IntegrationInstallAnswer {}
+impl crate::api::ResponseVariant for IntegrationUninstallAnswer {}
+impl crate::api::ResponseVariant for AgentManifestReloadAnswer {}
+impl crate::api::ResponseVariant for AgentManifestStatusAnswer {}
+impl crate::api::ResponseVariant for PluginLinkedAnswer {}
+impl crate::api::ResponseVariant for PluginListAnswer {}
+impl crate::api::ResponseVariant for PluginUnlinkedAnswer {}
+impl crate::api::ResponseVariant for PluginEnabledAnswer {}
+impl crate::api::ResponseVariant for PluginDisabledAnswer {}
+impl crate::api::ResponseVariant for PluginActionListAnswer {}
+impl crate::api::ResponseVariant for PluginActionInvokedAnswer {}
+impl crate::api::ResponseVariant for PaneLinkActivatedAnswer {}
+impl crate::api::ResponseVariant for PluginLogListAnswer {}
+impl crate::api::ResponseVariant for PluginPaneOpenedAnswer {}
+impl crate::api::ResponseVariant for PluginPaneFocusedAnswer {}
+impl crate::api::ResponseVariant for PluginPaneClosedAnswer {}
+impl crate::api::ResponseVariant for ConfigReloadAnswer {}
+impl crate::api::ResponseVariant for ClientShellSurfaceSetAnswer {}
+impl crate::api::ResponseVariant for OkAnswer {}
 
 // ---------------------------------------------------------------------------
 // Provenance. Generated from the same fetch as the types above.
