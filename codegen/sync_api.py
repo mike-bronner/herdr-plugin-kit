@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Regenerate the Herdr wire types from a published Herdr release tag.
 
-Four stages, in the order SCOPE.md section 3.2 sets out:
+Five stages, in the order SCOPE.md section 3.2 sets out:
 
 1. **Fetch** Herdr's ``herdr-api.schema.json`` at the given tag.
 2. **Extract** the five sub-schemas into one self-contained document.
 3. **Lift** the request envelope's ``id`` out of the way of the discriminator.
-4. **Generate** with ``cargo-typify``, and write the committed output.
+4. **Split** the response union, naming one type per variant beside it.
+5. **Generate** with ``cargo-typify``, and write the committed output.
 
 Every intermediate lands in ``target/codegen/``, which is already ignored by
 git, so a failed run leaves its evidence behind without leaving anything to
@@ -36,15 +37,17 @@ import sys
 from pathlib import Path
 from typing import List
 
-from emit_sweep import collect_cases, render, write_rust
+from emit_sweep import collect_cases, collect_result_cases, render, render_results, write_rust
 from extract import DriftError, extract
 from lift_envelope import lift
+from split_results import impls, split
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORK_DIR = REPO_ROOT / "target" / "codegen"
 CRATE = REPO_ROOT / "crates" / "herdr-plugin-kit"
 GENERATED_RS = CRATE / "src" / "api" / "generated.rs"
 SWEEP_RS = CRATE / "tests" / "method_sweep.rs"
+RESULT_SWEEP_RS = CRATE / "tests" / "response_sweep.rs"
 
 #: Where Herdr publishes the schema. The tag keeps its leading ``v``, because
 #: that is what Herdr's own release tags carry.
@@ -156,6 +159,7 @@ def sync(tag: str) -> None:
     envelope_path = WORK_DIR / "herdr-api.schema.json"
     merged_path = WORK_DIR / "merged.json"
     lifted_path = WORK_DIR / "lifted.json"
+    split_path = WORK_DIR / "split.json"
     raw_path = WORK_DIR / "generated.raw.rs"
 
     installed = typify_version()
@@ -178,12 +182,19 @@ def sync(tag: str) -> None:
     lifted = lift(merged)
     lifted_path.write_text(json.dumps(lifted, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-    generate(lifted_path, raw_path)
+    split_document, named = split(lifted)
+    split_path.write_text(
+        json.dumps(split_document, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    print(f"split: {len(named)} response variants named")
+
+    generate(split_path, raw_path)
 
     write_rust(
         GENERATED_RS,
         banner("sync_api.py", tag, protocol, schema_version, installed)
         + raw_path.read_text(encoding="utf-8")
+        + impls(named)
         + constants(tag, protocol, schema_version),
     )
     print(f"generate: {GENERATED_RS.relative_to(REPO_ROOT)}")
@@ -194,6 +205,18 @@ def sync(tag: str) -> None:
         render(cases, banner("emit_sweep.py", tag, protocol, schema_version, installed)),
     )
     print(f"emit-sweep: {len(cases)} methods -> {SWEEP_RS.relative_to(REPO_ROOT)}")
+
+    result_cases = collect_result_cases(lifted, named)
+    write_rust(
+        RESULT_SWEEP_RS,
+        render_results(
+            result_cases, banner("emit_sweep.py", tag, protocol, schema_version, installed)
+        ),
+    )
+    print(
+        f"emit-sweep: {len(result_cases)} results -> "
+        f"{RESULT_SWEEP_RS.relative_to(REPO_ROOT)}"
+    )
 
 
 def main(argv: List[str]) -> int:

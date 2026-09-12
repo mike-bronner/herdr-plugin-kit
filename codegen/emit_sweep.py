@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Emit the method sweep: one row per method, derived from the schema.
+"""Emit the sweeps: one row per method, and one row per response variant.
 
-The sweep is the acceptance test for the lift stage, and it is generated rather
-than hand-written for two reasons.
+A sweep is the acceptance test for a generation stage, and both are generated
+rather than hand-written for two reasons.
 
 First, a hand-maintained table of 102 method names drifts. Herdr adds methods
 every release, and a table nobody regenerates quietly stops covering the ones
 that matter most, which are the new ones.
 
 Second, and this is the part worth understanding before changing anything here:
-**the generated sweep is an independent check on typify, not a restatement of
+**a generated sweep is an independent check on typify, not a restatement of
 it.** Both this module and typify read the same schema and derive a variant
-name from each method's ``const``. Neither reads the other's output. So the
-emitted ``match`` arms are a second opinion:
+name from each ``const``. Neither reads the other's output. So the emitted
+``match`` arms are a second opinion:
 
 * if typify abandons the discriminator again and collapses the enum to
   ``Variant0``..``Variant101``, the arms name variants that do not exist and
@@ -24,45 +24,48 @@ emitted ``match`` arms are a second opinion:
 
 A round-trip test catches none of those three. See SCOPE.md section 3.3.
 
-Run directly::
+The response sweep carries the same three checks over ``ResponseResult``, and
+two more that only apply to it. Each response variant now also has a type of
+its own (``codegen/split_results.py``), so the sweep holds the two renderings
+of one schema branch against each other: the same fixture must deserialize
+through both, and both must serialize back to the same JSON. And an answer
+tagged for a *different* variant must be refused, which is the whole reason a
+narrow type is safe to name.
+
+⚠️ **The response side had no sweep at all until 2026-09-11**, while the
+request side has had one since the pipeline was written. That was a gap in the
+first release rather than something the per-variant types introduced:
+``ResponseResult`` has always been able to collapse the way ``RequestMethod``
+demonstrably did.
+
+Run directly for the request sweep::
 
     python3 codegen/emit_sweep.py lifted.json crates/herdr-plugin-kit/tests/method_sweep.rs
+
+The response sweep has no entry point of its own, because it needs the names
+``codegen/split_results.py`` gave the branches. ``codegen/sync_api.py`` emits
+both, and is always runnable.
 
 Python 3.9 is the floor. This machine has no other interpreter.
 """
 
 import argparse
 import json
-import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Sequence, Tuple
 
-from extract import DriftError
+from extract import DriftError, variant_name
 from lift_envelope import LIFTED_ROOT
 
 #: The edition the crate is built with. rustfmt needs telling, because it is
 #: invoked directly rather than through cargo.
 EDITION = "2021"
 
-#: Splits a wire discriminator into the words a Rust variant name is built from.
-#: ``server.live_handoff`` becomes ``ServerLiveHandoff``. This reproduces the
-#: transform typify applies, and is checked against typify's own output every
-#: run by the fact that the emitted match has to compile.
-WORD_BOUNDARY = re.compile(r"[^0-9A-Za-z]+")
-
 
 class Unsatisfiable(Exception):
     """No minimal instance of this sub-schema exists down this branch."""
-
-
-def variant_name(discriminator: str) -> str:
-    """Derive the Rust variant name for one method discriminator."""
-    words = [word for word in WORD_BOUNDARY.split(discriminator) if word]
-    if not words:
-        raise DriftError(f"the method {discriminator!r} has no name characters.")
-    return "".join(word[:1].upper() + word[1:] for word in words)
 
 
 def minimal_instance(schema: Any, defs: Dict[str, Any], stack: Tuple[str, ...] = ()) -> Any:
@@ -172,6 +175,87 @@ def _reject_duplicates(cases: Sequence[Tuple[str, str, str]]) -> None:
                     f"The sweep cannot tell them apart, and neither can serde."
                 )
             seen[case[column]] = case[0]
+
+
+def collect_result_cases(
+    document: Dict[str, Any],
+    named_branches: Sequence[Tuple[str, str, Dict[str, Any]]],
+) -> List[Tuple[str, str, str, str, str, bool]]:
+    """Return one row per response variant.
+
+    A row is ``(discriminator, union variant, own type, fixture, a fixture
+    tagged for the next variant, is a unit variant)``.
+
+    *named_branches* arrives as ``(discriminator, type name, branch)``, already
+    validated and named by ``split_results``. Taking it as an argument rather
+    than deriving it keeps one validator for the union's shape instead of two,
+    and keeps this module out of an import cycle with that stage.
+
+    The mistagged fixture is this variant's own minimal instance wearing the
+    *next* variant's tag. Every other field is present and correct, so the only
+    reason to refuse it is the tag itself. That is what makes the refusal a
+    test of the discriminator rather than of a missing field.
+    """
+    defs = document["$defs"]
+    if len(named_branches) < 2:
+        raise DriftError(
+            f"there are {len(named_branches)} response variants, and the sweep "
+            f"needs at least two: it tags each fixture with the next variant's "
+            f"discriminator to prove a type refuses an answer meant for "
+            f"another."
+        )
+
+    rows = []
+    for index, (discriminator, answer, branch) in enumerate(named_branches):
+        instance = minimal_instance(branch, defs)
+        next_discriminator = named_branches[(index + 1) % len(named_branches)][0]
+        mistagged = {**instance, "type": next_discriminator}
+        rows.append((
+            discriminator,
+            variant_name(discriminator),
+            answer,
+            json.dumps(instance),
+            json.dumps(mistagged),
+            # typify emits a unit variant where the tag is the only property,
+            # which is derived here from the schema rather than read off its
+            # output. A disagreement stops the sweep compiling.
+            list(instance) == ["type"],
+        ))
+    return rows
+
+
+def render_results(cases: Sequence[Tuple[str, str, str, str, str, bool]], header: str) -> str:
+    """Render the response sweep as a Rust integration test."""
+    rows = []
+    checks = []
+    imports = ["ResponseResult"]
+    for discriminator, variant, answer, fixture, mistagged, _ in cases:
+        for literal in (fixture, mistagged):
+            if '"#' in literal:
+                raise DriftError(
+                    f"the minimal result for {discriminator!r} contains '\"#', "
+                    f"which cannot sit inside a Rust raw string literal: {literal}"
+                )
+        rows.append(f'    ({json.dumps(discriminator)}, {json.dumps(variant)}, r#"{fixture}"#),')
+        checks.append(
+            f'    mirrors!(checked, {answer}, {json.dumps(discriminator)}, '
+            f'r#"{fixture}"#, r#"{mistagged}"#);'
+        )
+        imports.append(answer)
+
+    arms = []
+    for _, variant, _, _, _, unit in cases:
+        pattern = f"ResponseResult::{variant}" + ("" if unit else " { .. }")
+        arms.append(f"        {pattern} => {json.dumps(variant)},")
+
+    return RESULT_TEMPLATE.format(
+        header=header,
+        count=len(cases),
+        imports="\n".join(f"    {name}," for name in imports),
+        rows="\n".join(rows),
+        arms="\n".join(arms),
+        checks="\n".join(checks),
+    )
 
 
 def render(cases: Sequence[Tuple[str, str, str]], header: str) -> str:
@@ -285,6 +369,136 @@ fn a_method_with_empty_params_is_rejected_when_it_requires_some() {{
         let result: Result<Request, _> = serde_json::from_str(&json);
         assert!(result.is_err(), "{{method}} was accepted with empty params");
     }}
+}}
+'''
+
+
+RESULT_TEMPLATE = '''{header}
+//! Every result discriminator reaches its own named variant, and its own type.
+//!
+//! This file is the acceptance test for `codegen/split_results.py`, and the
+//! response side's answer to `tests/method_sweep.rs`. Read both before
+//! changing anything here.
+//!
+//! The rows, the match arms, and the type names below were derived from
+//! Herdr's schema, not from the generated Rust. `cargo-typify` derives the
+//! same names from the same schema by its own route, so the two only agree
+//! when both are right.
+//!
+//! Three things are held up, and the last two exist because one schema branch
+//! is now rendered twice: once as a variant of the union, and once as a type a
+//! caller can name on its own.
+//!
+//! 1. Each discriminator reaches its own union variant. The `match` is
+//!    exhaustive, so a variant Herdr adds, renames, or drops stops this file
+//!    compiling until the sweep is regenerated.
+//! 2. The two renderings agree. The same fixture deserializes through both,
+//!    and both serialize back to the same JSON.
+//! 3. A type refuses an answer tagged for another variant. That refusal is
+//!    what makes naming one type safe: `workspace.move` answers
+//!    `workspace_list`, so a caller who guesses the tag from the method name
+//!    has to be told, rather than handed a wrong parse.
+//!
+//! Note what is deliberately *not* asserted: a JSON round-trip on its own. An
+//! untagged enum round-trips perfectly while dispatching on shape instead of
+//! on the tag, which is the defect SCOPE.md section 3.3 records on the request
+//! side and section 3.5 records for two more encodings tried here.
+
+use herdr_plugin_kit::api::generated::{{
+{imports}
+}};
+
+/// One row per result: the wire discriminator, the union variant it must
+/// reach, and the smallest result object the schema accepts for it.
+///
+/// Smallest is on purpose. A fixture carrying optional fields would still pass
+/// if a required field had been generated as optional.
+const CASES: &[(&str, &str, &str)] = &[
+{rows}
+];
+
+/// Names the union variant a value actually holds.
+fn variant_name(result: &ResponseResult) -> &'static str {{
+    match result {{
+{arms}
+    }}
+}}
+
+#[test]
+fn every_result_discriminator_reaches_its_own_named_variant() {{
+    assert_eq!(CASES.len(), {count}, "the sweep must cover every result Herdr declares");
+
+    for (tag, expected, fixture) in CASES {{
+        let result: ResponseResult = serde_json::from_str(fixture)
+            .unwrap_or_else(|error| panic!("{{tag}} did not deserialize: {{error}}\\n{{fixture}}"));
+
+        assert_eq!(variant_name(&result), *expected, "{{tag}} reached the wrong variant");
+    }}
+}}
+
+#[test]
+fn a_result_type_this_build_does_not_know_is_rejected() {{
+    let result: Result<ResponseResult, _> =
+        serde_json::from_str(r#"{{"type":"invented_by_a_later_herdr"}}"#);
+
+    assert!(
+        result.is_err(),
+        "an invented result type was accepted, so the enum is untagged: {{result:?}}",
+    );
+}}
+
+#[test]
+fn a_result_carrying_no_type_at_all_is_rejected() {{
+    // An untagged enum accepts this by matching whichever variant needs
+    // nothing. A tagged one has nothing to dispatch on and says so.
+    let result: Result<ResponseResult, _> = serde_json::from_str("{{}}");
+
+    assert!(
+        result.is_err(),
+        "an untagged object was accepted as a result: {{result:?}}",
+    );
+}}
+
+/// Holds one variant's own type against the union arm it was split from.
+macro_rules! mirrors {{
+    ($checked:ident, $answer:ty, $tag:literal, $fixture:literal, $mistagged:literal) => {{{{
+        let union: ResponseResult = serde_json::from_str($fixture)
+            .unwrap_or_else(|error| panic!("{{}} is not a union value: {{}}", $tag, error));
+        let narrow: $answer = serde_json::from_str($fixture).unwrap_or_else(|error| {{
+            panic!("{{}} is not a {{}}: {{}}", $tag, stringify!($answer), error)
+        }});
+
+        assert_eq!(
+            serde_json::to_value(&union).unwrap(),
+            serde_json::to_value(&narrow).unwrap(),
+            "{{}} serialises differently through {{}} than through the union",
+            $tag,
+            stringify!($answer),
+        );
+
+        let refused: Result<$answer, _> = serde_json::from_str($mistagged);
+        assert!(
+            refused.is_err(),
+            "{{}} accepted {{}}, which is tagged for another variant",
+            stringify!($answer),
+            $mistagged,
+        );
+
+        $checked += 1;
+    }}}};
+}}
+
+#[test]
+fn every_result_type_mirrors_the_union_variant_it_was_split_from() {{
+    let mut checked = 0usize;
+
+{checks}
+
+    assert_eq!(
+        checked,
+        CASES.len(),
+        "every result in the sweep must have a type of its own",
+    );
 }}
 '''
 

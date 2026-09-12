@@ -49,9 +49,28 @@ ROOT_ONLY_KEYS = ("$schema", "title")
 #: The reference style every sub-schema uses for its own definitions.
 OWN_REF = re.compile(r"^#/schemas/(?P<schema>[A-Za-z_][A-Za-z0-9_]*)/\$defs/(?P<name>.+)$")
 
+#: Splits a wire discriminator into the words a Rust name is built from.
+#: ``server.live_handoff`` becomes ``ServerLiveHandoff``.
+WORD_BOUNDARY = re.compile(r"[^0-9A-Za-z]+")
+
 
 class DriftError(Exception):
     """The published schema no longer has the shape this pipeline was built for."""
+
+
+def variant_name(discriminator: str) -> str:
+    """Derive the Rust variant name for one wire discriminator.
+
+    It lives here, in the module every other stage already imports, because
+    three of them need it: the request sweep, the response sweep, and the stage
+    that names one type per response variant. It reproduces the transform
+    typify applies, and every run checks it against typify's own output by the
+    fact that the emitted Rust has to compile.
+    """
+    words = [word for word in WORD_BOUNDARY.split(discriminator) if word]
+    if not words:
+        raise DriftError(f"the method {discriminator!r} has no name characters.")
+    return "".join(word[:1].upper() + word[1:] for word in words)
 
 
 def iter_refs(node: Any) -> Iterator[str]:

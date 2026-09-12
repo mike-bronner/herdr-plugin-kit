@@ -13,6 +13,7 @@ No network, and no dependency beyond the standard library. Run with::
 Python 3.9 is the floor. This machine has no other interpreter.
 """
 
+import copy
 import json
 import tempfile
 import unittest
@@ -21,13 +22,15 @@ from pathlib import Path
 from emit_sweep import (
     Unsatisfiable,
     collect_cases,
+    collect_result_cases,
     minimal_instance,
     render,
-    variant_name,
+    render_results,
     write_rust,
 )
-from extract import DriftError, extract
+from extract import DriftError, extract, variant_name
 from lift_envelope import LIFTED_ROOT, REQUEST_ROOT, lift
+from split_results import RESULT_ROOT, impls, split
 
 
 def envelope(**schemas):
@@ -386,6 +389,222 @@ class SweepCases(unittest.TestCase):
         with self.assertRaises(DriftError) as caught:
             collect_cases(document)
         self.assertIn("discriminator", str(caught.exception))
+
+
+def result_branch(discriminator, properties=None, required=None):
+    """One branch of the response union, shaped the way Herdr writes them."""
+    declared = {"type": {"const": discriminator, "type": "string"}}
+    declared.update(properties or {})
+    return {
+        "type": "object",
+        "properties": declared,
+        "required": list(required) if required is not None else list(declared),
+    }
+
+
+def result_document(branches=None, extra_defs=None):
+    """A lifted document carrying a response union."""
+    defs = {
+        RESULT_ROOT: {
+            "oneOf": branches if branches is not None else [
+                result_branch("pong", {"version": {"type": "string"}}),
+                result_branch("ok"),
+            ]
+        }
+    }
+    defs.update(extra_defs or {})
+    return {"$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$ref": "#/$defs/" + RESULT_ROOT, "$defs": defs}
+
+
+class SplitGuards(unittest.TestCase):
+    """One type per response variant, and the union left exactly as it was."""
+
+    def test_each_branch_gets_a_definition_of_its_own(self):
+        split_document, named = split(result_document())
+
+        self.assertEqual(named[0][:2], ("pong", "PongAnswer"))
+        self.assertEqual(named[1][:2], ("ok", "OkAnswer"))
+        self.assertIn("PongAnswer", split_document["$defs"])
+        self.assertIn("OkAnswer", split_document["$defs"])
+
+    def test_the_union_is_left_exactly_as_it_was(self):
+        # 🔑 The whole design rests on this. The union is copied, never moved,
+        # so the generated enum comes out of typify byte-identical and nothing
+        # that matches it today has to move.
+        document = result_document()
+        before = copy.deepcopy(document)
+
+        split_document, _ = split(document)
+
+        self.assertEqual(document, before, "split mutated the document it was given")
+        self.assertEqual(split_document["$defs"][RESULT_ROOT], before["$defs"][RESULT_ROOT])
+
+    def test_the_injected_copy_validates_its_tag(self):
+        # A `const` generates an unvalidated String field, and a single-valued
+        # `enum` generates a one-variant Rust enum. Only the second refuses an
+        # answer meant for another variant.
+        split_document, _ = split(result_document())
+        tag = split_document["$defs"]["PongAnswer"]["properties"]["type"]
+
+        self.assertEqual(tag, {"type": "string", "enum": ["pong"]})
+        self.assertNotIn("const", tag)
+
+    def test_other_keys_on_the_tag_survive_the_rewrite(self):
+        branch = result_branch("pong")
+        branch["properties"]["type"]["description"] = "what this answer is"
+        split_document, _ = split(result_document(branches=[branch, result_branch("ok")]))
+
+        self.assertEqual(
+            split_document["$defs"]["PongAnswer"]["properties"]["type"]["description"],
+            "what this answer is",
+        )
+
+    def test_a_missing_response_root_stops_the_pipeline(self):
+        document = result_document()
+        del document["$defs"][RESULT_ROOT]
+        with self.assertRaises(DriftError) as caught:
+            split(document)
+        self.assertIn(RESULT_ROOT, str(caught.exception))
+
+    def test_a_response_root_without_a_choice_of_results_stops_the_pipeline(self):
+        document = result_document()
+        document["$defs"][RESULT_ROOT] = {"type": "object"}
+        with self.assertRaises(DriftError) as caught:
+            split(document)
+        self.assertIn("'oneOf'", str(caught.exception))
+
+    def test_a_union_with_no_branches_stops_the_pipeline(self):
+        with self.assertRaises(DriftError) as caught:
+            split(result_document(branches=[]))
+        self.assertIn("no branches", str(caught.exception))
+
+    def test_a_branch_with_no_discriminator_stops_the_pipeline(self):
+        branch = result_branch("pong")
+        del branch["properties"]["type"]["const"]
+        with self.assertRaises(DriftError) as caught:
+            split(result_document(branches=[branch]))
+        self.assertIn("discriminator", str(caught.exception))
+
+    def test_a_branch_that_does_not_require_its_tag_stops_the_pipeline(self):
+        # An optional tag means an answer can arrive with no discriminator at
+        # all, which no per-variant type could refuse.
+        branch = result_branch("pong", required=[])
+        with self.assertRaises(DriftError) as caught:
+            split(result_document(branches=[branch]))
+        self.assertIn("without a discriminator", str(caught.exception))
+
+    def test_a_type_name_the_schema_already_uses_stops_the_pipeline(self):
+        # Herdr names ten payload types `*Result` today. The day it names one
+        # `PongAnswer`, this stage must not quietly replace it.
+        document = result_document(extra_defs={"PongAnswer": {"type": "string"}})
+        with self.assertRaises(DriftError) as caught:
+            split(document)
+        self.assertIn("PongAnswer", str(caught.exception))
+        self.assertIn("already defines", str(caught.exception))
+
+    def test_two_variants_sharing_a_derived_name_stop_the_pipeline(self):
+        document = result_document(branches=[result_branch("a.b"), result_branch("a_b")])
+        with self.assertRaises(DriftError) as caught:
+            split(document)
+        self.assertIn("type name", str(caught.exception))
+
+    def test_two_variants_sharing_a_discriminator_stop_the_pipeline(self):
+        document = result_document(branches=[result_branch("ok"), result_branch("ok")])
+        with self.assertRaises(DriftError) as caught:
+            split(document)
+        self.assertIn("discriminator", str(caught.exception))
+
+    def test_the_union_stays_callable_alongside_its_variants(self):
+        _, named = split(result_document())
+        rendered = impls(named, trait="Trait")
+
+        self.assertIn("impl Trait for ResponseResult {}", rendered)
+        self.assertIn("impl Trait for PongAnswer {}", rendered)
+        self.assertIn("impl Trait for OkAnswer {}", rendered)
+
+
+class ResultSweepCases(unittest.TestCase):
+    def test_each_branch_becomes_one_row(self):
+        document = result_document()
+        _, named = split(document)
+
+        cases = collect_result_cases(document, named)
+
+        self.assertEqual(cases[0][:3], ("pong", "Pong", "PongAnswer"))
+        self.assertEqual(json.loads(cases[0][3]), {"type": "pong", "version": ""})
+        self.assertFalse(cases[0][5], "a branch with fields is not a unit variant")
+
+    def test_a_branch_carrying_nothing_but_its_tag_is_a_unit_variant(self):
+        # typify emits a unit variant for these, and the sweep's match arm has
+        # to be written without a field pattern or it will not compile.
+        document = result_document()
+        _, named = split(document)
+
+        cases = collect_result_cases(document, named)
+
+        self.assertTrue(cases[1][5], "a tag-only branch is a unit variant")
+
+    def test_the_mistagged_fixture_wears_the_next_variants_tag(self):
+        # Every other field stays correct, so the only reason to refuse it is
+        # the tag. That is what makes the refusal a test of the discriminator.
+        document = result_document()
+        _, named = split(document)
+
+        cases = collect_result_cases(document, named)
+
+        self.assertEqual(json.loads(cases[0][4]), {"type": "ok", "version": ""})
+        # The last row wraps round to the first, so every row has one.
+        self.assertEqual(json.loads(cases[1][4]), {"type": "pong"})
+
+    def test_a_union_of_one_stops_the_pipeline(self):
+        document = result_document(branches=[result_branch("ok")])
+        _, named = split(document)
+
+        with self.assertRaises(DriftError) as caught:
+            collect_result_cases(document, named)
+        self.assertIn("at least two", str(caught.exception))
+
+
+class ResultRendering(unittest.TestCase):
+    def rendered(self):
+        document = result_document()
+        _, named = split(document)
+        return render_results(collect_result_cases(document, named), "// header")
+
+    def test_the_sweep_carries_a_row_an_arm_and_a_check_per_variant(self):
+        rendered = self.rendered()
+
+        self.assertIn('("pong", "Pong", r#"{"type": "pong", "version": ""}"#),', rendered)
+        self.assertIn('ResponseResult::Pong { .. } => "Pong",', rendered)
+        self.assertIn('mirrors!(checked, PongAnswer, "pong",', rendered)
+        self.assertIn("CASES.len(), 2", rendered)
+
+    def test_a_unit_variant_gets_a_pattern_with_no_fields(self):
+        # `ResponseResult::Ok { .. }` does not compile against a unit variant.
+        rendered = self.rendered()
+
+        self.assertIn('ResponseResult::Ok => "Ok",', rendered)
+        self.assertNotIn("ResponseResult::Ok { .. }", rendered)
+
+    def test_every_named_type_is_imported(self):
+        rendered = self.rendered()
+
+        self.assertIn("    ResponseResult,", rendered)
+        self.assertIn("    PongAnswer,", rendered)
+        self.assertIn("    OkAnswer,", rendered)
+
+    def test_a_fixture_that_would_break_a_raw_string_stops_the_pipeline(self):
+        case = ("pong", "Pong", "PongAnswer", '{"x":"\\"#"}', "{}", False)
+        with self.assertRaises(DriftError) as caught:
+            render_results([case], "// header")
+        self.assertIn("raw string", str(caught.exception))
+
+    def test_a_mistagged_fixture_that_would_break_a_raw_string_stops_the_pipeline(self):
+        case = ("pong", "Pong", "PongAnswer", "{}", '{"x":"\\"#"}', False)
+        with self.assertRaises(DriftError) as caught:
+            render_results([case], "// header")
+        self.assertIn("raw string", str(caught.exception))
 
 
 class Rendering(unittest.TestCase):
