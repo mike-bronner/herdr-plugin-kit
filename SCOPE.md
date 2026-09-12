@@ -2148,6 +2148,40 @@ today; a bare tag push works too, and the release is created if it does not exis
 Anything else — a branch, a manual run on `main` — reaches the tag-form gate and is
 refused there.
 
+#### ✅ Established 2026-09-12: a target that cannot compile is already loud
+
+**Asked because it had to be established rather than assumed**, and the answer is that
+nothing needs closing. Read off the file, there is no path to a green release with
+nothing attached:
+
+| Step | What the file does |
+|---|---|
+| A leg cannot compile | `cargo build` fails, so that leg fails |
+| A leg compiles but produces no file | `upload-artifact` carries `if-no-files-found: error`, so that leg fails |
+| Any leg fails | `build` fails. ⚠️ `fail-fast: false` only stops the **others being cancelled**, so every failure is visible; it does not change the job's conclusion |
+| `build` fails | `publish` declares `needs: [guard, build]` and **no `if:`**, so it is skipped. The only `if:` in the whole file is the musl step's `runner.os == 'Linux'`, and there is no `always()` and no `continue-on-error` anywhere |
+| `publish` is skipped | `gh release create` lives **only** inside it, so nothing is created and nothing is uploaded |
+| `publish` somehow ran partial | The count compares files found against twice the matrix rows and exits **before** any upload |
+
+🔑 **So the worst case is a red run**, which is a problem somebody fixes, rather than a
+green release with no assets, which is one nobody notices until every install compiles.
+
+⚠️ **One shape resembles it and is not it.** Under the `release: created` trigger a
+*human* created the release before the workflow started, so a red run leaves a
+human-created release with no assets attached. The workflow cannot prevent that — the
+release existed before it ran — and its loudness is the red run beside it.
+
+🚨 **The worked example is live.** ✅ project-finder cannot compile for **either** Windows
+target: `src/layout.rs` uses `std::os::unix::fs::PermissionsExt` to test executability
+and `std::os::unix::process::CommandExt` with `setsid` to detach a child. Tagging it today
+would publish **zero** assets rather than four, and every install of that release would
+compile from source — which is exactly the silent fallback §9 exists to prevent, arriving
+loudly instead. 🔑 **Mike's decision: port `layout.rs` rather than narrow the matrix.**
+The six targets stay.
+
+⚠️ **This is read off the file and GitHub's documented `needs` and matrix semantics.
+Nothing here has been observed**, because the workflow has still never completed a run.
+
 🚧 **It has still never run.** Its first call failed at the resolution step that has now
 been replaced, and nothing has exercised the six build legs or the publish job. ⚠️ **The
 first migrated plugin release is what settles it**, and under download-by-default that

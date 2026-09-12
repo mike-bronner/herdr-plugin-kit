@@ -600,8 +600,16 @@ Nothing is published unless all six arrive. Five platforms published and a sixth
 is not a partial success — it is one platform silently compiling on every install, and
 nothing would say so.
 
+🚨 **If one target cannot compile, you get no release at all, and the run is red.** A
+failed leg fails the build job, the publish job needs it and is skipped, and nothing
+creates a release or uploads a file. That is deliberate: five platforms published and a
+sixth missing is one platform compiling on every install forever, with nothing to say so.
+✅ It is also live — project-finder cannot build for either Windows target today, so
+tagging it would publish zero assets rather than four.
+
 > 🚧 **It has never run.** Its first call failed at a resolution step that has since been
-> replaced, and nothing has exercised the build legs or the publish job.
+> replaced, and nothing has exercised the build legs or the publish job. The failure
+> chain above is read off the file rather than observed.
 
 ## Layout
 
