@@ -1796,9 +1796,12 @@ today; a bare tag push works too, and the release is created if it does not exis
 Anything else — a branch, a manual run on `main` — reaches the tag-form gate and is
 refused there.
 
-🚧 **Blocking for the kit's own 0.1.0.** Under download-by-default the first migrated
-plugin release must produce assets, so the release workflow has to be correct before that
-release, not after.
+🚧 **Still unrun, and still blocking — but the thing it blocks is the first migrated
+plugin release, not a kit version.** Under download-by-default that release must produce
+assets, so this workflow has to be correct before it rather than after. ⚠️ This read
+"blocking for the kit's own 0.1.0" until 2026-09-12, and 0.1.0 shipped without the
+workflow ever executing, which is how a gate written against a version number stops
+being a gate at all.
 
 ### 11.6 Build matrix — native runners, not cross-compilation
 
@@ -2009,6 +2012,13 @@ tag form when recent-spaces migrates (§13).
 - `just sync-api <tag>` refetches and regenerates. **A human reviews the diff before it
   lands.**
 - A protocol change is a minor bump at minimum.
+- ➕ **A source-breaking change is a minor bump at minimum**, added 2026-09-12. 🔑 **0.2.0
+  is the first test of this rule, and it arrived before the protocol case it was written
+  for.** `Client::call` became generic (§4.4), so every call site needs a turbofish that
+  0.1.0 did not. ⚠️ A patch bump would have been worse than merely understated: Cargo
+  treats 0.1.1 as compatible with 0.1.0, so a consumer on a version range would have
+  taken it silently and then failed to compile. **The number is what tells a consumer
+  whether to expect work**, and it is the only thing that tells them before they upgrade.
 - Promotion to crates.io stays open and needs no design change.
 
 ---

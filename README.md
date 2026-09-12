@@ -143,7 +143,7 @@ Pin to a tag:
 
 ```toml
 [dependencies]
-herdr-plugin-kit = { git = "https://github.com/mike-bronner/herdr-plugin-kit", tag = "0.1.0" }
+herdr-plugin-kit = { git = "https://github.com/mike-bronner/herdr-plugin-kit", tag = "0.2.0" }
 ```
 
 Build a request:
@@ -440,7 +440,7 @@ on:
   pull_request:
 jobs:
   conformance:
-    uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-ci.yml@0.1.0
+    uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-ci.yml@0.2.0
 ```
 
 There are no required inputs. Every fact it needs is already stated in the plugin's own
@@ -472,7 +472,7 @@ permissions:
   contents: write
 jobs:
   release:
-    uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-release.yml@0.1.0
+    uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-release.yml@0.2.0
     permissions:
       contents: write
 ```
