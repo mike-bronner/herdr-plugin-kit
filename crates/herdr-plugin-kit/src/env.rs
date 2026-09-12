@@ -50,6 +50,65 @@ pub const PLUGIN_EVENT_VAR: &str = "HERDR_PLUGIN_EVENT";
 /// Per-invocation, so it is not queryable from the API at any later point.
 pub const PLUGIN_EVENT_JSON_VAR: &str = "HERDR_PLUGIN_EVENT_JSON";
 
+/// The variables that name **this** plugin's own launch, and no other's.
+///
+/// 🚨 **Handing these to another plugin's binary makes it read this plugin as
+/// itself.** project-finder spawns agentic-panes-layout's `bin/agent-layout`,
+/// and a child that inherits [`PLUGIN_ROOT_VAR`] reads project-finder's
+/// checkout as its own manifest, its own config, and its own state directory.
+///
+/// ⚠️ **Named for the condition, not for what a caller does about it.** A
+/// plugin spawning its *own* helper wants every one of these kept: they are
+/// true for that child. They are false only for a binary belonging to some
+/// other plugin, which is the case that needs the filter.
+///
+/// ```
+/// use herdr_plugin_kit::env::{Environment, PER_PLUGIN_VARS};
+///
+/// let env = Environment::from_pairs(&[
+///     ("HERDR_SOCKET_PATH", "/run/herdr.sock"),
+///     ("HERDR_PLUGIN_ROOT", "/plugins/project-finder"),
+///     ("PATH", "/usr/bin"),
+/// ]);
+///
+/// let for_another_plugin: Vec<(&str, &str)> = env
+///     .vars()
+///     .filter(|(key, _)| !PER_PLUGIN_VARS.contains(key))
+///     .collect();
+///
+/// assert_eq!(
+///     for_another_plugin,
+///     [("HERDR_SOCKET_PATH", "/run/herdr.sock"), ("PATH", "/usr/bin")],
+/// );
+/// ```
+///
+/// # Why this is a constant rather than a method
+///
+/// 🚨 **Which variables belong to one plugin is a fact about Herdr's contract,
+/// and Herdr does not write it down.** The first hand-written filter got two
+/// of the three directory variables and missed [`PLUGIN_STATE_DIR_VAR`],
+/// which recent-spaces reads to place a lock file. The defect is not that one
+/// plugin had a bug; it is that the second person to write this filter had
+/// nothing to copy.
+///
+/// ⚠️ **Unverified, and the list does not rest on it:** nobody has confirmed
+/// that Herdr sets [`PLUGIN_STATE_DIR_VAR`] for a pane command at all, so that
+/// particular leak may be theoretical. The reason to write the list down is
+/// that nothing else states it.
+///
+/// 🔑 **The event pair is included on a fail-closed reading.** A child was not
+/// triggered by the event that triggered this process, so
+/// [`PLUGIN_EVENT_VAR`] and [`PLUGIN_EVENT_JSON_VAR`] are false for it in the
+/// same way the directories are. Stripping one a caller wanted costs them a
+/// line to put it back. Leaving one they did not want is silent.
+pub const PER_PLUGIN_VARS: &[&str] = &[
+    PLUGIN_ROOT_VAR,
+    PLUGIN_CONFIG_DIR_VAR,
+    PLUGIN_STATE_DIR_VAR,
+    PLUGIN_EVENT_VAR,
+    PLUGIN_EVENT_JSON_VAR,
+];
+
 /// A snapshot of the variables a process was launched with.
 ///
 /// A snapshot rather than a live view, and that is the point. Reading through
@@ -100,6 +159,41 @@ impl Environment {
         self.vars.get(key).map(String::as_str)
     }
 
+    /// Every variable, in key order, borrowed.
+    ///
+    /// 🔑 **The accessor exists so that a plugin can write its own policy**,
+    /// rather than the kit adjudicating one. A copy with one key overridden, a
+    /// copy with pairs filled underneath, and a filtered child environment are
+    /// three shapes two consumers genuinely disagree about, and each is a few
+    /// lines over this iterator. SCOPE.md §13's one-consumer bar is why the kit
+    /// ships the accessor and not the three.
+    ///
+    /// It yields `(&str, &str)` rather than the map's own `(&String, &String)`
+    /// so that it composes both ways without an intermediate:
+    ///
+    /// ```
+    /// use herdr_plugin_kit::env::Environment;
+    ///
+    /// let env = Environment::from_pairs(&[("B", "2"), ("A", "1")]);
+    ///
+    /// // Straight into a child process, which takes `AsRef<OsStr>` pairs.
+    /// let mut command = std::process::Command::new("true");
+    /// command.envs(env.vars().filter(|(key, _)| *key != "B"));
+    ///
+    /// // Or back into another Environment, through `from_pairs`.
+    /// let kept: Vec<(&str, &str)> = env.vars().filter(|(key, _)| *key != "B").collect();
+    /// assert_eq!(Environment::from_pairs(&kept).get("A"), Some("1"));
+    /// assert_eq!(Environment::from_pairs(&kept).get("B"), None);
+    /// ```
+    ///
+    /// ⚠️ Key order, not launch order. The snapshot is a `BTreeMap`, and no
+    /// caller has ever needed the order a process was handed its variables in.
+    pub fn vars(&self) -> impl Iterator<Item = (&str, &str)> + '_ {
+        self.vars
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+    }
+
     /// The user's home directory, and never a failure.
     ///
     /// `HOME` first, then `USERPROFILE`, then `/`. An empty value counts as
@@ -115,6 +209,46 @@ impl Environment {
             .or_else(|| self.get("USERPROFILE").filter(|value| !value.is_empty()))
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("/"))
+    }
+
+    /// Expands a leading `~` through [`Environment::home`].
+    ///
+    /// `~` answers the home directory, `~/rest` answers it joined with *rest*,
+    /// and **everything else is returned unchanged**. Promoted from two
+    /// independent implementations that agree exactly on those three rules:
+    /// project-finder's `expanduser` and agentic-panes-layout's `expand_home`.
+    ///
+    /// ```
+    /// use herdr_plugin_kit::env::Environment;
+    /// use std::path::PathBuf;
+    ///
+    /// let env = Environment::from_pairs(&[("HOME", "/home/mike")]);
+    ///
+    /// assert_eq!(env.expanduser("~"), PathBuf::from("/home/mike"));
+    /// assert_eq!(env.expanduser("~/.config"), PathBuf::from("/home/mike/.config"));
+    /// assert_eq!(env.expanduser("/etc/hosts"), PathBuf::from("/etc/hosts"));
+    /// ```
+    ///
+    /// ⚠️ **`~other` is not expanded**, and that is the promoted behaviour
+    /// rather than an omission: resolving another user's home needs the
+    /// password database, which this type deliberately cannot reach. A path
+    /// beginning `~other` comes back as it went in, which is wrong in a way a
+    /// caller can see, rather than resolved to this user's home, which is
+    /// wrong in a way they cannot.
+    ///
+    /// 🔑 **It answers a [`PathBuf`], where one donor answered a `String`
+    /// through `to_string_lossy`.** Two of that donor's three call sites wrap
+    /// the result in `PathBuf::from` immediately, and the lossy step cannot
+    /// round-trip a path that is not UTF-8. A caller that needs a string
+    /// converts at its own edge, where the loss is visible.
+    pub fn expanduser(&self, value: &str) -> PathBuf {
+        if value == "~" {
+            return self.home();
+        }
+        match value.strip_prefix("~/") {
+            Some(rest) => self.home().join(rest),
+            None => PathBuf::from(value),
+        }
     }
 }
 

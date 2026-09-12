@@ -671,14 +671,14 @@ refuses an answer carrying no `type` at all.
 
 Promoted from project-finder's `config.rs`, the two-thirds identical across all three.
 
-- `Environment` with `from_process`, `from_pairs`, `get`, `home`.
+- `Environment` with `from_process`, `from_pairs`, `get`, `home`, ➕ `vars` and
+  ➕ `expanduser`.
 - `parse_env_file` and `read_env_file`, preserving the existing malformed-line skip.
 - Named constants for the eight injected variables a plugin actually reads:
   `HERDR_SOCKET_PATH`, `HERDR_BIN_PATH`, `HERDR_CONFIG_PATH`, `HERDR_PLUGIN_ROOT`,
   `HERDR_PLUGIN_CONFIG_DIR`, `HERDR_PLUGIN_STATE_DIR`, `HERDR_PLUGIN_EVENT`,
-  `HERDR_PLUGIN_EVENT_JSON`.
-
-Plugin-specific config parsing stays in the plugin. Only the shared mechanism moves.
+  `HERDR_PLUGIN_EVENT_JSON`, ➕ and `PER_PLUGIN_VARS` naming the five of them that
+  belong to one plugin.
 
 ### 5.1 Amended 2026-09-10: why `env` exists, and what it holds
 
@@ -753,6 +753,78 @@ and `set_var` becomes unsafe.
 Full reasoning: `decisions/2026-09-10-herdr-plugin-kit-shared-crate.md`.
 
 ---
+
+### 5.2 ➕ Added 2026-09-12: what project-finder's migration needed
+
+Three additions, and the first is the one that matters structurally.
+
+#### `vars`, an accessor rather than three methods
+
+project-finder needs three things `Environment` could not express: a filter producing a
+child-process environment, a copy with one key overridden, and a copy with pairs merged
+underneath. 🔑 **All three were blocked by the same absence — nothing enumerated.** You
+cannot copy-with-changes a map you cannot walk.
+
+**Decided by Mike: add the accessor, not the three methods.** Each plugin writes its own
+policy as an extension trait over the kit's type. Two reasons, and the second is the
+stronger one:
+
+- §13's one-consumer bar stays honest. An accessor on a type the kit already owns is not
+  an abstraction with no consumer.
+- ⚠️ **It stops the kit adjudicating a shape two plugins genuinely disagree about.**
+  recent-spaces resolves its `.env` pairs per key; project-finder wants a copy with pairs
+  filled underneath. Neither should be imposed on the other, and a kit that picked one
+  would be choosing for a consumer rather than serving it.
+
+It yields `(&str, &str)` so that it composes both ways with no intermediate: straight
+into `Command::envs`, which takes `AsRef<OsStr>` pairs, and back through `from_pairs`,
+which takes borrowed pairs.
+
+#### `expanduser`, which meets the two-consumer bar without argument
+
+✅ Two independent implementations exist and agree exactly: project-finder's `expanduser`
+and agentic-panes-layout's `expand_home`. `~` answers home, `~/rest` answers home joined
+with *rest*, everything else comes back unchanged. §1.1's duplication, written twice.
+
+⚠️ **It answers a `PathBuf` where one donor answered a `String`** through
+`to_string_lossy`. ✅ Two of that donor's three call sites wrap the result in
+`PathBuf::from` immediately, and the lossy step cannot round-trip a path that is not
+UTF-8. A caller needing a string converts at its own edge, where the loss is visible.
+
+⚠️ **`~other` is not expanded**, which is the promoted behaviour rather than an omission.
+Resolving another user's home needs the password database, which this type deliberately
+cannot reach. Unchanged is wrong in a way a caller can see; silently resolving to *this*
+user's home is wrong in a way they cannot.
+
+#### `PER_PLUGIN_VARS`, which carries a correctness argument rather than a reuse count
+
+🚨 **project-finder builds a child environment for another plugin's binary** — it hands a
+picked workspace to agentic-panes-layout's `bin/agent-layout` — and strips the variables
+that would make the child read project-finder's checkout as its own. It strips
+`HERDR_PLUGIN_ROOT` and `HERDR_PLUGIN_CONFIG_DIR` and **misses
+`HERDR_PLUGIN_STATE_DIR`**, which recent-spaces reads to place a lock file.
+
+🔑 **The argument is not that there is a live bug.** It is that which launch variables
+belong to *this* plugin is a fact about Herdr's contract, Herdr writes it down nowhere,
+and the first person to answer it got two of three. The second person writing this filter
+gets it wrong too, for the same reason.
+
+⚠️ **Unverified, and the list does not rest on it**: nobody has confirmed that Herdr sets
+`HERDR_PLUGIN_STATE_DIR` for a pane command at all, so that particular leak may be
+theoretical.
+
+🔑 **Named for the condition, not for what a caller does with it.** `without_plugin_vars`
+was the donor's name and the donor flagged it as wrong: it says what it removes rather
+than why, and **a plugin spawning its own helper wants those variables kept**. They are
+true for that child.
+
+➕ **The event pair is included on a fail-closed reading.** A child was not triggered by
+the event that triggered this process, so `HERDR_PLUGIN_EVENT` and
+`HERDR_PLUGIN_EVENT_JSON` are false for it in the same way the directories are. Stripping
+one a caller wanted costs them a line to put it back; leaving one they did not want is
+silent.
+
+Plugin-specific config parsing stays in the plugin. Only the shared mechanism moves.
 
 ## 6. Module: `version`
 

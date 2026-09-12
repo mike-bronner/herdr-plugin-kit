@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use herdr_plugin_kit::env::{
-    parse_env_file, read_env_file, Environment, BIN_PATH_VAR, CONFIG_PATH_VAR,
+    parse_env_file, read_env_file, Environment, BIN_PATH_VAR, CONFIG_PATH_VAR, PER_PLUGIN_VARS,
     PLUGIN_CONFIG_DIR_VAR, PLUGIN_EVENT_JSON_VAR, PLUGIN_EVENT_VAR, PLUGIN_ROOT_VAR,
     PLUGIN_STATE_DIR_VAR, SOCKET_PATH_VAR,
 };
@@ -261,4 +261,149 @@ fn a_directory_where_a_file_was_expected_answers_nothing_rather_than_panicking()
     let path = dir.join("a-directory");
     std::fs::create_dir_all(&path).unwrap();
     assert_eq!(read_env_file(&path), vec![]);
+}
+
+// ------------------------------------------------------------------ walking
+
+#[test]
+fn every_variable_comes_back_borrowed_and_in_key_order() {
+    let env = Environment::from_pairs(&[("B", "2"), ("A", "1"), ("C", "3")]);
+
+    let seen: Vec<(&str, &str)> = env.vars().collect();
+
+    assert_eq!(seen, [("A", "1"), ("B", "2"), ("C", "3")]);
+}
+
+#[test]
+fn an_empty_environment_walks_to_nothing() {
+    assert_eq!(Environment::from_pairs(&[]).vars().count(), 0);
+}
+
+#[test]
+fn a_value_set_to_nothing_is_walked_like_any_other() {
+    // 🔑 The same distinction `get` makes. A filter that dropped empty values
+    // would decide for the caller which of "set to nothing" and "not set"
+    // matters, which is the one thing this type refuses to do.
+    let env = Environment::from_pairs(&[(PLUGIN_ROOT_VAR, "")]);
+
+    assert_eq!(env.vars().collect::<Vec<_>>(), [(PLUGIN_ROOT_VAR, "")]);
+}
+
+#[test]
+fn what_is_walked_out_can_be_built_straight_back_in() {
+    // The composition the accessor exists for: `from_pairs` takes borrowed
+    // pairs, so a caller needs no intermediate beyond the collect.
+    let env = Environment::from_pairs(&[("A", "1"), (PLUGIN_ROOT_VAR, "/plugins/finder")]);
+
+    let kept: Vec<(&str, &str)> = env
+        .vars()
+        .filter(|(key, _)| !PER_PLUGIN_VARS.contains(key))
+        .collect();
+    let child = Environment::from_pairs(&kept);
+
+    assert_eq!(child.get("A"), Some("1"));
+    assert_eq!(child.get(PLUGIN_ROOT_VAR), None);
+}
+
+// ------------------------------------------------- the per-plugin variables
+
+#[test]
+fn the_per_plugin_variables_are_every_variable_that_names_one_plugin() {
+    // 🚨 The list nothing in Herdr writes down, which is the whole reason it
+    // is written down here. The first hand-written filter had three of these
+    // and missed HERDR_PLUGIN_STATE_DIR.
+    assert_eq!(
+        PER_PLUGIN_VARS,
+        [
+            PLUGIN_ROOT_VAR,
+            PLUGIN_CONFIG_DIR_VAR,
+            PLUGIN_STATE_DIR_VAR,
+            PLUGIN_EVENT_VAR,
+            PLUGIN_EVENT_JSON_VAR,
+        ],
+    );
+}
+
+#[test]
+fn every_per_plugin_variable_is_named_for_a_plugin_rather_than_enumerated() {
+    // A membership rule rather than a list, because a list goes stale by
+    // omission and a rule cannot. Herdr's per-plugin variables all carry the
+    // prefix; the shared three do not.
+    for name in PER_PLUGIN_VARS {
+        assert!(name.starts_with("HERDR_PLUGIN_"), "{}", name);
+    }
+}
+
+#[test]
+fn the_variables_shared_by_every_plugin_are_not_in_the_list() {
+    // ⚠️ Stripping these would leave a child unable to reach the API at all,
+    // which is a louder failure than the one the list exists to prevent, but a
+    // failure the caller did not ask for either.
+    for shared in [SOCKET_PATH_VAR, BIN_PATH_VAR, CONFIG_PATH_VAR] {
+        assert!(!PER_PLUGIN_VARS.contains(&shared), "{}", shared);
+    }
+}
+
+// ---------------------------------------------------------------- expanding
+
+#[test]
+fn a_bare_tilde_is_the_home_directory() {
+    let env = Environment::from_pairs(&[("HOME", "/home/mike")]);
+
+    assert_eq!(env.expanduser("~"), PathBuf::from("/home/mike"));
+}
+
+#[test]
+fn a_tilde_slash_path_is_joined_onto_home() {
+    let env = Environment::from_pairs(&[("HOME", "/home/mike")]);
+
+    assert_eq!(
+        env.expanduser("~/.config/herdr"),
+        PathBuf::from("/home/mike/.config/herdr")
+    );
+}
+
+#[test]
+fn a_tilde_naming_another_user_is_left_exactly_as_it_came() {
+    // 🚨 The edge neither donor handles, and the answer is deliberate:
+    // resolving another user's home needs the password database, which this
+    // type cannot reach. Returning it unchanged is wrong in a way the caller
+    // can see. Expanding it to *this* user's home would not be.
+    let env = Environment::from_pairs(&[("HOME", "/home/mike")]);
+
+    assert_eq!(env.expanduser("~root/.ssh"), PathBuf::from("~root/.ssh"));
+    assert_eq!(env.expanduser("~root"), PathBuf::from("~root"));
+}
+
+#[test]
+fn a_tilde_anywhere_but_the_front_is_not_a_home_directory() {
+    let env = Environment::from_pairs(&[("HOME", "/home/mike")]);
+
+    assert_eq!(env.expanduser("/etc/~/x"), PathBuf::from("/etc/~/x"));
+    assert_eq!(env.expanduser("x~/y"), PathBuf::from("x~/y"));
+}
+
+#[test]
+fn an_absolute_or_relative_path_survives_untouched() {
+    let env = Environment::from_pairs(&[("HOME", "/home/mike")]);
+
+    assert_eq!(env.expanduser("/etc/hosts"), PathBuf::from("/etc/hosts"));
+    assert_eq!(
+        env.expanduser("projects/one"),
+        PathBuf::from("projects/one")
+    );
+    assert_eq!(env.expanduser(""), PathBuf::from(""));
+}
+
+#[test]
+fn expansion_follows_the_same_home_that_everything_else_does() {
+    // Including the fallback. An environment naming no home answers `/`, so
+    // `~/x` is `/x` rather than a relative path, which is the reason `home`
+    // treats an empty value as absent.
+    let nowhere = Environment::from_pairs(&[]);
+    let empty = Environment::from_pairs(&[("HOME", "")]);
+
+    assert_eq!(nowhere.expanduser("~/x"), PathBuf::from("/x"));
+    assert_eq!(empty.expanduser("~/x"), PathBuf::from("/x"));
+    assert_eq!(empty.expanduser("~"), empty.home());
 }
