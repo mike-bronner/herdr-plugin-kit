@@ -1784,11 +1784,55 @@ So one Python module holds the target table, the asset naming and the version ru
 has with `codegen/` and `templates/`, applied to CI: **a recipe that grows logic of its
 own becomes a path nobody can test**.
 
-⚠️ **A called workflow gets the kit by checking it out at `github.job_workflow_sha`**,
-which is the commit of the workflow file itself. So the kit that checks a plugin is
-exactly the kit version that plugin pinned, with no second ref to keep in step. It fails
-closed: a `job_workflow_sha` that does not name a commit stops the job, because an empty
-ref would check out the default branch and quietly check the plugin against the wrong kit.
+⚠️ **A called workflow gets the kit by checking it out at whatever the call context says
+this file was resolved at.** So the kit that checks a plugin is exactly the kit version
+that plugin pinned, with no second ref to keep in step. An input naming the ref again
+would be that second pin.
+
+#### 🚨 Corrected 2026-09-12: the documented value was empty on the first real call
+
+✅ **Measured, not guessed.** recent-spaces run 34708262498, push to `main`, caller pinned
+`@0.3.0`. `Conformance` failed in three seconds and `build` was skipped behind it.
+**`github.job_workflow_sha` was empty.** The runner's own log resolved the file to
+`…/plugin-ci.yml@refs/tags/0.3.0 (abb5f038…)`, and that sha is the **annotated tag
+object** rather than the commit — but the guard's arithmetic rules that out as the cause,
+because a tag object sha is still 40 hex characters and would have been accepted.
+
+🔑 **Failing closed is why that cost a red build rather than a wrong answer**, which is
+this clause working exactly as written. The defect is that it failed closed on **the only
+call pattern the README documents**: §12.3 says a consumer pins a tag, and it refused
+every one of them.
+
+So the resolution now takes the first of these that answers:
+
+| Candidate | Why it is safe |
+|---|---|
+| `github.job_workflow_sha` | A commit. Needs no further check: a sha from another repository does not resolve in this one |
+| `github.job_workflow_ref`, then `github.workflow_ref` | Only when the path names **this** repository. Everything after the last `@` is what the runner already resolved, so it takes a tag, a branch or a sha without caring which |
+
+🚨 **The repository check is the whole safety of the second row, and it is not
+decoration.** A wrong *sha* fails closed by itself. A wrong *ref name* does not:
+`refs/heads/main` exists in this kit too, so taking a caller's own ref would check the
+plugin against the kit's default branch and **pass**. That is the silent wrong-kit
+failure this whole clause exists to prevent, arriving through the fix for it.
+
+⚠️ **Every candidate is printed on every run, not only on a refusal.** The next time this
+breaks it will be a different context being empty, and a guard that speaks only when it
+refuses teaches nothing about the run that worked. One red run has already cost a round
+trip for want of exactly that.
+
+#### The exception to "nothing that can be wrong lives in YAML", and how it is tested
+
+🔑 **This block cannot live in `tools/` like everything else, because it decides which
+`tools/` to check out.** It is the only logic here that ships untested by construction —
+so the test comes to it. `tools/test_workflow_ref.py` extracts the block from **both**
+workflows, proves the two copies are byte-identical, and runs the real text under `sh`
+against fabricated contexts: an empty one, a commit, a ref path this kit owns, a ref path
+somebody else owns, and a repository whose name merely starts the same.
+
+✅ That is `tools/test_plugin_gate.py`'s arrangement for the asset-naming line, applied
+here: execute the shipped text rather than a copy, because a copy agrees with itself
+while both sides are wrong together.
 
 ### 11.3 `plugin-ci.yml`
 
@@ -1888,7 +1932,11 @@ Anything else — a branch, a manual run on `main` — reaches the tag-form gate
 refused there.
 
 🚧 **Still unrun, and still blocking — but the thing it blocks is the first migrated
-plugin release, not a kit version.** Under download-by-default that release must produce
+plugin release, not a kit version.** ➕ **2026-09-12: `plugin-ci.yml` has now run and
+failed**, at the step both workflows share (§11.2.1). `plugin-release.yml` carries the
+identical step, so it would have refused a release the same way. recent-spaces correctly
+declined to create one, which is the only reason no plugin version was burned on a
+release with no assets. Under download-by-default that release must produce
 assets, so this workflow has to be correct before it rather than after. ⚠️ This read
 "blocking for the kit's own 0.1.0" until 2026-09-12, and 0.1.0 shipped without the
 workflow ever executing, which is how a gate written against a version number stops
@@ -2113,6 +2161,13 @@ tag form when recent-spaces migrates (§13).
   ⚠️ **The second test arrived the same day**: 0.3.0 widens every `ratio` from `f32` to
   `f64` (§3.2.1), which breaks any consumer that bound one to an `f32`. Two source-
   breaking changes in one day, on a rule with no exercise before either.
+- ➕ **A consumer may pin any kind of tag**, added 2026-09-12. All three of this kit's
+  releases are annotated tags, and the reusable workflows resolve a ref rather than a tag
+  object, so lightweight and annotated are both taken. ⚠️ **If that ever stops being
+  true, it belongs here rather than in whoever happens to remember it.** A workflow that
+  serves one kind of tag is a trap for whoever tags the next release without knowing
+  which kind they made, and §11.2.1 records that the tag *kind* was ruled out as the
+  cause of the first failure rather than confirmed as harmless.
 - Promotion to crates.io stays open and needs no design change.
 
 ---

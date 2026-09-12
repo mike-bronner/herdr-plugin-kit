@@ -78,26 +78,93 @@ jobs:
           path: plugin
           ref: ${{ steps.tag.outputs.tag }}
 
+      # The same resolution as plugin-ci.yml, and the same reason. A release
+      # published by the wrong kit is worse than a check run by one, because
+      # the assets outlive the run.
       - name: Establish which kit this is
         id: kit
+        env:
+          # 🔑 Names the same repository as the checkout below, and both stay
+          # literal: the line that decides what code runs should say so
+          # without a lookup. tools/test_workflow_ref.py holds them together.
+          KIT_REPO: mike-bronner/herdr-plugin-kit
+          JOB_WORKFLOW_SHA: ${{ github.job_workflow_sha }}
+          JOB_WORKFLOW_REF: ${{ github.job_workflow_ref }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          EVENT_SHA: ${{ github.sha }}
+          EVENT_REF: ${{ github.ref }}
         run: |
-          sha='${{ github.job_workflow_sha }}'
-          case "$sha" in
-            [0-9a-f]*) [ ${#sha} -eq 40 ] || sha='' ;;
-            *) sha='' ;;
+          # ---8<--- kit-ref resolution. Identical in plugin-ci.yml and
+          # plugin-release.yml, and tools/test_workflow_ref.py runs this exact text and
+          # fails if the two copies differ. It cannot live in tools/ like every other
+          # piece of logic here, because it is what decides which tools/ to check out.
+          #
+          # Every candidate, every run. 🚨 The value documented to answer this was
+          # empty on the first real call (recent-spaces run 34708262498, 2026-09-12),
+          # and a guard that speaks only when it refuses teaches nothing about the run
+          # that worked.
+          echo "github.job_workflow_sha = ${JOB_WORKFLOW_SHA:-<empty>}"
+          echo "github.job_workflow_ref = ${JOB_WORKFLOW_REF:-<empty>}"
+          echo "github.workflow_ref     = ${WORKFLOW_REF:-<empty>}"
+          echo "github.workflow_sha     = ${WORKFLOW_SHA:-<empty>}"
+          echo "github.sha              = ${EVENT_SHA:-<empty>}"
+          echo "github.ref              = ${EVENT_REF:-<empty>}"
+
+          resolved=''
+          answered_by=''
+
+          # 1. A commit of this file. It needs no further checking: a sha from some
+          #    other repository fails closed by itself, because it does not resolve in
+          #    this one.
+          case "$JOB_WORKFLOW_SHA" in
+            [0-9a-f]*)
+              if [ ${#JOB_WORKFLOW_SHA} -eq 40 ]; then
+                resolved="$JOB_WORKFLOW_SHA"
+                answered_by='github.job_workflow_sha'
+              fi
+              ;;
           esac
-          if [ -z "$sha" ]; then
-            echo "job_workflow_sha did not name a commit, so the kit version" \
-                 "publishing this release could not be established" >&2
+
+          # 2. A ref path, and only one this kit owns. Everything after the last '@' is
+          #    what the runner already resolved this file at, so it takes a tag, a
+          #    branch or a sha without caring which.
+          #
+          # 🚨 The repository check is the whole safety of this branch, and the
+          #    asymmetry behind it is not obvious from the code: **a wrong sha fails
+          #    closed by itself, because it does not resolve here. A wrong ref name
+          #    does not, because a common branch name resolves everywhere.** So
+          #    taking a caller's own ref would check the plugin against this kit's
+          #    default branch and *pass*, which is the silent wrong-kit failure
+          #    §11.2.1 exists to prevent, arriving through the fix for it.
+          for candidate in "$JOB_WORKFLOW_REF" "$WORKFLOW_REF"; do
+            [ -z "$resolved" ] || break
+            case "$candidate" in
+              "$KIT_REPO"/*@*)
+                resolved="${candidate##*@}"
+                answered_by='a ref path this kit owns'
+                ;;
+            esac
+          done
+
+          if [ -z "$resolved" ]; then
+            echo "no context value named the kit to check this plugin against." >&2
+            echo "One of the values above has to carry either a 40-character commit" >&2
+            echo "of ${KIT_REPO}, or a ref path beginning ${KIT_REPO}/." >&2
+            echo "Nothing is guessed here: an unresolved ref would check out the" >&2
+            echo "default branch and check this plugin against the wrong kit." >&2
             exit 1
           fi
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+          echo "the kit is ${resolved}, from ${answered_by}"
+          echo "ref=${resolved}" >> "$GITHUB_OUTPUT"
+          # --->8--- end kit-ref resolution
 
       - name: Take the kit the caller pinned
         uses: actions/checkout@v7
         with:
           repository: mike-bronner/herdr-plugin-kit
-          ref: ${{ steps.kit.outputs.sha }}
+          ref: ${{ steps.kit.outputs.ref }}
           path: kit
 
       # 🚨 One tag form, never both. Mike's plugin tags are the bare semantic

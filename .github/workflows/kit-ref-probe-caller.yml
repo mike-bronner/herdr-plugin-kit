@@ -1,0 +1,65 @@
+# Calls the probe at one ref form per run, so three runs answer three questions.
+#
+# 🚧 **Disposable**, with `kit-ref-probe.yml` and the two probe tags.
+#
+# ```sh
+# gh workflow run kit-ref-probe-caller.yml -f form=branch
+# ```
+#
+# 🔑 **One job per ref form, because `uses:` cannot take an expression.** A ref
+# in `uses:` is literal, so a single parameterised job is not expressible and
+# three gated jobs are the whole of the trick. `workflow_dispatch` is what makes
+# a re-run free: no commit, no push, no tag.
+#
+# **Run them in this order**, which is cheapest-signal-first:
+#
+# | Form | Separates |
+# |---|---|
+# | `branch` | "tags do not populate it" from "nothing populates it" |
+# | `lightweight` | an annotated tag from tags in general |
+# | `annotated` | nothing — it is the form all three releases take, and the one that has to work |
+#
+# ⚠️ **If a lightweight tag works and an annotated one does not, do not fix it
+# by changing how this kit tags.** §12.3 says a consumer pins a tag and says
+# nothing about which kind, so a workflow that serves one kind is a trap for
+# whoever tags the next release without knowing which they made. Fix the
+# workflow, or write the restriction into §12.3 where somebody will read it.
+#
+# The two probe tags have to exist before their runs, on a commit that carries
+# `kit-ref-probe.yml`:
+#
+# ```sh
+# git tag ci-probe-lightweight <commit>          # lightweight
+# git tag -a -m probe ci-probe-annotated <commit>  # annotated
+# ```
+
+name: Kit ref probe caller
+
+on:
+  workflow_dispatch:
+    inputs:
+      form:
+        description: Which ref form to call the probe at
+        type: choice
+        required: true
+        default: branch
+        options:
+          - branch
+          - lightweight
+          - annotated
+
+jobs:
+  # 🚨 The full cross-repository path on purpose, never `./.github/workflows/…`.
+  # The local form is a different call shape, so proving something about it
+  # would prove something about a path no consumer takes.
+  branch:
+    if: inputs.form == 'branch'
+    uses: mike-bronner/herdr-plugin-kit/.github/workflows/kit-ref-probe.yml@main
+
+  lightweight:
+    if: inputs.form == 'lightweight'
+    uses: mike-bronner/herdr-plugin-kit/.github/workflows/kit-ref-probe.yml@ci-probe-lightweight
+
+  annotated:
+    if: inputs.form == 'annotated'
+    uses: mike-bronner/herdr-plugin-kit/.github/workflows/kit-ref-probe.yml@ci-probe-annotated

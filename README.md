@@ -531,10 +531,16 @@ just test          # or run the five entry points the recipe wraps, directly
 just check         # formatting, lints, and every suite
 ```
 
-Five suites, because an untested guard is a claim rather than a check: the codegen
+Six suites, because an untested guard is a claim rather than a check: the codegen
 guards, the shell templates, the mutation harness's own tests, the plugin conformance
-gate, and the Rust suite. None needs a network, and none of the four Python ones needs
-anything beyond the standard library.
+gate, the kit-ref resolution, and the Rust suite. None needs a network, and none of the
+five Python ones needs anything beyond the standard library.
+
+The kit-ref suite is the odd one. Every other piece of CI logic lives in `tools/` because
+YAML cannot be run, and this one cannot: it decides which kit to check out, so it runs
+before there is a `tools/` to call. So the test goes to it — extracting the block from
+both reusable workflows, proving the two copies are identical, and running the real text
+against fabricated GitHub contexts.
 
 The conformance gate's suite runs both sides of every agreement it asserts. It extracts
 the release workflow's own asset-naming line and executes it, then asks the real shim
