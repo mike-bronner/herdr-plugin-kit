@@ -26,7 +26,8 @@ use herdr_plugin_kit::api::client::{
     DEFAULT_SOCKET,
 };
 use herdr_plugin_kit::api::generated::{
-    PaneListAnswer, PaneListParams, PingParams, RequestMethod, ResponseResult, GENERATED_PROTOCOL,
+    LayoutExportAnswer, LayoutExportParams, LayoutNode, PaneListAnswer, PaneListParams, PingParams,
+    RequestMethod, ResponseResult, GENERATED_PROTOCOL,
 };
 use herdr_plugin_kit::env::{Environment, SOCKET_PATH_VAR};
 
@@ -418,6 +419,63 @@ fn the_union_is_still_callable_for_a_caller_that_wants_any_answer() {
         .expect("the union accepts every result Herdr declares");
 
     assert!(matches!(any, ResponseResult::PaneList { ref panes } if panes.len() == 1));
+}
+
+#[test]
+fn a_ratio_survives_a_call_at_the_precision_the_server_sent_it() {
+    // 🚨 **Measured 2026-09-12 against a live Herdr 0.9.0**, and the first
+    // defect this client found by talking to a real server. Herdr's schema
+    // declares `format: float`, typify maps that to `f32` correctly, and an
+    // `f32` cannot hold what the server sends: a `session.snapshot` ratio of
+    // 0.69 came back as 0.6899999976158142, and 0.7 as 0.699999988079071.
+    //
+    // ⚠️ **0.69 is load-bearing, and a round number would pass against the
+    // defect.** Four of the five calls in that probe round-tripped clean
+    // because the pane sat on an exact 50/50 split, and 0.5 *is* representable
+    // in an f32. The schema-derived fixture in `tests/response_sweep.rs` misses
+    // this for the same reason: a fixture built from the schema inherits the
+    // schema's own blind spots.
+    //
+    // Nothing errors or warns when this regresses. A plugin that reads a
+    // layout and applies it back silently corrupts every ratio it touches.
+    let sent = json!({
+        "type": "layout_export",
+        "layout": {
+            "focused_pane_id": "p1",
+            "tab_id": "t1",
+            "workspace_id": "w1",
+            "zoomed": false,
+            "root": {
+                "type": "split",
+                "direction": "right",
+                "ratio": 0.69,
+                "first": {"type": "pane", "pane_id": "p1"},
+                "second": {"type": "pane", "pane_id": "p2"},
+            },
+        },
+    });
+    let answer = sent.clone();
+    let server = Server::answering(1, move |request| success(request, answer.clone()));
+
+    let exported: LayoutExportAnswer = server
+        .client()
+        .call(RequestMethod::LayoutExport(LayoutExportParams::default()))
+        .expect("a layout_export answer is a LayoutExportAnswer");
+
+    match exported.layout.root {
+        LayoutNode::Split { ratio, .. } => assert_eq!(ratio, 0.69),
+        ref other => panic!("the fixture is a split, and this is {:?}", other),
+    }
+
+    // 🔑 The discriminating half. Comparing the ratio alone would pass under an
+    // f32, because the literal would be inferred as one. Serialising the whole
+    // answer back is what shows the loss: an f32 widens to 0.6899999976158142
+    // on the way out, which is exactly what the live probe reported.
+    assert_eq!(
+        serde_json::to_value(&exported).expect("an answer serialises"),
+        sent,
+        "the answer did not survive the round trip at full precision",
+    );
 }
 
 #[test]

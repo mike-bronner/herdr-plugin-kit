@@ -28,7 +28,15 @@ from emit_sweep import (
     render_results,
     write_rust,
 )
-from extract import DriftError, extract, variant_name
+from extract import (  # noqa: E402
+    NARROW_FORMAT,
+    WIDE_FORMAT,
+    DriftError,
+    extract,
+    variant_name,
+    widen_floats,
+    widened_numbers,
+)
 from lift_envelope import LIFTED_ROOT, REQUEST_ROOT, lift
 from split_results import RESULT_ROOT, impls, split
 
@@ -165,6 +173,84 @@ class ExtractStructureGuards(unittest.TestCase):
         merged, _ = extract(document)
         target = merged["$ref"][len("#/$defs/"):]
         self.assertIn(target, merged["$defs"])
+
+
+class WideningFloats(unittest.TestCase):
+    """Guard 4: the one place the pipeline disagrees with the published schema.
+
+    🚨 typify maps `float` to `f32`, correctly, and an `f32` cannot hold what
+    the server sends. Measured 2026-09-12 against a live 0.9.0: a ratio of
+    `0.69` came back `0.6899999976158142`. Deserialization succeeds, so the
+    loss is silent.
+    """
+
+    def test_a_float_becomes_a_double(self):
+        schema = {"type": "number", "format": NARROW_FORMAT}
+        self.assertEqual(widen_floats(schema), 1)
+        self.assertEqual(schema["format"], WIDE_FORMAT)
+
+    def test_a_nullable_float_is_widened_too(self):
+        # PaneResizeParams.amount and PaneSplitParams.ratio are both nullable,
+        # so a rule that only matched a bare "number" would miss three of the
+        # eight sites Herdr declares.
+        schema = {"type": ["number", "null"], "format": NARROW_FORMAT}
+        self.assertEqual(widen_floats(schema), 1)
+        self.assertEqual(schema["format"], WIDE_FORMAT)
+
+    def test_it_reaches_every_depth(self):
+        schema = {"$defs": {"A": {"properties": {"r": {"type": "number", "format": NARROW_FORMAT}}},
+                            "B": {"oneOf": [{"type": "number", "format": NARROW_FORMAT}]}}}
+        self.assertEqual(widen_floats(schema), 2)
+        self.assertNotIn(NARROW_FORMAT, json.dumps(schema))
+
+    def test_no_other_format_is_touched(self):
+        # Herdr declares int32, uint, uint16, uint32 and uint64 as well, and
+        # every one of them is a correct claim about an integer.
+        schema = {"a": {"type": "integer", "format": "uint64"},
+                  "b": {"type": "integer", "format": "int32"}}
+        widen_floats({"c": {"type": "number", "format": NARROW_FORMAT}, **schema})
+        self.assertEqual(schema["a"]["format"], "uint64")
+        self.assertEqual(schema["b"]["format"], "int32")
+
+    def test_a_float_on_something_that_is_not_a_number_stops_the_pipeline(self):
+        # Widening is a claim about numeric precision and nothing else.
+        with self.assertRaises(DriftError) as caught:
+            widen_floats({"type": "string", "format": NARROW_FORMAT})
+        self.assertIn("rather than", str(caught.exception))
+
+    def test_the_envelope_the_caller_passed_is_not_widened(self):
+        # extract rebuilds the pool, so the rewrite lands on the copy. A caller
+        # holding the fetched document still sees what Herdr published.
+        document = envelope(
+            alpha=sub_schema("Alpha", properties={"r": {"type": "number", "format": NARROW_FORMAT}}),
+        )
+        merged, _ = extract(document)
+
+        self.assertEqual(
+            document["schemas"]["alpha"]["properties"]["r"]["format"], NARROW_FORMAT
+        )
+        self.assertEqual(merged["$defs"]["Alpha"]["properties"]["r"]["format"], WIDE_FORMAT)
+
+    def test_a_schema_with_no_fractional_number_at_all_stops_the_driver(self):
+        # A rewrite that matched nothing looks exactly like one that worked.
+        with self.assertRaises(DriftError) as caught:
+            widened_numbers({"type": "object"})
+        message = str(caught.exception)
+        self.assertIn("doing nothing", message)
+        # Whoever hits this needs to be told the good-news reading too.
+        self.assertIn("good news", message)
+        self.assertIn("delete the widening", message)
+
+    def test_a_surviving_float_stops_the_driver(self):
+        with self.assertRaises(DriftError) as caught:
+            widened_numbers({"a": {"type": "number", "format": NARROW_FORMAT},
+                             "b": {"type": "number", "format": WIDE_FORMAT}})
+        self.assertIn("did not reach them all", str(caught.exception))
+
+    def test_it_counts_what_it_found(self):
+        self.assertEqual(
+            widened_numbers({"a": {"format": WIDE_FORMAT}, "b": {"format": WIDE_FORMAT}}), 2
+        )
 
 
 def request_document(properties=None, required=None, branches=None, extra_defs=None):

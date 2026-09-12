@@ -38,7 +38,7 @@ from pathlib import Path
 from typing import List
 
 from emit_sweep import collect_cases, collect_result_cases, render, render_results, write_rust
-from extract import DriftError, extract
+from extract import DriftError, extract, widened_numbers
 from lift_envelope import lift
 from split_results import impls, split
 
@@ -177,7 +177,10 @@ def sync(tag: str) -> None:
 
     merged, roots = extract(envelope)
     merged_path.write_text(json.dumps(merged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(f"extract: {len(merged['$defs'])} types from {len(roots)} sub-schemas")
+    print(
+        f"extract: {len(merged['$defs'])} types from {len(roots)} sub-schemas, "
+        f"{widened_numbers(merged)} fractional numbers widened to double"
+    )
 
     lifted = lift(merged)
     lifted_path.write_text(json.dumps(lifted, indent=2, sort_keys=True) + "\n", encoding="utf-8")

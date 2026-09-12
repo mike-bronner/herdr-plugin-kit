@@ -2625,7 +2625,7 @@ pub enum LayoutNode {
     Split {
         direction: SplitDirection,
         first: ::std::boxed::Box<LayoutNode>,
-        ratio: f32,
+        ratio: f64,
         second: ::std::boxed::Box<LayoutNode>,
     },
 }
@@ -2635,7 +2635,7 @@ pub struct LayoutSetSplitRatioParams {
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub pane_id: ::std::option::Option<::std::string::String>,
     pub path: ::std::vec::Vec<bool>,
-    pub ratio: f32,
+    pub ratio: f64,
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub tab_id: ::std::option::Option<::std::string::String>,
 }
@@ -4294,7 +4294,7 @@ impl PaneLayoutSnapshot {
 pub struct PaneLayoutSplit {
     pub direction: SplitDirection,
     pub id: ::std::string::String,
-    pub ratio: f32,
+    pub ratio: f64,
     pub rect: PaneLayoutRect,
 }
 impl PaneLayoutSplit {
@@ -4515,7 +4515,7 @@ pub enum PaneMoveDestination {
     #[serde(rename = "tab")]
     Tab {
         #[serde(skip_serializing_if = "::std::option::Option::is_none")]
-        ratio: ::std::option::Option<f32>,
+        ratio: ::std::option::Option<f64>,
         split: SplitDirection,
         tab_id: ::std::string::String,
         #[serde(skip_serializing_if = "::std::option::Option::is_none")]
@@ -5149,7 +5149,7 @@ impl ::std::convert::TryFrom<::std::string::String> for PaneResizeAnswerType {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct PaneResizeParams {
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
-    pub amount: ::std::option::Option<f32>,
+    pub amount: ::std::option::Option<f64>,
     pub direction: PaneDirection,
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub pane_id: ::std::option::Option<::std::string::String>,
@@ -5431,7 +5431,7 @@ pub struct PaneSplitParams {
     #[serde(default)]
     pub focus: bool,
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
-    pub ratio: ::std::option::Option<f32>,
+    pub ratio: ::std::option::Option<f64>,
     #[serde(default = "defaults::pane_split_params_right_click")]
     pub right_click: PaneRightClickTarget,
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
@@ -13525,7 +13525,7 @@ pub mod builder {
             ::std::string::String,
         >,
         path: ::std::result::Result<::std::vec::Vec<bool>, ::std::string::String>,
-        ratio: ::std::result::Result<f32, ::std::string::String>,
+        ratio: ::std::result::Result<f64, ::std::string::String>,
         tab_id: ::std::result::Result<
             ::std::option::Option<::std::string::String>,
             ::std::string::String,
@@ -13564,7 +13564,7 @@ pub mod builder {
         }
         pub fn ratio<T>(mut self, value: T) -> Self
         where
-            T: ::std::convert::TryInto<f32>,
+            T: ::std::convert::TryInto<f64>,
             T::Error: ::std::fmt::Display,
         {
             self.ratio = value
@@ -16451,7 +16451,7 @@ pub mod builder {
     pub struct PaneLayoutSplit {
         direction: ::std::result::Result<super::SplitDirection, ::std::string::String>,
         id: ::std::result::Result<::std::string::String, ::std::string::String>,
-        ratio: ::std::result::Result<f32, ::std::string::String>,
+        ratio: ::std::result::Result<f64, ::std::string::String>,
         rect: ::std::result::Result<super::PaneLayoutRect, ::std::string::String>,
     }
     impl ::std::default::Default for PaneLayoutSplit {
@@ -16487,7 +16487,7 @@ pub mod builder {
         }
         pub fn ratio<T>(mut self, value: T) -> Self
         where
-            T: ::std::convert::TryInto<f32>,
+            T: ::std::convert::TryInto<f64>,
             T::Error: ::std::fmt::Display,
         {
             self.ratio = value
@@ -18732,7 +18732,7 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct PaneResizeParams {
-        amount: ::std::result::Result<::std::option::Option<f32>, ::std::string::String>,
+        amount: ::std::result::Result<::std::option::Option<f64>, ::std::string::String>,
         direction: ::std::result::Result<super::PaneDirection, ::std::string::String>,
         pane_id: ::std::result::Result<
             ::std::option::Option<::std::string::String>,
@@ -18751,7 +18751,7 @@ pub mod builder {
     impl PaneResizeParams {
         pub fn amount<T>(mut self, value: T) -> Self
         where
-            T: ::std::convert::TryInto<::std::option::Option<f32>>,
+            T: ::std::convert::TryInto<::std::option::Option<f64>>,
             T::Error: ::std::fmt::Display,
         {
             self.amount = value
@@ -19433,7 +19433,7 @@ pub mod builder {
             ::std::string::String,
         >,
         focus: ::std::result::Result<bool, ::std::string::String>,
-        ratio: ::std::result::Result<::std::option::Option<f32>, ::std::string::String>,
+        ratio: ::std::result::Result<::std::option::Option<f64>, ::std::string::String>,
         right_click: ::std::result::Result<super::PaneRightClickTarget, ::std::string::String>,
         target_pane_id: ::std::result::Result<
             ::std::option::Option<::std::string::String>,
@@ -19503,7 +19503,7 @@ pub mod builder {
         }
         pub fn ratio<T>(mut self, value: T) -> Self
         where
-            T: ::std::convert::TryInto<::std::option::Option<f32>>,
+            T: ::std::convert::TryInto<::std::option::Option<f64>>,
             T::Error: ::std::fmt::Display,
         {
             self.ratio = value

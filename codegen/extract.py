@@ -25,6 +25,12 @@ nobody is looking at.
    which within seconds.
 3. Every rewritten reference must resolve. A dangling reference means the
    envelope lost a definition it still points at.
+4. Every ``format: float`` is rewritten to ``double``, and there has to be at
+   least one. ✅ **Measured 2026-09-12 against a live server**: Herdr declares
+   ``float`` eight times and ``double`` never, typify maps the first to ``f32``,
+   and the numbers the server actually sends do not fit one. This is the only
+   place the pipeline deliberately disagrees with the published schema, which
+   is why it is a guard rather than a quiet rewrite.
 
 Run directly::
 
@@ -49,6 +55,24 @@ ROOT_ONLY_KEYS = ("$schema", "title")
 #: The reference style every sub-schema uses for its own definitions.
 OWN_REF = re.compile(r"^#/schemas/(?P<schema>[A-Za-z_][A-Za-z0-9_]*)/\$defs/(?P<name>.+)$")
 
+#: What Herdr declares every fractional number as, and what this stage rewrites
+#: it to before generation.
+#:
+#: 🚨 **A deliberate divergence from the published schema, measured 2026-09-12
+#: against a live 0.9.0 server.** typify maps ``float`` to ``f32``, correctly,
+#: and an ``f32`` cannot hold the numbers this server sends: a `session.snapshot`
+#: carrying ``0.69`` came back as ``0.6899999976158142``, and ``0.7`` as
+#: ``0.699999988079071``. Deserialization succeeds either way, so the loss is
+#: silent, and a plugin that reads a layout and applies it back corrupts every
+#: ratio it touches.
+#:
+#: ⚠️ The same defect is documented from the other side in
+#: ``agentic-panes-layout/docs/herdr-behaviour.md``: send ``ratio`` as a JSON
+#: double, because serialising an ``f32`` widens it on the wire. One root cause,
+#: both directions.
+NARROW_FORMAT = "float"
+WIDE_FORMAT = "double"
+
 #: Splits a wire discriminator into the words a Rust name is built from.
 #: ``server.live_handoff`` becomes ``ServerLiveHandoff``.
 WORD_BOUNDARY = re.compile(r"[^0-9A-Za-z]+")
@@ -71,6 +95,86 @@ def variant_name(discriminator: str) -> str:
     if not words:
         raise DriftError(f"the method {discriminator!r} has no name characters.")
     return "".join(word[:1].upper() + word[1:] for word in words)
+
+
+def iter_formats(node: Any) -> Iterator[Dict[str, Any]]:
+    """Yield every schema node anywhere in *node* that declares a ``format``."""
+    if isinstance(node, dict):
+        if isinstance(node.get("format"), str):
+            yield node
+        for value in node.values():
+            yield from iter_formats(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from iter_formats(value)
+
+
+def widen_floats(node: Any) -> int:
+    """Rewrite every ``float`` format to ``double``, in place, and count them.
+
+    Guard 4 lives here, and it has two halves.
+
+    A ``float`` on anything but a number means the keyword is being used for
+    something this stage does not understand, so it stops rather than widening
+    a type it has not reasoned about.
+
+    Finding none at all is not decided here: see :func:`widened_numbers`, which
+    the driver calls against the published schema.
+    """
+    widened = 0
+    for owner in iter_formats(node):
+        if owner["format"] != NARROW_FORMAT:
+            continue
+        kind = owner.get("type")
+        admits_a_number = kind == "number" or (isinstance(kind, list) and "number" in kind)
+        if not admits_a_number:
+            raise DriftError(
+                f"a schema declares {NARROW_FORMAT!r} on a {kind!r} rather than "
+                f"on a number, so this stage will not widen it.\n"
+                f"Widening is a claim about numeric precision and nothing else. "
+                f"Read SCOPE.md section 3.2 before relaxing this."
+            )
+        owner["format"] = WIDE_FORMAT
+        widened += 1
+
+    return widened
+
+
+def widened_numbers(document: Dict[str, Any]) -> int:
+    """Count the widened numbers in *document*, refusing one that has none.
+
+    The other half of guard 4, and it asks about the **result** rather than
+    about the action: no ``float`` may survive anywhere, and at least one
+    ``double`` has to exist. A rewrite that matched nothing looks exactly like
+    a rewrite that worked, and that is how this defect returns unnoticed.
+
+    It is separate from :func:`widen_floats` because only the published schema
+    is known to carry fractional numbers. A test fixture that carries none is
+    not drift.
+    """
+    formats = [node["format"] for node in iter_formats(document)]
+    if NARROW_FORMAT in formats:
+        raise DriftError(
+            f"{formats.count(NARROW_FORMAT)} properties still declare "
+            f"{NARROW_FORMAT!r} after the widening, so the rewrite did not "
+            f"reach them all."
+        )
+
+    widened = formats.count(WIDE_FORMAT)
+    if widened == 0:
+        raise DriftError(
+            f"the published schema declares no fractional number at all, so "
+            f"this stage is doing nothing.\n"
+            f"This is good news if Herdr now declares {WIDE_FORMAT!r} itself: "
+            f"the server sends numbers an f32 cannot hold, and the widening "
+            f"exists only because the published schema understated them. Check "
+            f"what the schema declares now. If it is {WIDE_FORMAT!r} at the "
+            f"source, delete the widening and this guard together.\n"
+            f"If it declares neither, the ratios have changed shape and the "
+            f"generated types need reading before anything ships. See SCOPE.md "
+            f"section 3.2."
+        )
+    return widened
 
 
 def iter_refs(node: Any) -> Iterator[str]:
@@ -205,6 +309,12 @@ def extract(envelope: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
                 f"the reference {ref!r} does not resolve in the merged schema. "
                 f"The envelope points at a definition it no longer carries."
             )
+
+    # Guard 4: every fractional number is widened, or the pipeline stops. It
+    # runs over the assembled pool so that one pass covers all five
+    # sub-schemas, and it mutates the pool rather than the envelope, which
+    # ``_localise`` has already rebuilt.
+    widen_floats(pool)
 
     # Which root the ``$ref`` names does not matter, because typify emits no
     # type for it and the generated type list is identical whichever is picked.

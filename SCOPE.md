@@ -177,7 +177,7 @@ documented one and the tested one cannot drift apart.
 
 ✅ Runs in 0.93 seconds, deterministic and byte-identical across runs.
 
-**Six guards fail closed**, because each catches a change that would otherwise produce
+**Seven guards fail closed**, because each catches a change that would otherwise produce
 Rust that compiles and is quietly wrong:
 
 | Guard | Catches |
@@ -188,11 +188,58 @@ Rust that compiles and is quietly wrong:
 | `ResponseResult` is still a `oneOf` | The response side ceasing to be a choice of tagged branches, which every per-variant type assumes |
 | Every response branch requires a string `const` tag | A branch that no per-variant type could refuse an answer for, because nothing distinguishes it |
 | No derived result-type name is already defined | Herdr taking a name the split stage derives, which would otherwise replace a type the rest of the file refers to |
+| Every `format: float` is widened to `double`, and at least one exists | The one place this pipeline disagrees with the published schema silently reverting — see below |
 
 The collision guard is the ref guard applied to type names instead of references, and it
 is deliberate rather than a side effect of merging. Its message names the type, both
 sub-schemas, and the diff between the two bodies, so the reader can tell a changed shared
 type from a new one within seconds.
+
+#### 🚨 3.2.1 The one deliberate divergence from what Herdr publishes
+
+✅ **Measured 2026-09-12 against Mike's live 0.9.0 server, through this kit's own
+client.** It is the first defect the transport found by talking to a real Herdr rather
+than to a scripted peer.
+
+Herdr's schema declares `"format": "float"` **eight times and `"double"` never**, walked
+across the whole document. `cargo-typify` maps `float` to `f32`, correctly. **An `f32`
+cannot hold what the server sends:**
+
+| Sent by the server | Read back through the generated type |
+|---|---|
+| `0.69` | `0.6899999976158142` |
+| `0.7` | `0.699999988079071` |
+
+🚨 **Three things make this worse than a wrong number.** Deserialization *succeeds*, so
+it is fidelity loss rather than a parse failure and nothing errors or warns. A plugin
+that reads a layout and applies it back corrupts every ratio it touches. And it is
+data-dependent: `pane.layout`, `pane.edges`, `pane.neighbor` and `layout.export` all
+round-tripped clean in the same probe, because the target pane sat on an exact 50/50
+split and **0.5 is exactly representable in an `f32`**. Only `session.snapshot`, spanning
+twelve workspaces, reached a ratio that was not.
+
+⚠️ **The same defect is already documented from the other side**, in
+`agentic-panes-layout/docs/herdr-behaviour.md`: send `ratio` as a JSON double, because
+serialising an `f32` widens it on the wire. Weeks old, write side. The kit inherited the
+read side without anyone checking.
+
+**So the extract stage rewrites `float` to `double` before generation.** The precedent is
+`split_results.py` rewriting `const` to a single-valued `enum` for the same class of
+reason: the fix belongs in the schema the generator reads, never in `generated.rs`, which
+is machine-written and never hand-edited (§3.4).
+
+✅ **Eight declarations become six widened numbers**, because merging collapses
+`LayoutNode` and `PaneLayoutSplit`, each declared in two sub-schemas. Seven of the eight
+are named `ratio`; the eighth is `PaneResizeParams.amount`, which is a fractional number
+on the same wire and is widened for the same reason.
+
+🔑 **This is the only place the pipeline says something the published schema does not, so
+it is a guard rather than a quiet rewrite.** A reader comparing the generated types
+against the schema will find `f64` where `float` is declared, and this section is the
+answer. The guard has two halves, and the second is the one that matters: a rewrite
+matching **nothing** looks exactly like a rewrite working, so the driver refuses a schema
+it widened nothing in, and its message carries the good-news reading — if Herdr has
+started declaring `double` itself, delete the widening.
 
 ### 3.3 The lift, and why it is mandatory
 
@@ -312,6 +359,12 @@ drop, merge, or rename a variant.
 
 - ✅ 11 methods have unvalidated params, because Herdr declares `PingParams` and
   `EmptyParams` as bare objects. Upstream gap, not ours.
+- 🚨 ✅ **The schema understates its own numbers.** `format: float` eight times,
+  `double` never, and the server sends values no `f32` can hold. §3.2.1 carries the
+  measurement and the rewrite that answers it. ⚠️ **A schema-derived fixture cannot
+  catch this**, which is why the 64-row response sweep did not: `minimal_instance`
+  answers `0` for a number, and 0.0 is exactly representable. The regression test uses
+  0.69 and lives in `tests/client.rs`, where a real call carries it.
 - ✅ **A bare `true` is a legal schema, and Herdr writes one**: `agent_explain`'s
   `explain` property, which typify generates as `serde_json::Value`. The fixture builder
   now has a rule for it (`true` is smallest as `null`, `false` is unsatisfiable). ⚠️ It

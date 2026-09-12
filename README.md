@@ -261,6 +261,14 @@ So the pipeline lifts `id` out before generation and `envelope.rs` puts it back 
 the outside. It names no method, no variant, and no params shape, which is what lets it
 survive every regeneration untouched.
 
+⚠️ **The generated types diverge from the published schema in exactly one place, on
+purpose.** Herdr declares `format: float` eight times and `double` never, `cargo-typify`
+maps the first to `f32` correctly, and an `f32` cannot hold what the server sends: a
+ratio of `0.69` reads back as `0.6899999976158142`. Measured 2026-09-12 against a live
+0.9.0 server. The pipeline widens those eight to `double` before generating, so a reader
+comparing `f64` against `float` is looking at a decision rather than a defect. `SCOPE.md`
+§3.2.1 carries the measurement.
+
 **Never read a green round-trip test as evidence that these types are correct.**
 `tests/method_sweep.rs` is the test that actually discriminates: it sweeps all 102
 discriminators and asserts each reaches its own named variant.
@@ -301,7 +309,7 @@ upgrade, so it is not a formality.
 
 ### When the pipeline stops
 
-It is built to stop rather than guess. Six schema changes halt it on purpose, each
+It is built to stop rather than guess. Seven schema changes halt it on purpose, each
 with a message naming what changed and what to do:
 
 - a `$ref` that points outside its own sub-schema, which would mean Herdr had started
@@ -315,6 +323,8 @@ with a message naming what changed and what to do:
   wrong answer for
 - a result type name Herdr has taken for itself, which would otherwise replace a type the
   generated file refers to
+- a schema that declares no fractional number at all, which would mean the one deliberate
+  divergence above had quietly stopped happening
 
 Every one of those would otherwise produce Rust that compiles and is quietly wrong.
 
