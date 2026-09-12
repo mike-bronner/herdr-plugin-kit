@@ -1828,6 +1828,41 @@ breaks it will be a different context being empty, and a guard that speaks only 
 refuses teaches nothing about the run that worked. One red run has already cost a round
 trip for want of exactly that.
 
+#### 🚨 Answered 2026-09-12: a called workflow cannot discover which version of itself is running
+
+✅ **Measured, twice, identically.** `kit-ref-probe.yml` called cross-repository at
+`@main` and at an annotated tag:
+
+```
+github.job_workflow_sha = <empty>
+github.job_workflow_ref = <empty>
+github.workflow_ref     = mike-bronner/herdr-plugin-kit/.github/workflows/
+                          kit-ref-probe-caller.yml@refs/heads/main
+```
+
+**Every explanation that had been offered is ruled out by those two runs.**
+
+| Suspected | Ruled out because |
+|---|---|
+| Tags do not populate it | `@main` is a branch, and it is empty there too |
+| Annotated tags specifically | Empty on both forms |
+| The event — the consumer failed on `push` | The probe ran on `workflow_dispatch` and failed the same way |
+| `job_workflow_ref` would answer instead | It does not exist in the context at all |
+
+🚨 **`github.workflow_ref` names the *caller's* entry workflow**, exactly as the OIDC
+claims imply and not as this pipeline needed. So the only populated value points at the
+caller's own file at the caller's own ref. **Following it would check a plugin out
+against whatever `refs/heads/main` means in this kit**, and pass. The repository check
+added the same day is what refuses it.
+
+🔑 **So there is no route.** A reusable workflow cannot learn which of its own versions a
+caller pinned, and four stages of this design rested on a documented value that is empty
+in practice. **The documented behaviour of `github.job_workflow_sha` and what it does are
+different things**, which is worth more outside this repository than in it.
+
+⚠️ **Keep this subsection through any rewrite of §11.** It is the reason the sections
+around it changed, and it would otherwise vanish with the workflows it explains.
+
 #### The exception to "nothing that can be wrong lives in YAML", and how it is tested
 
 🔑 **This block cannot live in `tools/` like everything else, because it decides which
