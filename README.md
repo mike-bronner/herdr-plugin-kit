@@ -143,7 +143,7 @@ Pin to a tag:
 
 ```toml
 [dependencies]
-herdr-plugin-kit = { git = "https://github.com/mike-bronner/herdr-plugin-kit", tag = "0.4.1" }
+herdr-plugin-kit = { git = "https://github.com/mike-bronner/herdr-plugin-kit", tag = "0.4.2" }
 ```
 
 Build a request:
@@ -578,7 +578,7 @@ permissions:
   contents: write
 jobs:
   release:
-    uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-release.yml@0.4.1
+    uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-release.yml@0.4.2
     permissions:
       contents: write
 ```

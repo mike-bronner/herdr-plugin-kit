@@ -2416,7 +2416,12 @@ tag form when recent-spaces migrates (§13).
   one day, on a rule with no exercise before any of them**, and the third is the one the
   rule's wording nearly missed: nothing about a deleted workflow is Rust source, and it
   breaks a consumer just the same.
-- ➕ **A purely additive change is a patch**, added 2026-09-12, and 0.4.1 is the first.
+- ➕ **A change that does not break a consumer is a patch**, added 2026-09-12, and 0.4.1
+  is the first. ⚠️ **It read "a purely additive change" for one release**, which is
+  narrower than the rule intends and did not cover 0.4.2, a documentation-only release
+  that adds nothing at all. **Additive and documentation-only are two shapes of
+  non-breaking, and the rule is about the class rather than either shape** — the same
+  wording trap that nearly let a deleted workflow through as a patch, two clauses down.
   🔑 **The rule above had been tested three times in one day and every test was a break**,
   so this section spoke only to breaking changes while the common case went unstated and
   the next person would have inferred it. Stated beside the breaking clause so the
