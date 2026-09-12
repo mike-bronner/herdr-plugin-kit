@@ -35,7 +35,8 @@
 //! features were registered without ever running. **The crate version could not
 //! have caught it**, because under this release convention the version only
 //! moves on a release commit, and the stale binary and the current manifest
-//! both read `0.3.0`. The commit is what tells them apart.
+//! read the same version as each other, whatever it happens to be. The commit
+//! is what tells them apart.
 
 #![forbid(unsafe_code)]
 

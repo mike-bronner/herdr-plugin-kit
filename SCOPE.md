@@ -2072,6 +2072,9 @@ tag form when recent-spaces migrates (§13).
   treats 0.1.1 as compatible with 0.1.0, so a consumer on a version range would have
   taken it silently and then failed to compile. **The number is what tells a consumer
   whether to expect work**, and it is the only thing that tells them before they upgrade.
+  ⚠️ **The second test arrived the same day**: 0.3.0 widens every `ratio` from `f32` to
+  `f64` (§3.2.1), which breaks any consumer that bound one to an `f32`. Two source-
+  breaking changes in one day, on a rule with no exercise before either.
 - Promotion to crates.io stays open and needs no design change.
 
 ---

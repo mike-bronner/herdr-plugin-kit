@@ -9,7 +9,7 @@ name: Plugin CI
 #       pull_request:
 #     jobs:
 #       conformance:
-#         uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-ci.yml@0.2.0
+#         uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-ci.yml@0.3.0
 #
 # 🔑 There are no required inputs, and that is deliberate. Every fact this
 # needs — the binary's name, the version — is already stated in the plugin's
