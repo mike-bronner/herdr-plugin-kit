@@ -613,6 +613,57 @@ so it is the call rather than `ping` that moves. It lands 89,792 short of the 1,
 a scratch crate bounded it at, which is the right direction: the transport, `regress`,
 and the request enum sit in both rungs of a real client.
 
+#### 🚨 A second consumer inverts the headline — measured 2026-09-12
+
+**project-finder narrowed every call site, seven result types, and its binary grew.**
+macOS arm64, the same profile settings.
+
+| Build | Bytes |
+|---|---|
+| before, its own hand-written client | 1,738,592 |
+| after, seven narrow types | **2,886,640** |
+| after, if any one call had stayed on the union | 3,990,400 |
+
+**Narrowing is worth 1,103,760 bytes, 27.7%**, and it is pinned by tests that answer each
+call with a different valid Herdr result and assert refusal. 🚨 **The net against its old
+client is +1,148,048, +66.0%.** ✅ The published 0.8.1 asset corroborates the starting
+figure to within 17 KB, at 1,755,584, which is a different build rather than a
+disagreement.
+
+Attribution, from an unstripped build, by `__text` unless noted: `herdr_plugin_kit`
+155 KB, `regress` 124 KB, `interprocess` 5.5 KB, `serde_json` **+185 KB as a jump rather
+than a total**, and **426 KB of `__const`** for the generated types' static tables.
+
+#### 🔑 Why the two consumers disagree, and what actually scales
+
+**Seven narrow types do not amortise the way one does.** Each drags its own nested schema
+types in, while the shared `__const` tables and `regress` arrive once regardless. So the
+cost has two parts:
+
+| Part | Who pays it | Scales with |
+|---|---|---|
+| A **fixed floor** — the static tables, the regex engine, the transport | every consumer | nothing |
+| A **per-type cost** — each named result's nested types | the consumer naming them | how much of the API the plugin touches |
+
+⚠️ **Read the absolute saving, not the percentage.** recent-spaces saved 1,006,096 bytes
+and project-finder 1,103,760 — within 10% of each other — because narrowing removes the
+same thing both times, the 63 variants nobody named. The percentages differ, 43.9%
+against 27.7%, only because the binaries they are fractions *of* differ. 🪤 Two points
+make that a weak pattern rather than a law, and nothing here has measured a third.
+
+🚨 **So the two headline figures are each honest and neither generalises.**
+recent-spaces names one type, which is the best case, and 43.9% holds for recent-spaces.
+project-finder names seven, and 66% growth holds for project-finder. ⚠️ **Nothing
+entitles a reader to interpolate between them.** project-finder also links `ratatui`,
+`crossterm` and `nucleo` where recent-spaces links none — that stack is in both its
+before and its after so it does not explain the delta, but it is one more reason these
+are two measurements rather than two points on a line.
+
+❓ **Unmeasured, and worth stating rather than leaving to be assumed.** A consumer naming
+most of the 64 would presumably reach a crossover where the union is cheaper than the
+types it replaced. **Nobody has measured where that sits**, and nothing suggests it is
+near seven.
+
 #### ⚠️ Two measurements, two intervals, and neither is safe alone
 
 Quoting one of these without the other misleads in opposite directions.
@@ -2383,6 +2434,13 @@ of one tree at `opt-level = "s"` with `strip = true` on macOS arm64.
 | kit 0.1.0, naming `ResponseResult` | 3,257,600 |
 | kit 0.2.0, naming `ResponseResult` — **the pin bumped and nothing else** | **3,350,544** |
 | kit 0.2.0, naming `WorkspaceListAnswer` | 1,878,832 |
+
+🚨 **And a whole migration can still cost more than it saves.** ✅ project-finder
+narrowed every one of its seven call sites and its binary grew 66% against the
+hand-written client it replaced (§4.4). Narrowing was worth 1.1 MB to it and the kit cost
+it more than that. **Neither figure generalises**: what the kit buys a plugin is one
+description of Herdr's wire format instead of a hand-maintained one, and on a plugin that
+touches much of the API it is not bought cheaply.
 
 🚨 **A plugin that bumps the pin and stops is 92,944 bytes worse off than it was on
 0.1.0.** The per-variant types are 128 new types every consumer compiles, and nothing

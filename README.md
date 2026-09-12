@@ -200,12 +200,34 @@ for pane in panes.panes {
 }
 ```
 
-💰 **Naming one result rather than the union is worth about a megabyte.** Measured
-2026-09-12 on a consumer that resolves a socket, pings, and makes one call, at
-`opt-level = "s"` with `strip = true` on macOS arm64: **1,393,952 bytes against
-2,400,048**, a saving of 1,006,096. `ResponseResult` carries all 64 shapes Herdr can
+💰 **Naming one result rather than the union saves about a megabyte**, and that is the
+saving rather than the whole story. `ResponseResult` carries all 64 shapes Herdr can
 answer with, serde generates parsing code for every one, and nothing can drop them while
-they are all reachable through one type.
+they are all reachable through one type. Two consumers measured it on macOS arm64 at
+`opt-level = "s"` with `strip = true`:
+
+| Plugin | Result types named | Narrowing saved |
+|---|---|---|
+| recent-spaces | 1 | 1,006,096 bytes, **43.9%** |
+| project-finder | 7 | 1,103,760 bytes, **27.7%** |
+
+🚨 **What the kit costs is a separate question from what narrowing saves, and the answer
+is not the same for every plugin.** project-finder narrowed every call site it has and
+its binary still grew **66%** against the hand-written client it replaced. recent-spaces
+narrowed its one and came out ahead. The difference is not the saving — those are within
+10% of each other in bytes — it is everything else the kit brings: a fixed floor of
+static tables, a regex engine and a transport that every consumer pays once, plus a
+per-type cost that scales with how much of the API you touch.
+
+⚠️ **So do not read either percentage as yours.** `SCOPE.md` §4.4 has both measurements,
+the attribution behind them, and what is still unmeasured — including where the crossover
+sits for a plugin that names most of the 64, which nobody has measured at all.
+
+🚨 **The kit may make your binary bigger even when you do everything right**, and
+project-finder is the worked example above. What it buys you is one description of
+Herdr's wire format, generated from Herdr's own schema, instead of a hand-maintained one
+that drifts. Whether that is worth the bytes is yours to decide with the numbers in front
+of you rather than a slogan.
 
 🚨 **Upgrading the pin without naming a result makes your binary bigger, not smaller.**
 The per-variant types are 128 new types every consumer compiles, and nothing recovers
