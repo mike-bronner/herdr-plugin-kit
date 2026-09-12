@@ -20,7 +20,7 @@ order `SCOPE.md` section 13 sets out.
 
 | Piece | State |
 |---|---|
-| `api::generated` — 102 request methods, 187 schema types | ✅ generated and committed |
+| `api::generated` — 102 request methods, 64 result types, 187 schema types | ✅ generated and committed |
 | `api::Request` — the hand-written envelope | ✅ |
 | `api::client` — the socket transport and the protocol handshake | ✅ **never run against a live server**, see below |
 | `env` — the reader for Herdr's launch contract | ✅ |
@@ -186,6 +186,38 @@ match client.ping() {
 That example is a doctest on `api::client::Client`, so it is compiled by `cargo test`
 rather than asserted here.
 
+Name the result you expect:
+
+```rust
+use herdr_plugin_kit::api::generated::{PaneListAnswer, PaneListParams, RequestMethod};
+
+let panes = client.call::<PaneListAnswer>(RequestMethod::PaneList(PaneListParams {
+    workspace_id: None,
+}))?;
+
+for pane in panes.panes {
+    println!("{}", pane.pane_id);
+}
+```
+
+💰 **Naming one result rather than the union is worth about a megabyte.** Measured
+2026-09-12 on a consumer that resolves a socket, pings, and makes one call, at
+`opt-level = "s"` with `strip = true` on macOS arm64: **1,393,952 bytes against
+2,400,048**, a saving of 1,006,096. `ResponseResult` carries all 64 shapes Herdr can
+answer with, serde generates parsing code for every one, and nothing can drop them while
+they are all reachable through one type.
+
+The union is still there, and `client.call::<ResponseResult>(…)` still works. It is a
+narrower option rather than a replacement, so a caller that genuinely wants any answer
+can still say so and pay for it on purpose.
+
+🚨 **Which result a method answers with is yours to establish, and the schema cannot help
+you.** It declares no link between the two, and the obvious guess is wrong on the first
+plugin that looked: `workspace.move` answers `workspace_list`, carrying the sidebar after
+the move, and `workspace_moved` is not a result type at all. A wrong guess is a
+`CallError::Protocol` that names the method, the tag that arrived, and the tag expected —
+which is the correction you need, rather than a wrong parse.
+
 **A protocol mismatch is a diagnosis, never a hard failure.** A plugin that still works
 must keep working, so the kit hands the finding back and the plugin decides. The
 `Display` above writes the whole warning line, naming both protocol numbers, so nobody
@@ -233,6 +265,17 @@ survive every regeneration untouched.
 `tests/method_sweep.rs` is the test that actually discriminates: it sweeps all 102
 discriminators and asserts each reaches its own named variant.
 
+The response side is generated twice from one description: once as `ResponseResult`, the
+union of all 64 shapes, and once as one type per variant — `PongAnswer`,
+`PaneListAnswer`, `OkAnswer`, and 61 more. Both come out of the same pass over the same
+schema branch, and the union is byte-identical to what it was before the per-variant
+types existed.
+
+`tests/response_sweep.rs` is what holds the two together. Per variant it asserts that the
+discriminator reaches its own union variant, that both renderings agree on the wire, and
+that an answer tagged for another variant is refused. That last one is what makes naming
+a narrow type safe rather than optimistic.
+
 ## Regenerating
 
 ```sh
@@ -245,9 +288,10 @@ Or, where `just` is not installed:
 python3 codegen/sync_api.py v0.9.0
 ```
 
-Both run the same module. Four stages: fetch the schema at that tag, extract the five
-sub-schemas into one document, lift the request envelope's `id`, and generate. Output is
-byte-identical across runs for a given tag and a given `cargo-typify`.
+Both run the same module. Five stages: fetch the schema at that tag, extract the five
+sub-schemas into one document, lift the request envelope's `id`, split the response union
+into one type per variant, and generate. Output is byte-identical across runs for a given
+tag and a given `cargo-typify`.
 
 Regenerating needs `cargo-typify` 0.8.0 (`cargo install cargo-typify`), Python 3.9 or
 newer, and network access. **Building the crate needs none of the three.**
@@ -257,7 +301,7 @@ upgrade, so it is not a formality.
 
 ### When the pipeline stops
 
-It is built to stop rather than guess. Three schema changes halt it on purpose, each
+It is built to stop rather than guess. Six schema changes halt it on purpose, each
 with a message naming what changed and what to do:
 
 - a `$ref` that points outside its own sub-schema, which would mean Herdr had started
@@ -266,6 +310,11 @@ with a message naming what changed and what to do:
   changed on one side only or a new type that took a taken name
 - a change to the request envelope's `id` property, which `envelope.rs` hand-writes and
   therefore cannot track by itself
+- a response union that is no longer a choice of branches
+- a response branch with no required `const` tag, which no result type could refuse a
+  wrong answer for
+- a result type name Herdr has taken for itself, which would otherwise replace a type the
+  generated file refers to
 
 Every one of those would otherwise produce Rust that compiles and is quietly wrong.
 
@@ -420,7 +469,7 @@ nothing would say so.
 ```
 crates/herdr-plugin-kit/        the runtime crate
 crates/herdr-plugin-kit-build/  the build-script stamp, a build-dependency only
-codegen/                        the four-stage pipeline and its tests
+codegen/                        the five-stage pipeline and its tests
 templates/                      the shell shims every plugin's bin/ is synced from
 tools/                          the mutation harness and the plugin conformance gate
 .github/workflows/              the kit's own CI, and the two reusable workflows
@@ -452,7 +501,7 @@ itself against a server that accepts a connection and then says nothing. So the 
 builds exactly that server and times the call.
 
 ```sh
-just mutate tools/mutations/client.json   # the transport's 17 guards
+just mutate tools/mutations/client.json   # the transport's 20 guards
 just mutate tools/mutations/dialog.json   # the dialogs' 25
 ```
 

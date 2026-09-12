@@ -84,6 +84,7 @@ herdr-plugin-kit/
 │   │   │   │   ├── mod.rs
 │   │   │   │   ├── generated.rs      # committed, never hand-edited
 │   │   │   │   ├── envelope.rs       # the hand-written Request wrapper
+│   │   │   │   ├── response.rs       # the trait a caller names a result through
 │   │   │   │   └── client.rs         # transport
 │   │   │   ├── env.rs
 │   │   │   ├── version.rs
@@ -95,13 +96,15 @@ herdr-plugin-kit/
 │   │   └── tests/
 │   │       ├── client.rs             # the transport, against a scripted server
 │   │       ├── dialog.rs             # the dialogs, against a fake opener
-│   │       └── method_sweep.rs       # generated, the 102-discriminator sweep
+│   │       ├── method_sweep.rs       # generated, the 102-discriminator sweep
+│   │       └── response_sweep.rs     # generated, the 64-result sweep
 │   └── herdr-plugin-kit-build/       # build-dependency crate only
 ├── codegen/
-│   ├── sync_api.py                   # the driver: fetch, extract, lift, generate
-│   ├── extract.py                    # stage 2, and the ref and collision guards
+│   ├── sync_api.py                   # the driver, and the five stages in order
+│   ├── extract.py                    # stage 2, the ref and collision guards, naming
 │   ├── lift_envelope.py              # stage 3
-│   ├── emit_sweep.py                 # the sweep, derived from the schema
+│   ├── split_results.py              # stage 4, one type per response variant
+│   ├── emit_sweep.py                 # both sweeps, derived from the schema
 │   └── test_codegen.py               # the guards' own tests, no network
 ├── templates/
 │   ├── bin/                          # byte-identical in every plugin
@@ -118,7 +121,7 @@ herdr-plugin-kit/
 │   ├── plugin_gate.py                # the target table and the version rules
 │   ├── test_plugin_gate.py           # both sides of every agreement, run
 │   └── mutations/
-│       ├── client.json               # the transport's 17 mutations
+│       ├── client.json               # the transport's 20 mutations
 │       └── dialog.json               # the dialogs' 25 mutations
 ├── .github/workflows/
 │   ├── plugin-ci.yml                 # reusable, workflow_call
@@ -147,7 +150,7 @@ implementation.
 | Sub-schema | Defs | Variants | Generation |
 |---|---|---|---|
 | `request` | 121 | 102 | 🔧 needs the lift |
-| `success_response` | 71 | 64 | ✅ clean |
+| `success_response` | 71 | 64 | ✅ clean, and split into one type per variant (§4.4) |
 | `event` | 16 | 26 | ✅ clean |
 | `subscription_event` | 10 | 3 | ⚠️ untagged, named, functional |
 | `error_response` | 1 | 0 | ✅ clean, and validates nothing (§3.5) |
@@ -156,7 +159,7 @@ implementation.
 
 ### 3.2 Pipeline
 
-Four stages, run by `just sync-api <herdr-tag>` or by `python3 codegen/sync_api.py
+Five stages, run by `just sync-api <herdr-tag>` or by `python3 codegen/sync_api.py
 <herdr-tag>` where `just` is absent. Both entry points run the same module, so the
 documented one and the tested one cannot drift apart.
 
@@ -166,12 +169,15 @@ documented one and the tested one cannot drift apart.
    with zero conflicting bodies, which is what makes `SplitDirection` one Rust type
    instead of three.
 3. **Lift** the top-level `id` out of `request`.
-4. **Generate** with `cargo-typify`, then commit the output, along with the
-   102-discriminator sweep derived from the same schema.
+4. **Split** `ResponseResult`, adding one definition per branch so typify emits a type a
+   caller can name (§4.4). ➕ **Added 2026-09-12.** The union is copied rather than
+   moved, and comes out of typify byte-identical either way.
+5. **Generate** with `cargo-typify`, then commit the output, along with the
+   102-discriminator sweep and the 64-result sweep, both derived from the same schema.
 
-✅ Runs in 0.79 seconds, deterministic and byte-identical across runs.
+✅ Runs in 0.93 seconds, deterministic and byte-identical across runs.
 
-**Three guards fail closed**, because each catches a change that would otherwise produce
+**Six guards fail closed**, because each catches a change that would otherwise produce
 Rust that compiles and is quietly wrong:
 
 | Guard | Catches |
@@ -179,6 +185,9 @@ Rust that compiles and is quietly wrong:
 | Every `$ref` points inside its own sub-schema | Herdr starting to share definitions across sub-schemas, which changes what "merge" means |
 | A name defined twice is defined identically | A shared type changed on one side only, or a new type that took a taken name |
 | The request envelope's sibling property is exactly `id: string` | `envelope.rs` hand-writing a field the schema no longer declares |
+| `ResponseResult` is still a `oneOf` | The response side ceasing to be a choice of tagged branches, which every per-variant type assumes |
+| Every response branch requires a string `const` tag | A branch that no per-variant type could refuse an answer for, because nothing distinguishes it |
+| No derived result-type name is already defined | Herdr taking a name the split stage derives, which would otherwise replace a type the rest of the file refers to |
 
 The collision guard is the ref guard applied to type names instead of references, and it
 is deliberate rather than a side effect of merging. Its message names the type, both
@@ -212,6 +221,34 @@ pub struct Request {
 This is the **only** hand-written type in the generated layer. It names no method, no
 variant, and no params shape, so it survives every regeneration untouched.
 
+#### 🚨 The same trap, met a third time — 2026-09-12
+
+`#[serde(untagged)]` is how typify reports every shape it cannot tag, and this project
+has now walked into it three times from three directions:
+
+1. the request envelope's sibling `id`, which this section exists for.
+2. a response `oneOf` whose branches are `$ref`s, tried while looking for a way to define
+   the union in terms of the per-variant types (§3.5).
+3. the same `oneOf` written as `allOf` against a `$ref`, and again with a `$ref` carrying
+   a sibling tag property. Both produced untagged output too.
+
+**Every one of them compiles, round-trips, and dispatches on shape instead of on the
+tag.**
+
+⚠️ **Do not build a guard on a grep for `#[serde(untagged)]`, and the measurement says
+why.** ✅ There are **five** in the generated file today: `AgentViewField`,
+`AgentViewSortField`, `AgentViewValue`, `PopupSize`, and `SubscriptionEventData`. Four
+are unions of scalars the schema genuinely declares that way, and the fifth is the
+`subscription_event` limit §3.1 already carries.
+
+🚨 So the attribute is normal here, and **that grep answers green today and answers green
+after a regeneration that has collapsed the request enum.** A collapsed `RequestMethod`
+would be the sixth occurrence rather than the first, and nothing about the search would
+say so.
+
+The sweeps in `tests/method_sweep.rs` and `tests/response_sweep.rs` are what actually
+catch it, on the two types where it would matter, without anyone remembering to look.
+
 ### 3.4 Rules for generated code
 
 - ✅ **Commit `generated.rs`.** Never use `typify::import_types!`, which would make typify
@@ -219,6 +256,10 @@ variant, and no params shape, so it survives every regeneration untouched.
 - ✅ No `build.rs`, no `[build-dependencies]`, no proc macro in the runtime crate.
   Verified building `--offline` with `cargo-typify` renamed off the PATH.
 - Generate all 102 methods, not a subset. Selective generation is what produces drift.
+- ➕ **Everything new is emitted in the same whole-file pass**, from the schema, by the
+  same generator. The per-variant result types (§4.4) are a schema injection rather than
+  a transform over typify's output, so nothing hand-written enters the generated layer
+  and the union is not rewritten by anything.
 - ✅ Generated code's runtime dependencies: `serde`, `serde_json`, `regress`.
 - ✅ 29 type names appear in more than one sub-schema with **zero conflicting
   definitions**, so dedup into one shared module is mechanical.
@@ -226,8 +267,57 @@ variant, and no params shape, so it survives every regeneration untouched.
 
 ### 3.5 Known generation limits
 
+#### ✅ Measured 2026-09-12: typify cannot be driven to a tagged newtype enum
+
+This is a negative result, and it is written down because it cost a day to establish and
+answers a question anyone looking at §4.4 will ask: *why are there two renderings of one
+schema branch, rather than a union defined in terms of the per-variant types?*
+
+The shape that was wanted, which is byte-identical on the wire to what typify emits
+today, and was verified as such by hand:
+
+```rust
+#[serde(tag = "type")]
+enum ResponseResult { WorkspaceList(WorkspaceListAnswer), Ok }
+```
+
+Four encodings of the same schema were tried against `cargo-typify` 0.8.0:
+
+| Each `oneOf` branch written as | typify emits |
+|---|---|
+| a `$ref` to a named definition | ❌ `#[serde(untagged)]`, discriminator lost |
+| `allOf: [tag object, $ref]` | ❌ `#[serde(untagged)]` |
+| a `$ref` with a sibling tag property | ❌ `#[serde(untagged)]` |
+| an inline object with a `const` tag (today) | ✅ `#[serde(tag = "type")]`, inline struct variants |
+
+🚨 The three failures are all §3.3's trap, so the alternative was not merely unavailable:
+it was the defect this project has already met twice.
+
+⚠️ **One near miss, and the reason it does not generalise.** When **every** branch carries
+exactly one non-tag property **under the same key**, typify emits
+`#[serde(tag = "type", content = "<key>")]` with newtype variants — the shape wanted,
+reached by a different route. ✅ Herdr's branches fail that twice over: **25 of the 64
+carry more than one** non-tag property, so no single key could hold them at all, and the
+37 that carry exactly one spread across **29 distinct keys**. Nesting every payload under
+one key would change the wire format, which is not ours to change.
+
+**So the union stays as typify writes it, and the per-variant types are emitted beside
+it.** Reaching the newtype form would mean post-processing the generated Rust, which is a
+transform between the schema and the committed output that none of §3.2's guards watch,
+over 26,000 lines nobody reads. §3.4's argument applies directly: it would deduplicate
+generated code, which nobody maintains, and pay for it with a stage that can silently
+drop, merge, or rename a variant.
+
+#### The rest
+
 - ✅ 11 methods have unvalidated params, because Herdr declares `PingParams` and
   `EmptyParams` as bare objects. Upstream gap, not ours.
+- ✅ **A bare `true` is a legal schema, and Herdr writes one**: `agent_explain`'s
+  `explain` property, which typify generates as `serde_json::Value`. The fixture builder
+  now has a rule for it (`true` is smallest as `null`, `false` is unsatisfiable). ⚠️ It
+  sat unnoticed through six stages because the request side never reaches it, and the
+  first thing to walk the response side found it. **Adding a check to a previously
+  unchecked half finds old things, not new ones.**
 - `#[serde(flatten)]` buffers through a map, so `deny_unknown_fields` does not work
   through the envelope.
 - `subscription_event` does not cross-check event kind against payload.
@@ -328,7 +418,7 @@ ways a string match does not: a changed value lands in the diff a human has to r
 (§12), and an exhaustive `match` on the enum stops compiling. A string match absorbs the
 same change in silence.
 
-⚠️ The three codegen guards (§3.2) do **not** cover this. None of them watches enum
+⚠️ The six codegen guards (§3.2) do **not** cover this. None of them watches enum
 values, and adding one is not proposed here. The compiler and the diff review are the
 whole of the protection.
 
@@ -391,6 +481,100 @@ the sentence.
 ⚠️ **A mismatch never fails a call.** `ping` succeeds and the diagnosis rides along
 beside the result. A test holds that up specifically, because "warning, not failure" is
 the kind of promise that erodes quietly.
+
+### 4.4 One result type per variant ✅ **built 2026-09-12**
+
+`Client::call` is generic over the result the caller names:
+
+```rust
+let panes = client.call::<PaneListAnswer>(RequestMethod::PaneList(params))?;
+```
+
+🚨 **The cost that started this was measured by the recent-spaces migration, not
+inferred.** Its release binary tripled, 979,376 → 3,257,616 bytes, and the decomposition
+was the surprising part: serializing all 102 request methods costs **102,368 bytes**, and
+deserializing the 64-variant `ResponseResult` costs **1,951,648**. A factor of nineteen,
+on the axis nobody was watching. serde generates parsing code per variant and dead-code
+elimination cannot drop any, because every one is reachable through the single type.
+
+#### Per variant, never per method
+
+**A method-to-variant mapping is not derivable, and building one by hand is §3.4's blast
+radius by another door.** The `$ref` guard in `extract.py` enforces that `request` and
+`success_response` are structurally independent, and the schema states nothing about what
+a method answers. 🚨 The obvious name heuristic is false on the first plugin that looked:
+`workspace.move` answers `workspace_list`, carrying the sidebar after the move, and
+`workspace_moved` appears **zero** times in `ResponseResult` and once in `EventData`.
+
+Per variant needs no mapping at all, because the caller names what it expects. That puts
+the knowledge at the call site, which is the only place it was ever established, by
+measurement, whatever this kit does. ⚠️ If a method-to-variant table is ever written
+down, §4.2.1 is its home: documentation beside the transport, never an input to the
+emitter, for the same reason error codes live there.
+
+#### What makes naming one type safe
+
+Each generated type carries its own tag as a one-variant enum, so an answer meant for
+another variant fails to deserialize and becomes `CallError::Protocol` naming the method
+and both tags. 🔑 **The check is in the type rather than in `call`, and the narrowest type
+is why**: `OkAnswer` declares nothing but its tag, and without it would accept every
+object Herdr can send.
+
+`tests/response_sweep.rs` holds three things up per variant: the discriminator reaches its
+own union variant, both renderings of the branch agree on the wire, and an answer tagged
+for another variant is refused. ⚠️ **The response side had no sweep at all before this**,
+while the request side has had one since the pipeline was written.
+
+⚠️ **Two of the 64 variants are unit variants** — `subscription_started` and `ok` — and
+they cost almost nothing in either shape. ✅ Measured: 62 branches carry fields, the
+widest being `pane_graphics_info` at 11, `pane_copy_search` at 6, and `worktree_opened`
+at 5. **A plugin whose every call answers a bare `ok` saves nothing here**, and many
+methods do answer one. The saving is per distinct result shape read, never per method
+called.
+
+#### The trade, both halves
+
+| | |
+|---|---|
+| Generated file | 18,475 → 26,589 lines, **+44%**, compiled by every consumer |
+| A consumer's binary | 2,400,048 → 1,393,952 bytes, **−42%**, when it names one result |
+
+✅ **Measured 2026-09-12** on a consumer that resolves a socket, pings, and makes one
+call. macOS 27.0 arm64, rustc 1.97.0, release with `opt-level = "s"` and `strip = true`,
+no LTO, default codegen-units, kit as a path dependency with default features.
+
+| Rung | Bytes |
+|---|---|
+| socket resolved, no call | 368,464 |
+| ping + `call::<PaneListAnswer>` | 1,393,952 |
+| ping + `call::<ResponseResult>` | 2,400,048 |
+| the union, plus `{:?}` on it in one arm | 2,470,032 |
+
+**The saving is 1,006,096 bytes**, and it holds at 1,005,568 with the handshake removed,
+so it is the call rather than `ping` that moves. It lands 89,792 short of the 1,095,888
+a scratch crate bounded it at, which is the right direction: the transport, `regress`,
+and the request enum sit in both rungs of a real client.
+
+#### ✅ The generic signature has no cost. It pays.
+
+Nobody had measured this, and both sessions that argued about the design expected the
+opposite. The same union call is **331,552 bytes smaller** than it was before the client
+changed (2,361,008 against 2,692,560, handshake excluded from both). The reason is the
+shape the generic required: `Answer` carries the result as an unread `serde_json::Value`
+and parses it afterwards into the one type the call named. **Deserializing from a `Value`
+generates less code than `from_str` straight into the union.**
+
+⚠️ **So `ping` and the `dialog` transport name narrow types too, and that is
+load-bearing rather than tidy.** A `ping` that kept matching the union would instantiate
+all 64 variants inside the kit, for every plugin that opens with a handshake, and no
+narrow call anywhere else could win it back.
+
+`open_pane` is the one caller that reads nothing, because its promise is that Herdr
+accepted the request rather than that a pane appeared. It names a **crate-private**
+`AnySuccess`: §7.2 measured a discarded response as the actual defect in two of three
+donors, so the kit publishes no sanctioned way to do it. That type accepts a result shape
+this build has never heard of, which follows the promise rather than widening it, and
+refuses an answer carrying no `type` at all.
 
 ---
 
@@ -2022,3 +2206,36 @@ same example is what exposed the button truncation, which nobody had asked it to
 above.** Whether click forwarding reaches a **popup** specifically was measured against a
 plugin pane rather than a popup, and the `TerminalState` teardown guard has no test. Both
 stay flagged exactly as they are.
+
+### 15.6 Extended 2026-09-12: one result type per variant
+
+Sent back by the recent-spaces migration, which measured a tripled binary and attributed
+it rather than guessing.
+
+| § | What changed | Kind |
+|---|---|---|
+| 4.4 | `Client::call` is generic over the result the caller names | 🔑 decision |
+| 4.4 | Per variant, never per method, because no method-to-variant mapping is derivable | 🔑 decision |
+| 4.4 | **The saving is 1,006,096 bytes, 42% of a consumer's binary** | ✅ measured |
+| 4.4 | **The generic signature costs nothing and saves 331,552 bytes** | ✅ measured |
+| 3.2 | A fifth stage, splitting the response union, and three more guards | ➕ new |
+| 3.3 | The untagged trap, met a third and fourth time | ➕ new |
+| 3.5 | typify cannot be driven to a tagged newtype enum, four encodings tried | ✅ measured |
+| 3.5 | A bare `true` is a legal schema, and Herdr writes one | ➕ new |
+| 4.4 | `tests/response_sweep.rs`, 64 rows, closing a gap as old as the pipeline | ➕ new |
+
+🔑 **The decision worth carrying forward is the one about where a check lives.** Making
+each result type refuse its own wrong tag, rather than checking the tag inside `call`,
+cost a `type_` field in 64 structs and bought a guarantee that holds wherever the type is
+used. This project has chosen that direction every time it has come up.
+
+💰 **And the transferable finding is a negative result about cost.** A generic parameter
+on a hot path was expected to cost something, and it paid instead. **Measure the thing
+you are about to reason about**, especially when the reasoning is confident: the
+decomposition that started this work, the 42% that ended it, and the 331,552 bytes nobody
+predicted were all measurements that contradicted a plausible expectation.
+
+⚠️ **What is still unmeasured**: nothing here has run against a live Herdr server, and the
+64 per-variant types are exercised by a schema-derived fixture each rather than by a real
+answer. A fixture proves the shapes agree with the schema; it does not prove the schema
+agrees with the server.
