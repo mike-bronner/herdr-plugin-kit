@@ -26,7 +26,7 @@ use herdr_plugin_kit::api::client::{
     DEFAULT_SOCKET,
 };
 use herdr_plugin_kit::api::generated::{
-    PaneListParams, PingParams, RequestMethod, ResponseResult, GENERATED_PROTOCOL,
+    PaneListAnswer, PaneListParams, PingParams, RequestMethod, ResponseResult, GENERATED_PROTOCOL,
 };
 use herdr_plugin_kit::env::{Environment, SOCKET_PATH_VAR};
 
@@ -151,6 +151,19 @@ fn scratch_socket() -> PathBuf {
 /// Answers `request` with a success carrying `result`.
 fn success(request: &Value, result: Value) -> Option<Value> {
     Some(json!({"id": request["id"], "result": result}))
+}
+
+/// A pane, in the shape Herdr sends one.
+fn pane(id: &str) -> Value {
+    json!({
+        "agent_status": "unknown",
+        "focused": true,
+        "pane_id": id,
+        "revision": 1,
+        "tab_id": "t1",
+        "terminal_id": "term1",
+        "workspace_id": "w1",
+    })
 }
 
 /// The pong a real Herdr 0.9.0 answers, with the protocol swapped in.
@@ -290,7 +303,7 @@ fn a_call_sends_one_json_line_carrying_the_method_and_its_params() {
     let mut server = Server::answering(1, |request| success(request, json!({"type": "ok"})));
     let client = server.client();
 
-    let result = client.call(RequestMethod::PaneList(PaneListParams {
+    let result = client.call::<ResponseResult>(RequestMethod::PaneList(PaneListParams {
         workspace_id: None,
     }));
 
@@ -326,13 +339,85 @@ fn a_success_comes_back_as_a_typed_result() {
 
     let result = server
         .client()
-        .call(RequestMethod::Ping(PingParams(serde_json::Map::new())))
+        .call::<ResponseResult>(RequestMethod::Ping(PingParams(serde_json::Map::new())))
         .expect("a well-formed success is a result");
 
     assert!(matches!(
         result,
         ResponseResult::WorkspaceList { ref workspaces } if workspaces.is_empty()
     ));
+}
+
+#[test]
+fn a_caller_can_name_the_one_result_it_expects() {
+    let server = Server::answering(1, |request| {
+        success(request, json!({"type": "pane_list", "panes": [pane("p1")]}))
+    });
+
+    let listed: PaneListAnswer = server
+        .client()
+        .call(RequestMethod::PaneList(PaneListParams {
+            workspace_id: None,
+        }))
+        .expect("a pane_list answer is a PaneListAnswer");
+
+    assert_eq!(listed.panes.len(), 1);
+    assert_eq!(listed.panes[0].pane_id, "p1");
+}
+
+#[test]
+fn naming_the_result_a_method_does_not_answer_is_refused() {
+    // 🚨 The hazard the narrow types exist to make loud. The schema declares
+    // no link between a method and a result, and the obvious guess is wrong on
+    // the first plugin that looked: `workspace.move` answers `workspace_list`.
+    // So a wrong guess must name both tags rather than parse into silence.
+    let server = Server::answering(1, |request| {
+        success(request, json!({"type": "workspace_list", "workspaces": []}))
+    });
+
+    let error = server
+        .client()
+        .call::<PaneListAnswer>(RequestMethod::PaneList(PaneListParams {
+            workspace_id: None,
+        }))
+        .expect_err("a workspace_list answer is not a PaneListAnswer");
+
+    let reported = error.to_string();
+    assert!(matches!(error, CallError::Protocol(_)));
+    assert!(
+        reported.contains("pane.list"),
+        "the method is missing from {:?}",
+        reported
+    );
+    assert!(
+        reported.contains("workspace_list"),
+        "the tag that arrived is missing from {:?}",
+        reported
+    );
+    assert!(
+        reported.contains("pane_list"),
+        "the tag that was expected is missing from {:?}",
+        reported
+    );
+}
+
+#[test]
+fn the_union_is_still_callable_for_a_caller_that_wants_any_answer() {
+    // ⚠️ The narrow types are an option, not a replacement. A caller that
+    // genuinely wants any response still has one, and pays for all 64 on
+    // purpose rather than by default.
+    let server = Server::answering(1, |request| {
+        success(request, json!({"type": "pane_list", "panes": [pane("p1")]}))
+    });
+
+    let any = server
+        .client()
+        .call::<ResponseResult>(RequestMethod::PaneList(PaneListParams {
+            workspace_id: None,
+        }))
+        .expect("the union accepts every result Herdr declares");
+
+    assert!(matches!(any, ResponseResult::PaneList { ref panes } if panes.len() == 1));
 }
 
 #[test]
@@ -346,7 +431,7 @@ fn an_error_body_comes_back_verbatim() {
 
     let error = server
         .client()
-        .call(RequestMethod::Ping(PingParams(serde_json::Map::new())))
+        .call::<ResponseResult>(RequestMethod::Ping(PingParams(serde_json::Map::new())))
         .expect_err("an error body is not a result");
 
     match error {
@@ -368,7 +453,7 @@ fn an_answer_addressed_to_another_request_is_refused() {
 
     let error = server
         .client()
-        .call(RequestMethod::Ping(PingParams(serde_json::Map::new())))
+        .call::<ResponseResult>(RequestMethod::Ping(PingParams(serde_json::Map::new())))
         .expect_err("an answer to another request is not an answer to this one");
 
     let reported = error.to_string();
@@ -391,7 +476,7 @@ fn an_answer_that_is_not_json_is_refused() {
 
     let error = server
         .client()
-        .call(RequestMethod::Ping(PingParams(serde_json::Map::new())))
+        .call::<ResponseResult>(RequestMethod::Ping(PingParams(serde_json::Map::new())))
         .expect_err("a bare string is not a Herdr response");
 
     assert!(matches!(error, CallError::Protocol(_)));
@@ -403,7 +488,7 @@ fn an_answer_carrying_neither_a_result_nor_an_error_is_refused() {
 
     let error = server
         .client()
-        .call(RequestMethod::Ping(PingParams(serde_json::Map::new())))
+        .call::<ResponseResult>(RequestMethod::Ping(PingParams(serde_json::Map::new())))
         .expect_err("an envelope with nothing in it is not an answer");
 
     assert!(matches!(error, CallError::Protocol(_)));
@@ -420,7 +505,7 @@ fn a_result_shape_this_build_does_not_know_is_refused() {
 
     let error = server
         .client()
-        .call(RequestMethod::Ping(PingParams(serde_json::Map::new())))
+        .call::<ResponseResult>(RequestMethod::Ping(PingParams(serde_json::Map::new())))
         .expect_err("an unknown result type is not a result");
 
     assert!(matches!(error, CallError::Protocol(_)));
@@ -438,7 +523,7 @@ fn an_error_wins_when_an_answer_somehow_carries_both() {
 
     let error = server
         .client()
-        .call(RequestMethod::Ping(PingParams(serde_json::Map::new())))
+        .call::<ResponseResult>(RequestMethod::Ping(PingParams(serde_json::Map::new())))
         .expect_err("a contradictory answer fails closed");
 
     assert!(matches!(error, CallError::Server(_)));
@@ -450,7 +535,7 @@ fn a_server_that_closes_without_answering_is_refused() {
 
     let error = server
         .client()
-        .call(RequestMethod::Ping(PingParams(serde_json::Map::new())))
+        .call::<ResponseResult>(RequestMethod::Ping(PingParams(serde_json::Map::new())))
         .expect_err("silence followed by a close is not an answer");
 
     assert!(matches!(error, CallError::Protocol(_)));
@@ -471,7 +556,7 @@ fn an_unknown_top_level_key_is_ignored_rather_than_refused() {
 
     let result = server
         .client()
-        .call(RequestMethod::Ping(PingParams(serde_json::Map::new())));
+        .call::<ResponseResult>(RequestMethod::Ping(PingParams(serde_json::Map::new())));
 
     assert!(matches!(result, Ok(ResponseResult::Ok)));
 }
@@ -482,7 +567,7 @@ fn a_socket_that_is_not_there_names_the_path_and_where_it_came_from() {
     let env = Environment::from_pairs(&[("HOME", "/nowhere/at/all")]);
 
     let error = absent_client(&env)
-        .call(RequestMethod::Ping(PingParams(serde_json::Map::new())))
+        .call::<ResponseResult>(RequestMethod::Ping(PingParams(serde_json::Map::new())))
         .expect_err("there is no server on that path");
 
     let reported = error.to_string();
@@ -509,7 +594,7 @@ fn a_wedged_server_times_out_rather_than_hanging() {
 
     let started = Instant::now();
     let error = client
-        .call(RequestMethod::Ping(PingParams(serde_json::Map::new())))
+        .call::<ResponseResult>(RequestMethod::Ping(PingParams(serde_json::Map::new())))
         .expect_err("a wedged server answers nothing");
     let took = started.elapsed();
 
@@ -640,8 +725,18 @@ fn ping_refuses_an_answer_that_is_not_a_pong() {
         .ping()
         .expect_err("an ok is not a handshake");
 
+    let reported = error.to_string();
     assert!(matches!(error, CallError::Protocol(_)));
-    assert!(error.to_string().contains("not a pong"));
+    assert!(
+        reported.contains("ping"),
+        "the method is missing from {:?}",
+        reported
+    );
+    assert!(
+        reported.contains("pong"),
+        "the tag expected is missing from {:?}",
+        reported
+    );
 }
 
 // ------------------------------------------------------------- dialog's seam
@@ -725,6 +820,29 @@ mod dialog_seam {
         });
 
         assert_eq!(server.client().open_pane(open_params()), Ok(()));
+    }
+
+    #[test]
+    fn a_result_shape_this_build_does_not_know_is_acceptance_too() {
+        // ⚠️ Wider than the union was, and deliberately. The promise is that
+        // Herdr accepted the request, so a future placement answering a future
+        // shape is still acceptance. Refusing it would be reading the shape.
+        let server = Server::answering(1, |request| {
+            success(request, json!({"type": "invented_by_a_later_herdr"}))
+        });
+
+        assert_eq!(server.client().open_pane(open_params()), Ok(()));
+    }
+
+    #[test]
+    fn an_answer_carrying_no_type_at_all_is_not_acceptance() {
+        // The floor under the widening. A Herdr result carries a tag, and an
+        // answer without one is malformed rather than unread.
+        let server = Server::answering(1, |request| success(request, json!({"pane": "p1"})));
+
+        let refused = server.client().open_pane(open_params());
+
+        assert!(matches!(refused, Err(OpenError::Failed(_))));
     }
 
     #[test]
@@ -829,7 +947,7 @@ mod dialog_seam {
         let sent = server.client().show_notification(notify_params());
 
         match sent {
-            Err(detail) => assert!(detail.contains("delivery reason"), "{}", detail),
+            Err(detail) => assert!(detail.contains("notification_show"), "{}", detail),
             Ok(reason) => panic!("an ok carries no reason, got {:?}", reason),
         }
     }

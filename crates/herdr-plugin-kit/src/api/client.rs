@@ -57,13 +57,15 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::api::generated::{
-    ErrorBody, PingParams, RequestMethod, ResponseResult, ServerCapabilities, GENERATED_PROTOCOL,
+    ErrorBody, PingParams, PongAnswer, RequestMethod, ServerCapabilities, GENERATED_PROTOCOL,
 };
-use crate::api::Request;
+use crate::api::{Request, ResponseVariant};
 use crate::env::{Environment, SOCKET_PATH_VAR};
 
 #[cfg(feature = "dialog")]
-use crate::api::generated::{NotificationShowParams, NotificationShowReason, PluginPaneOpenParams};
+use crate::api::generated::{
+    NotificationShowAnswer, NotificationShowParams, NotificationShowReason, PluginPaneOpenParams,
+};
 #[cfg(feature = "dialog")]
 use crate::dialog::{OpenError, Transport};
 
@@ -348,14 +350,74 @@ impl fmt::Display for ProtocolMismatch {
 /// which names neither problem.
 ///
 /// ⚠️ **Unknown top-level keys are ignored on purpose.** A future Herdr adding
-/// a field to the envelope must not break every plugin built before it. The
-/// `result` payload is still closed: a `type` this build does not know fails
-/// to deserialize, and becomes [`CallError::Protocol`] rather than silence.
+/// a field to the envelope must not break every plugin built before it.
+///
+/// 🔑 **The result is carried as an unread [`Value`], and that is what makes
+/// naming one type cheap.** Parsing it here would name
+/// [`ResponseResult`](crate::api::generated::ResponseResult) in the envelope,
+/// which instantiates all 64 variants for every caller, however narrow the
+/// type they asked for. [`read`] parses it
+/// afterwards into the one type the call named, so the payload is still
+/// closed: a `type` this build does not know, or an answer meant for another
+/// variant, fails there and becomes [`CallError::Protocol`] rather than
+/// silence.
 #[derive(Debug, Deserialize)]
 struct Answer {
     id: String,
-    result: Option<ResponseResult>,
+    result: Option<Value>,
     error: Option<ErrorBody>,
+}
+
+/// A success this call accepts without reading.
+///
+/// 🔑 **Crate-private, and it stays that way.** SCOPE.md §7.2 measured a
+/// discarded response as the actual defect in two of the three donor plugins:
+/// `notification.show` answers a delivery reason, and both plugins threw it
+/// away. A public "any success" type would be a sanctioned way to do that
+/// again, so the kit does not publish one. A caller that wants any answer
+/// names [`ResponseResult`](crate::api::generated::ResponseResult) and reads
+/// it.
+///
+/// The one place this is right is [`Transport::open_pane`] below, which
+/// promises that Herdr accepted the request rather than that a pane appeared.
+/// ✅ A popup answers `ok` and an overlay answers `plugin_pane_opened`, both
+/// measured 2026-09-11, so reading the shape there would refuse a placement
+/// the promise never restricted.
+///
+/// ⚠️ It is not [`serde::de::IgnoredAny`], which would accept a bare number or
+/// a string. A Herdr result carries a `type`, and an answer without one is
+/// malformed rather than unread.
+#[cfg(feature = "dialog")]
+#[derive(Debug, Deserialize)]
+pub(crate) struct AnySuccess {
+    /// Read by nothing, and required by everything: its presence is the only
+    /// check this type makes.
+    #[serde(rename = "type")]
+    _tag: String,
+}
+
+#[cfg(feature = "dialog")]
+impl ResponseVariant for AnySuccess {}
+
+/// Reads one result payload into the type the caller named.
+///
+/// Free-standing and generic, so that everything around it stays one copy: a
+/// plugin naming three result types compiles this three times and the rest of
+/// the transport once.
+///
+/// The serde error is kept verbatim beside the method. Naming the wrong type
+/// is the failure this has to explain well, because
+/// 🚨 **the schema does not say what a method answers**: `workspace.move`
+/// answers `workspace_list`, and serde's own wording ("unknown variant
+/// `workspace_list`, expected `pane_list`") is exactly the correction a caller
+/// needs.
+fn read<R: ResponseVariant>(method: &str, result: Value) -> Result<R, CallError> {
+    serde_json::from_value(result).map_err(|error| {
+        CallError::Protocol(format!(
+            "the answer to {} is not the result this call asked for: {}",
+            method, error
+        ))
+    })
 }
 
 /// Calls Herdr over its socket.
@@ -417,6 +479,41 @@ impl Client {
 
     /// Sends one request, and returns the result it was answered with.
     ///
+    /// # The caller names the result, and that is what it pays for
+    ///
+    /// 🔑 **`R` is the one result type this call expects.**
+    /// [`ResponseResult`](crate::api::generated::ResponseResult) carries all 64
+    /// shapes Herdr can answer with, and deserializing it costs a binary every
+    /// one of them. ✅ **Measured
+    /// 2026-09-11: 1,951,648 bytes** on macOS arm64 at `opt-level = "s"`.
+    /// Naming one generated type costs one shape, and the linker drops the
+    /// other 63. See [`ResponseVariant`].
+    ///
+    /// ```no_run
+    /// use herdr_plugin_kit::api::client::{Client, Socket};
+    /// use herdr_plugin_kit::api::generated::{PaneListAnswer, PaneListParams, RequestMethod};
+    ///
+    /// # let client = Client::new(Socket::at("/run/herdr.sock"), "mikebronner.my-plugin");
+    /// let panes = client.call::<PaneListAnswer>(RequestMethod::PaneList(PaneListParams {
+    ///     workspace_id: None,
+    /// }))?;
+    ///
+    /// for pane in panes.panes {
+    ///     println!("{}", pane.pane_id);
+    /// }
+    /// # Ok::<(), herdr_plugin_kit::api::client::CallError>(())
+    /// ```
+    ///
+    /// ⚠️ **Naming the type a method answers with is the caller's job, and the
+    /// schema cannot help.** It declares no link between a method and a
+    /// result, and the obvious guess is wrong on the first plugin that looked:
+    /// `workspace.move` answers `workspace_list`, carrying the sidebar after
+    /// the move. A wrong guess is [`CallError::Protocol`], naming both tags.
+    ///
+    /// A caller that genuinely wants any answer names
+    /// [`ResponseResult`](crate::api::generated::ResponseResult), which is
+    /// still accepted here, and pays for all 64 on purpose.
+    ///
     /// # The id is checked, and that is what the counter is for
     ///
     /// 🔑 **Without the check the counter is decoration.** One connection per
@@ -428,7 +525,7 @@ impl Client {
     /// worse than no answer, because it looks like one.
     ///
     /// A mismatch is [`CallError::Protocol`] and names both ids.
-    pub fn call(&self, method: RequestMethod) -> Result<ResponseResult, CallError> {
+    pub fn call<R: ResponseVariant>(&self, method: RequestMethod) -> Result<R, CallError> {
         let id = format!(
             "{}-{}",
             self.plugin_id,
@@ -481,33 +578,37 @@ impl Client {
             .read_line(&mut line)
             .map_err(|error| self.classify(&method, "cannot read the answer to", error))?;
 
-        self.answer(&id, &method, &line)
+        read(&method, self.answer(&id, &method, &line)?)
     }
 
     /// Asks the server what it is, and what it speaks.
     ///
     /// Read [`Handshake::mismatch`] on the way past. Nothing else in the kit
     /// checks the protocol, because nothing else has an answer to check.
+    ///
+    /// 🔑 **It names [`PongAnswer`] rather than matching the union, and that is
+    /// load-bearing.** A `ping` that matched the union would instantiate all 64
+    /// variants inside the kit, for every plugin that opens with a handshake,
+    /// and no narrow call anywhere else could win that back. The same rule
+    /// governs the `dialog` transport below.
     pub fn ping(&self) -> Result<Handshake, CallError> {
-        match self.call(RequestMethod::Ping(PingParams(serde_json::Map::new())))? {
-            ResponseResult::Pong {
-                capabilities,
-                protocol,
-                version,
-            } => Ok(Handshake {
-                version,
-                protocol,
-                capabilities,
-            }),
-            other => Err(CallError::Protocol(format!(
-                "ping answered {:?}, which is not a pong",
-                other
-            ))),
-        }
+        let pong: PongAnswer =
+            self.call(RequestMethod::Ping(PingParams(serde_json::Map::new())))?;
+
+        Ok(Handshake {
+            version: pong.version,
+            protocol: pong.protocol,
+            capabilities: pong.capabilities,
+        })
     }
 
-    /// Reads one answer line into a result, or into the reason it is not one.
-    fn answer(&self, id: &str, method: &str, line: &str) -> Result<ResponseResult, CallError> {
+    /// Reads one answer line into its result payload, or into the reason it
+    /// carries none.
+    ///
+    /// Everything here is about the envelope rather than the payload, so it
+    /// takes no type parameter and is compiled once however many result types
+    /// a plugin names.
+    fn answer(&self, id: &str, method: &str, line: &str) -> Result<Value, CallError> {
         if line.trim().is_empty() {
             return Err(CallError::Protocol(format!(
                 "the server closed the connection without answering {}",
@@ -592,8 +693,16 @@ impl Transport for Client {
     /// `plugin_pane_opened`, both measured 2026-09-11, and both are
     /// acceptance. Reading the shape here would refuse a placement the trait
     /// never restricted.
+    ///
+    /// ⚠️ **`AnySuccess` is what "any success" now means, and it accepts one
+    /// shape more than the union did**: a result type this build has never
+    /// heard of. That follows the promise rather than widening it. A future
+    /// placement answering a future shape is still Herdr accepting the
+    /// request, and refusing it here would be reading the shape after all.
+    /// What it still refuses is an answer that carries no `type` at all, which
+    /// is not a Herdr result.
     fn open_pane(&mut self, params: PluginPaneOpenParams) -> Result<(), OpenError> {
-        match self.call(RequestMethod::PluginPaneOpen(params)) {
+        match self.call::<AnySuccess>(RequestMethod::PluginPaneOpen(params)) {
             Ok(_) => Ok(()),
             // The one hand-maintained code list in the kit, with its
             // measurement, lives on the other side of this call.
@@ -602,17 +711,16 @@ impl Transport for Client {
         }
     }
 
+    /// 🚨 SCOPE.md §7.2: the delivery reason is the whole contract, so the
+    /// type named here is the one that carries it. An answer of any other
+    /// shape fails to deserialize and never reaches the caller as a bare
+    /// success, which is the defect this module exists to fix.
     fn show_notification(
         &mut self,
         params: NotificationShowParams,
     ) -> Result<NotificationShowReason, String> {
-        match self.call(RequestMethod::NotificationShow(params)) {
-            Ok(ResponseResult::NotificationShow { reason, .. }) => Ok(reason),
-            Ok(other) => Err(format!(
-                "notification.show answered {:?}, which carries no delivery reason",
-                other
-            )),
-            Err(error) => Err(error.to_string()),
-        }
+        self.call::<NotificationShowAnswer>(RequestMethod::NotificationShow(params))
+            .map(|answer| answer.reason)
+            .map_err(|error| error.to_string())
     }
 }

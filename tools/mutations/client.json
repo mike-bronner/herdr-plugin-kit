@@ -92,8 +92,23 @@
     },
     {
       "name": "the notification's own delivery reason is handed back",
-      "find": "Ok(ResponseResult::NotificationShow { reason, .. }) => Ok(reason),",
-      "replace": "Ok(ResponseResult::NotificationShow { .. }) => Ok(NotificationShowReason::Shown),"
+      "find": "            .map(|answer| answer.reason)",
+      "replace": "            .map(|_| NotificationShowReason::Shown)"
+    },
+    {
+      "name": "a refused result names the method that was called",
+      "find": "            \"the answer to {} is not the result this call asked for: {}\",\n            method, error",
+      "replace": "            \"the answer is not the result this call asked for: {}{}\",\n            error, \"\""
+    },
+    {
+      "name": "an accepted success still has to carry a type",
+      "find": "    #[serde(rename = \"type\")]\n    _tag: String,",
+      "replace": "    #[serde(rename = \"type\")]\n    _tag: Option<String>,"
+    },
+    {
+      "name": "the handshake reads the server's own protocol number",
+      "find": "            protocol: pong.protocol,",
+      "replace": "            protocol: GENERATED_PROTOCOL,"
     }
   ]
 }
