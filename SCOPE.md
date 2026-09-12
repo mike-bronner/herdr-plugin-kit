@@ -2200,9 +2200,13 @@ tag form when recent-spaces migrates (§13).
   treats 0.1.1 as compatible with 0.1.0, so a consumer on a version range would have
   taken it silently and then failed to compile. **The number is what tells a consumer
   whether to expect work**, and it is the only thing that tells them before they upgrade.
-  ⚠️ **The second test arrived the same day**: 0.3.0 widens every `ratio` from `f32` to
-  `f64` (§3.2.1), which breaks any consumer that bound one to an `f32`. Two source-
-  breaking changes in one day, on a rule with no exercise before either.
+  ⚠️ **The second and third tests arrived the same day.** 0.3.0 widens every `ratio`
+  from `f32` to `f64` (§3.2.1), which breaks any consumer that bound one to an `f32`.
+  0.4.0 removes two reusable workflows consumers were told to call (§11), which breaks
+  any plugin that wired one up — recent-spaces did. 🔑 **Three source-breaking changes in
+  one day, on a rule with no exercise before any of them**, and the third is the one the
+  rule's wording nearly missed: nothing about a deleted workflow is Rust source, and it
+  breaks a consumer just the same.
 - ➕ **A consumer may pin any kind of tag**, added 2026-09-12. All three of this kit's
   releases are annotated tags, and ✅ the probe in §11.2.1 measured both kinds behaving
   identically. `actions/checkout` takes either, and a `cargo` git dependency takes either.
