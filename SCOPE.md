@@ -124,8 +124,6 @@ herdr-plugin-kit/
 │       ├── client.json               # the transport's 20 mutations
 │       └── dialog.json               # the dialogs' 25 mutations
 ├── .github/workflows/
-│   ├── plugin-ci.yml                 # reusable, workflow_call
-│   ├── plugin-release.yml            # reusable, workflow_call
 │   ├── kit-ci.yml                    # the kit's own, fast
 │   └── kit-mutation.yml              # the kit's own, slow — §11.8
 └── justfile
@@ -1460,12 +1458,12 @@ way is left alone under either anchoring, and a second sync adds nothing.
 marker in a real repository, runs `git add -A`, and asserts it is not staged. A text
 assertion would pass on an entry git does not honour.
 
-✅ **No plugin's CI breaks on this, and the reason is worth knowing before adding any
-future check.** `plugin-ci.yml` checks the kit out at `github.job_workflow_sha`, which is
-the commit of that workflow file, so a plugin pinned at `@0.1.0` runs 0.1.0's sync task
-and never sees this check until it bumps its pin. **Opting in is an explicit act**, which
-is precisely what lets the check be a hard failure rather than a warning: no plugin can
-meet it by accident, and none is held to it without asking.
+✅ **No plugin's CI breaks on this, and the reason survives the removal of the reusable
+workflows (§11).** A plugin runs `sync_bin.py --check` out of a kit **it** checked out at
+**its own** pin, so a plugin pinned at `0.1.0` runs 0.1.0's sync task and never sees this
+check until it bumps. **Opting in is an explicit act**, which is precisely what lets the
+check be a hard failure rather than a warning: no plugin can meet it by accident, and
+none is held to it without asking.
 
 ### 9.5 The fallback is loud, and failure classes differ
 
@@ -1633,6 +1631,11 @@ has to be able to do this, and a task nobody can run is a task nobody tests.
 🔑 **`--check` is what a plugin's own CI runs.** Without it the kit is a suggestion:
 drift becomes a discovery rather than a failing build.
 
+➕ **Unchanged by §11's removal of the reusable workflows, and worth saying because the
+opposite was assumed for a day.** The mechanism was never the kit running this; it was
+this running. §11.3 has the two-command recipe a plugin copies, against a kit the plugin
+checks out at its own pin. Only the invoker changed.
+
 ⚠️ **The sync verifies by running the synced `bin/common`, not by parsing the TOML
 itself.** A second parser on the Python side would agree with itself while disagreeing
 with the shell, which is the failure it exists to catch.
@@ -1750,83 +1753,54 @@ named.
 
 ---
 
-## 11. CI ✅ **built 2026-09-11**
+## 11. CI ✅ **built 2026-09-11**, 🔻 **plugin-facing half removed 2026-09-12**
+
+🔑 **Decided by Mike 2026-09-12: the kit stops running anything for anyone, and keeps
+providing things a plugin can run.** `plugin-ci.yml` and `plugin-release.yml` are gone.
+`tools/plugin_gate.py` and `templates/sync_bin.py` stay, in the same category as
+`templates/` itself: shipped, and called by whoever wants them.
+
+⚠️ **What failed was the delivery, never the gates.** §11.2.1 has the measurement, and
+this is the whole of it in one sentence: **a callee cannot discover which version of
+itself a caller pinned, but a caller always knows what it pinned.** It is in the plugin's
+own `Cargo.toml`. So every gate works when the plugin runs it, and none of them worked
+when the kit tried to run them on the plugin's behalf.
 
 **Corrected 2026-09-11 against what shipped.** This section was written before any code
-existed. Four things changed in the building, and each is marked where it sits: the
-inputs are derived rather than passed (§11.3), Linux is musl rather than gnu (§11.6), the
-release strips nothing (§11.5), and the workflows are wrappers around a tested Python
-module rather than logic in YAML (§11.2.1).
+existed. Three things changed in the building and survive the removal: Linux is musl
+rather than gnu (§11.6), the release strips nothing (§11.5), and the logic lives in a
+tested Python module rather than in YAML (§11.2.1).
 
 ### 11.1 Workflows cannot ship inside the crate
 
 🚫 Cargo does not scaffold a consumer's repo, and Actions only runs workflows physically
 present in `.github/workflows/`.
 
-### 11.2 Reusable workflows instead
+### 11.2 🔻 Reusable workflows were the answer, and they do not work
 
-✅ `{owner}/{repo}/.github/workflows/{file}@{ref}` works cross-repo, pins to a tag or SHA,
-and nests up to ten levels. Each plugin repo gets a caller of roughly ten lines. Bumping
-the pinned ref propagates to all three, the same model as pinning the crate.
+✅ The mechanism itself is real: `{owner}/{repo}/.github/workflows/{file}@{ref}` works
+cross-repo, pins to a tag or SHA, and nests up to ten levels. Two shipped, each plugin
+was to get a caller of roughly ten lines, and bumping the pinned ref would propagate to
+all three exactly as pinning the crate does.
 
-✅ `mike-bronner` is a GitHub **Organization**, so `secrets: inherit` is available.
-Neither shipped workflow needs a secret: both run on `GITHUB_TOKEN`.
+🚨 **It fails on the one thing it needed: a called workflow cannot learn which of its own
+versions it is.** It therefore cannot check out the matching kit, and checking a plugin
+against the wrong kit is worse than not checking it. §11.2.1 carries the measurement.
 
-### 11.2.1 ➕ The workflows are wrappers. The logic is `tools/plugin_gate.py`
+**So the plugins run the gates themselves** (§11.3), which has no discovery problem
+because a caller always knows what it pinned.
 
-🔑 **YAML cannot be run, so nothing that can be wrong lives in it.** Both reusable
-workflows need the same six targets and the same version rules. A copy in each would be
-two things to keep in step, and neither copy could be tested until a release was already
-going wrong.
+### 11.2.1 The logic is `tools/plugin_gate.py`, and that is what outlived the workflows
 
-So one Python module holds the target table, the asset naming and the version rules, and
-`tools/test_plugin_gate.py` drives it. ✅ This is the arrangement the justfile already
-has with `codegen/` and `templates/`, applied to CI: **a recipe that grows logic of its
-own becomes a path nobody can test**.
+🔑 **YAML cannot be run, so nothing that can be wrong lives in it.** One Python module
+holds the target table, the asset naming and the version rules, and
+`tools/test_plugin_gate.py` drives it. ✅ The same arrangement the justfile has with
+`codegen/` and `templates/`: **a recipe that grows logic of its own becomes a path nobody
+can test**.
 
-⚠️ **A called workflow gets the kit by checking it out at whatever the call context says
-this file was resolved at.** So the kit that checks a plugin is exactly the kit version
-that plugin pinned, with no second ref to keep in step. An input naming the ref again
-would be that second pin.
-
-#### 🚨 Corrected 2026-09-12: the documented value was empty on the first real call
-
-✅ **Measured, not guessed.** recent-spaces run 34708262498, push to `main`, caller pinned
-`@0.3.0`. `Conformance` failed in three seconds and `build` was skipped behind it.
-**`github.job_workflow_sha` was empty.** The runner's own log resolved the file to
-`…/plugin-ci.yml@refs/tags/0.3.0 (abb5f038…)`, and that sha is the **annotated tag
-object** rather than the commit — but the guard's arithmetic rules that out as the cause,
-because a tag object sha is still 40 hex characters and would have been accepted.
-
-🔑 **Failing closed is why that cost a red build rather than a wrong answer**, which is
-this clause working exactly as written. The defect is that it failed closed on **the only
-call pattern the README documents**: §12.3 says a consumer pins a tag, and it refused
-every one of them.
-
-So the resolution now takes the first of these that answers:
-
-| Candidate | Why it is safe |
-|---|---|
-| `github.job_workflow_sha` | A commit. Needs no further check: a sha from another repository does not resolve in this one |
-| `github.job_workflow_ref`, then `github.workflow_ref` | Only when the path names **this** repository. Everything after the last `@` is what the runner already resolved, so it takes a tag, a branch or a sha without caring which |
-
-🚨 **The repository check is the whole safety of the second row, and it is not
-decoration.** A wrong *sha* fails closed by itself. A wrong *ref name* does not:
-`refs/heads/main` exists in this kit too, so taking a caller's own ref would check the
-plugin against the kit's default branch and **pass**. That is the silent wrong-kit
-failure this whole clause exists to prevent, arriving through the fix for it.
-
-⚠️ **One constraint on the answer, recorded before the answer arrives.** ✅ Mike's
-machine sets `tag.gpgsign = true` globally, so a bare `git tag <name> <commit>` fails
-there and **every tag he makes is annotated by configuration rather than by choice**. All
-three releases are annotated for that reason. 🔑 So if the annotated form is the broken
-one, "use a lightweight tag" is not a fix available to him without changing global config,
-and the workflow has to take annotated tags.
-
-⚠️ **Every candidate is printed on every run, not only on a refusal.** The next time this
-breaks it will be a different context being empty, and a guard that speaks only when it
-refuses teaches nothing about the run that worked. One red run has already cost a round
-trip for want of exactly that.
+➕ **That decision is why removing the workflows cost almost nothing.** The workflows were
+wrappers, so deleting them deleted wrappers. Every check they invoked still exists, still
+has its tests, and is now invoked by the plugin instead.
 
 #### 🚨 Answered 2026-09-12: a called workflow cannot discover which version of itself is running
 
@@ -1863,48 +1837,79 @@ different things**, which is worth more outside this repository than in it.
 ⚠️ **Keep this subsection through any rewrite of §11.** It is the reason the sections
 around it changed, and it would otherwise vanish with the workflows it explains.
 
-#### The exception to "nothing that can be wrong lives in YAML", and how it is tested
+### 11.3 What a plugin's own CI runs
 
-🔑 **This block cannot live in `tools/` like everything else, because it decides which
-`tools/` to check out.** It is the only logic here that ships untested by construction —
-so the test comes to it. `tools/test_workflow_ref.py` extracts the block from **both**
-workflows, proves the two copies are byte-identical, and runs the real text under `sh`
-against fabricated contexts: an empty one, a commit, a ref path this kit owns, a ref path
-somebody else owns, and a repository whose name merely starts the same.
+**Copy this, do not paraphrase it.** 🚨 A recipe somebody restates is how three plugins
+end up running three different checks, which is the same argument that makes
+`templates/bin/` land byte-identical (§10).
 
-✅ That is `tools/test_plugin_gate.py`'s arrangement for the asset-naming line, applied
-here: execute the shipped text rather than a copy, because a copy agrees with itself
-while both sides are wrong together.
+```yaml
+# .github/workflows/ci.yml in the plugin
+jobs:
+  kit-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # 🚨 Load-bearing. The version gate reads tag history, and a shallow
+          # clone lets it pass by seeing no releases at all.
+          fetch-depth: 0
 
-### 11.3 `plugin-ci.yml`
+      # The tag comes from this plugin's own dependency pin, read through
+      # cargo rather than out of the TOML. `--no-deps` needs no network and no
+      # lockfile, and it answers for a workspace-inherited dependency, which a
+      # regex over Cargo.toml does not.
+      - id: kit
+        run: |
+          source=$(cargo metadata --no-deps --format-version 1 | python3 -c '
+          import json, sys
+          for package in json.load(sys.stdin)["packages"]:
+              for dependency in package["dependencies"]:
+                  if dependency["name"] == "herdr-plugin-kit":
+                      print(dependency.get("source") or "")
+          ' | head -1)
+          case "$source" in
+            *\?tag=*) tag="${source##*\?tag=}" ;;
+            *) tag='' ;;
+          esac
+          if [ -z "$tag" ]; then
+            echo "this plugin does not pin herdr-plugin-kit to a tag." >&2
+            echo "cargo reports its source as: ${source:-<none>}" >&2
+            echo "A branch, a commit or a path pin has no version to check" >&2
+            echo "against, so nothing is guessed here. Pin a tag." >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-⚠️ **Corrected: there are no required inputs.** This section named three — crate name,
-binary name, minimum Rust version — and building it retired each for its own reason.
+      - uses: actions/checkout@v7
+        with:
+          repository: mike-bronner/herdr-plugin-kit
+          ref: ${{ steps.kit.outputs.tag }}
+          path: kit
 
-- **Crate name and binary name are hazards rather than conveniences.** Both are already
-  stated in the plugin's own manifests, and **an input repeating a manifest fact is a
-  second copy that can disagree with the first.** A `binary_name` input disagreeing with
-  `Cargo.toml` publishes an asset under one name while every install requests the other,
-  which is precisely the silent failure §11.4 exists to catch. The workflow reads them.
-- **Minimum Rust version has nothing left to name.** §11.8.1 dropped the concept: a
-  plugin ships as a compiled binary, so a floor documents a requirement for people who
-  will never compile. The jobs take the runner's own toolchain.
+      - run: python3 kit/templates/sync_bin.py . --check
+      - run: python3 kit/tools/plugin_gate.py versions .
+```
 
-✅ One optional input survives: `test_os`, defaulting to `ubuntu-latest`. recent-spaces'
-suite writes under `/private/tmp` and cannot run on Linux at all, which is a fact about
-that plugin rather than about this workflow.
+Three things in it are load-bearing and none is obvious:
 
-Jobs:
+- 🚨 **`fetch-depth: 0`.** The version gate reads tag history, and a shallow clone lets it
+  pass by seeing **no releases at all** (§11.4). A gate that passes because it saw
+  nothing is the silent-pass class this project keeps finding.
+- 🔑 **The tag comes from the plugin's own dependency pin**, read through `cargo
+  metadata` rather than out of the TOML. ✅ Measured 2026-09-12: `--no-deps` needs no
+  network and no lockfile, and it answers `git+…?tag=0.3.0` for a **workspace-inherited**
+  dependency, which a regex over the member's `Cargo.toml` cannot see at all. It is the
+  same standard `plugin_gate.py` already holds itself to — ask the tool, do not parse the
+  file.
+- ⚠️ **A pin that is not a tag stops the job.** ✅ Measured on all four forms: `?branch=`,
+  `?rev=`, a bare git source and a path dependency each answer no tag, and the recipe
+  says so rather than checking out nothing. A plugin pinning a branch is a real case and
+  it has no version to check against.
 
-| Job | What it settles |
-|---|---|
-| `conformance` | `bin/` still matches the kit (§10.0's `--check`), and the versions agree (§11.4) |
-| `gates` | the suite, formatting, and clippy with warnings denied |
-| `build` | all six targets compile and link, on native runners |
-
-⚠️ **`build` builds the debug profile, not `--release`.** It answers "does this compile
-and link here?", which is the whole of the Windows guarantee, and these plugins set no
-LTO, so the release profile compiles nothing this does not.
+⚠️ **The plugin's own suite, formatting and lint are the plugin's business.** The old
+`gates` job ran them and it was the one part that worked, but nothing about it needed the
+kit: it is `cargo test` and `cargo clippy` on the runner's own toolchain.
 
 ### 11.4 The version-agreement gate is load-bearing
 
@@ -1945,44 +1950,33 @@ and the tag being pushed, `main` advertises an unreleased version. Assertion 4 p
 deliberately, because it is the ordinary state of a bumped tree. Push the bump and the
 tag together, or trigger the release from the bump commit.
 
-### 11.5 `plugin-release.yml`
+### 11.5 🔻 What a plugin's release job has to do, now that the kit does not
 
-Tag-triggered. Builds the matrix, generates a `.sha256` beside each binary, and uploads
-both. Produces exactly what §9.6 consumes: raw binaries, keyed on the commit, and **no
-archive step**. It also asserts the tag form (§12.2), which is what stops the two
-conventions crossing at the one place that publishes.
+**The workflow is gone; the requirements it met are not.** Download-by-default (§9.3) is
+unchanged, so a plugin that publishes nothing has every install compiling from source
+forever, and §9.6's convention still decides what the shim asks GitHub for.
 
-Requires the **caller** to grant `contents: write`. A called workflow runs on the
-caller's permissions. ✅ The requirement is stated in the workflow's own header and in the
-README's caller snippet, which are the two places a caller reads, and a caller who omits
-it gets a run that fails before it starts rather than a 403 halfway through a release.
+A plugin's own release job, on a tag:
 
-⚠️ **Corrected: it strips nothing.** This section said "strips", and the step was
-dropped after measuring what the plugins already do. All three set `strip = true` in
-`[profile.release]`, so cargo strips at link time, **before** macOS ad-hoc signs the
-Mach-O. A strip step after the fact would re-strip an already stripped binary and take a
-re-signing risk on arm64 for nothing.
+| Requirement | Why, and what provides it |
+|---|---|
+| Build the six targets on native runners | `python3 kit/tools/plugin_gate.py matrix` prints the rows a `matrix.include` takes (§11.6) |
+| Name each asset | `python3 kit/tools/plugin_gate.py asset-name . --target <triple>`. 🚨 **The producing half of §9.6.** The consuming half is `asset_url` in `bin/common`, and `tools/test_plugin_gate.py` runs both and compares |
+| A `.sha256` beside each binary | `bin/build` verifies it **before** anything executes (§9.4 step 7) |
+| Raw binaries, **no archive step** | §9.6: what the shim fetches is the file it runs |
+| Assert the tag form | §12.2, the one place two conventions can cross |
+| `contents: write` | The job uploads to a release |
+| **All six, or none** | Count the collected files against the table before uploading any. Five published and a sixth missing is one platform compiling on every install, forever, with nothing to say so |
 
-➕ **All six, or none.** The publish job needs the whole matrix, and it counts the files
-it collected against the size of the table before uploading any of them. Five platforms
-published and a sixth missing is not a partial success: it is one platform compiling on
-every install, forever, with nothing to say so.
+⚠️ **It strips nothing.** All three plugins set `strip = true` in `[profile.release]`, so
+cargo strips at link time, **before** macOS ad-hoc signs the Mach-O. A strip step after
+the fact would re-strip an already stripped binary and take a re-signing risk on arm64
+for nothing.
 
-➕ **Both caller triggers work.** `release: types: [created]` is what project-finder uses
-today; a bare tag push works too, and the release is created if it does not exist.
-Anything else — a branch, a manual run on `main` — reaches the tag-form gate and is
-refused there.
-
-🚧 **Still unrun, and still blocking — but the thing it blocks is the first migrated
-plugin release, not a kit version.** ➕ **2026-09-12: `plugin-ci.yml` has now run and
-failed**, at the step both workflows share (§11.2.1). `plugin-release.yml` carries the
-identical step, so it would have refused a release the same way. recent-spaces correctly
-declined to create one, which is the only reason no plugin version was burned on a
-release with no assets. Under download-by-default that release must produce
-assets, so this workflow has to be correct before it rather than after. ⚠️ This read
-"blocking for the kit's own 0.1.0" until 2026-09-12, and 0.1.0 shipped without the
-workflow ever executing, which is how a gate written against a version number stops
-being a gate at all.
+🚧 **Nothing here has ever run**, and that is now a plugin-side gap rather than a kit-side
+one. ✅ The kit-side half is testable and tested: the asset name a release would publish
+and the name a shim requests are compared by `tools/test_plugin_gate.py` on every run.
+⚠️ What no test covers is a plugin actually publishing six files under those names.
 
 ### 11.6 Build matrix — native runners, not cross-compilation
 
@@ -2025,6 +2019,10 @@ label that does not exist never starts, and the release then publishes five asse
 🪤 ✅ When a PR cannot compute a merge ref against `main`, Actions skips `pull_request`
 workflows entirely. No run, no error, and the checks simply never appear. A push trigger
 keeps a conflicted branch covered.
+
+➕ **It applies to a plugin's own workflows now**, and the kit's own CI (§11.8) already
+carries both triggers. It is written down here because a plugin author copying §11.3's
+recipe is choosing triggers at the same moment.
 
 ### 11.8 ➕ The kit's own CI, and where the slow check lives
 
@@ -2173,10 +2171,12 @@ Two requirements follow, and both are requirements rather than advice:
   has to state the expected string. **Done 2026-09-11**, in
   `templates/test_templates.py`: `uname` is stubbed so that every part of the string is a
   literal except the commit, which cannot be one.
-- ➕ ✅ **The release workflow must reject one of the two forms** (§11.5). Tolerating both
-  `0.8.0` and `v0.8.0` is exactly how two conventions drift apart and then disagree
-  without saying so. **Done 2026-09-11**: `TAG_PREFIX` in `tools/plugin_gate.py` is one
-  named constant, and the gate refuses the other form by name rather than ignoring it.
+- ➕ ✅ **The gate must reject one of the two forms.** Tolerating both `0.8.0` and
+  `v0.8.0` is exactly how two conventions drift apart and then disagree without saying
+  so. **Done 2026-09-11**: `TAG_PREFIX` in `tools/plugin_gate.py` is one named constant,
+  and the gate refuses the other form by name rather than ignoring it. ➕ It sat in the
+  release workflow until 2026-09-12 and now sits in the plugin's own release job (§11.5),
+  which changes who runs it and nothing about what it asserts.
 
 ⚠️ **Live instance to carry.** recent-spaces' own `bin/build` builds
 `releases/download/v$version/...`, and that repo still tags with a `v` (§13.1). The two
@@ -2204,12 +2204,11 @@ tag form when recent-spaces migrates (§13).
   `f64` (§3.2.1), which breaks any consumer that bound one to an `f32`. Two source-
   breaking changes in one day, on a rule with no exercise before either.
 - ➕ **A consumer may pin any kind of tag**, added 2026-09-12. All three of this kit's
-  releases are annotated tags, and the reusable workflows resolve a ref rather than a tag
-  object, so lightweight and annotated are both taken. ⚠️ **If that ever stops being
-  true, it belongs here rather than in whoever happens to remember it.** A workflow that
-  serves one kind of tag is a trap for whoever tags the next release without knowing
-  which kind they made, and §11.2.1 records that the tag *kind* was ruled out as the
-  cause of the first failure rather than confirmed as harmless.
+  releases are annotated tags, and ✅ the probe in §11.2.1 measured both kinds behaving
+  identically. `actions/checkout` takes either, and a `cargo` git dependency takes either.
+  ⚠️ **If that ever stops being true, it belongs here rather than in whoever happens to
+  remember it**: a check that serves one kind of tag is a trap for whoever tags the next
+  release without knowing which kind they made.
 - Promotion to crates.io stays open and needs no design change.
 
 ---
@@ -2221,6 +2220,19 @@ tag form when recent-spaces migrates (§13).
 | 1️⃣ | recent-spaces | Smallest at 158 lines of `api.rs`, no TUI, donates the best `version.rs`, and carries the live `v`-prefix hazard (§12.2) |
 | 2️⃣ | agentic-panes-layout | Donates `issues.rs` |
 | 3️⃣ | project-finder | Only one with a real behaviour change (§7.3), and donates the shim (§9.4) |
+
+#### What migrating a plugin now involves
+
+➕ **Rewritten 2026-09-12**, because two of the four steps changed the same day.
+
+1. Pin the kit by tag, and **name a result type at every call site**. The pin alone makes
+   the binary bigger, which is the next subsection.
+2. `just sync-bin <plugin>`, then commit `bin/` and the `.gitignore` entry (§9.4.2).
+3. Copy §11.3's recipe into the plugin's own CI. ⚠️ **Copy it; the kit no longer runs it
+   for anybody** (§11), and a paraphrase is how three plugins end up running three
+   different checks.
+4. Build the plugin's own release job against §11.5's requirements, which is the step
+   with no kit-side workflow behind it any more and the largest piece of new work.
 
 #### 🚨 Bumping the pin is half the migration, and half is worse than none
 
@@ -2300,8 +2312,8 @@ Last measured 2026-09-11. **Re-measure rather than trust it.**
 - ✅ **Agreement is a property, not a number.** It is what §11.4's gate asserts, and the
   gate is unchanged by any release either side of it cuts.
 - ⚠️ **A repo publishing no assets cannot be retrofitted.** Its first migrated version has
-  to be a new release cut through the new workflow, because there is nothing to attach
-  commit-keyed assets to retrospectively.
+  to be a new release cut through the plugin's own release job (§11.5), because there is
+  nothing to attach commit-keyed assets to retrospectively.
 - ⚠️ **Two of the three tags still carry a `v`.** §12 governs which form is right, and
   §12.2 records why crossing the two fails silently rather than loudly.
 
@@ -2342,8 +2354,10 @@ and nothing about it is measured. **Reversing it is one line in each of two plac
 (§9.6), and being wrong costs a 404 and a compile, never a wrong binary.
 
 💰 **A live instance is the cheapest confirmation available.** The first plugin release
-through `plugin-release.yml` publishes two Windows assets. Downloading one and running it
-on any Windows machine settles this for good.
+to publish assets publishes two Windows ones. Downloading one and running it on any
+Windows machine settles this for good. ⚠️ That release is further away than it was: the
+kit no longer ships the workflow that would have produced it (§11.5), so a plugin builds
+its own release job first.
 
 ---
 

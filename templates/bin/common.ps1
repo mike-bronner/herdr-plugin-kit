@@ -64,7 +64,8 @@ $OverrideFile = 'BUILD_FROM_SOURCE'
 # these names and nothing here is a measurement.
 #
 # The producing half is WINDOWS_ASSET_EXTENSION in tools/plugin_gate.py, which
-# is what .github/workflows/plugin-release.yml publishes. Those two assignments
+# is what a plugin's own release job publishes through `plugin_gate.py
+# asset-name`. Those two assignments
 # are the only places in this repository that decide this name, and
 # tools/test_plugin_gate.py fails if they ever disagree — a producer and a
 # consumer disagreeing here is a 404 and a silent compile on every Windows

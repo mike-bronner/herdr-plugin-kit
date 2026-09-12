@@ -56,11 +56,6 @@ jobs:
       - name: The plugin conformance gate
         run: python3 tools/test_plugin_gate.py
 
-      # 🔑 Runs the resolution block out of the reusable workflows themselves,
-      # against fabricated contexts. It is the only logic here that cannot
-      # live in tools/, because it decides which tools/ to check out.
-      - name: The kit-ref resolution, out of the workflows that ship it
-        run: python3 tools/test_workflow_ref.py
 
       - name: The Rust suite
         run: cargo test --locked --features dialog

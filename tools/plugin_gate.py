@@ -125,6 +125,37 @@ def is_windows(target: str) -> bool:
     return "windows" in target
 
 
+#: How many characters of the commit a release asset's name carries.
+#:
+#: 🔑 The **producing** half of §9.6's asset convention. The consuming half is
+#: ``asset_url`` in ``templates/bin/common``, which is what a shim asks GitHub
+#: for at install time, and ``tools/test_plugin_gate.py`` runs both and
+#: compares their answers.
+#:
+#: ⚠️ It lived in ``.github/workflows/plugin-release.yml`` until 2026-09-12,
+#: when the kit stopped running CI for other repositories (§11). A plugin's
+#: own release job calls ``asset-name`` here instead, so the convention stays
+#: in one runnable place rather than becoming a line three plugins copy.
+COMMIT_CHARACTERS = 12
+
+
+def asset_name(binary: str, target: str, commit: str) -> str:
+    """The file a release publishes, and the file a shim asks for.
+
+    🚨 A producer and a consumer disagreeing about this name is silent in both
+    directions: GitHub answers 404, ``bin/build`` falls back to compiling, and
+    the plugin still works. Nobody finds out.
+    """
+    row = next((row for row in TARGETS if row["target"] == target), None)
+    if row is None:
+        raise SyncError(
+            f"{target!r} is not one of the six targets this kit publishes. "
+            f"Run `plugin_gate.py targets` for the list."
+        )
+    suffix = WINDOWS_ASSET_EXTENSION if is_windows(target) else ""
+    return f"{binary}-{row['platform']}-{commit[:COMMIT_CHARACTERS]}{suffix}"
+
+
 def matrix() -> List[Dict[str, str]]:
     """The build matrix, as the rows a workflow's ``matrix.include`` takes.
 
@@ -179,6 +210,25 @@ def cargo_facts(target: Path) -> Tuple[str, str]:
             "binary and execute another"
         )
     return binaries[0]
+
+
+def head_commit(target: Path) -> str:
+    """The commit a plugin checkout is sitting on.
+
+    Fails closed like every other reader here: a name built from an unknown
+    commit would be published and then never requested.
+    """
+    finished = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=str(target),
+        capture_output=True,
+        text=True,
+    )
+    if finished.returncode != 0:
+        raise SyncError(
+            f"git could not read this plugin's HEAD:\n{finished.stderr.strip()}"
+        )
+    return finished.stdout.strip()
 
 
 def release_tags(target: Path) -> List[Tuple[str, str, str, Tuple[int, ...]]]:
@@ -322,6 +372,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     facts = subcommands.add_parser("binary-name", help="print the binary cargo builds")
     facts.add_argument("plugin", type=Path, help="a plugin checkout")
 
+    asset = subcommands.add_parser("asset-name", help="print the asset a release publishes")
+    asset.add_argument("plugin", type=Path, help="a plugin checkout")
+    asset.add_argument("--target", required=True, help="one of the six target triples")
+    asset.add_argument(
+        "--commit",
+        help="the commit being published, defaulting to the plugin's own HEAD",
+    )
+
     arguments = parser.parse_args(argv)
 
     try:
@@ -333,6 +391,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 0
         if arguments.command == "binary-name":
             print(cargo_facts(arguments.plugin)[1])
+            return 0
+        if arguments.command == "asset-name":
+            commit = arguments.commit or head_commit(arguments.plugin)
+            print(asset_name(cargo_facts(arguments.plugin)[1], arguments.target, commit))
             return 0
         problems, summary = check_versions(arguments.plugin, arguments.tag)
     except SyncError as error:

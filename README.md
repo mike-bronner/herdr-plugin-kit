@@ -30,7 +30,7 @@ order `SCOPE.md` section 13 sets out.
 | Shell templates — `bin/build`, the launcher, and their sync task | ✅ |
 | PowerShell templates | ⚠️ shipped **unrun**, see below |
 | `report`, `update` | ⏳ held until one real consumer proves the boundaries |
-| CI workflows | ⏳ later stage |
+| CI workflows | ✅ the kit's own. 🔻 The plugin-facing pair was removed 2026-09-12, see below |
 
 Generated against **Herdr `v0.9.0`**, protocol 22, schema version 1.
 
@@ -443,73 +443,118 @@ reach none, so the drawn path stays for that case permanently.
 
 ## Continuous integration
 
-A crate cannot ship a workflow: Actions only runs files physically present in a repo's
-own `.github/workflows/`. So the kit holds two **reusable** workflows, and each plugin
-calls one of them. Bumping the pinned ref propagates to all three plugins, the same model
-as pinning the crate.
+**The kit runs nothing for anybody.** It ships gates, and a plugin runs them against a
+kit it checks out at its own pin.
 
-### Conformance, on every push and every pull request
+> 🔻 **Two reusable workflows did this until 2026-09-12, and they are gone.** A called
+> workflow cannot discover which of its own versions a caller pinned — measured, twice,
+> and there is no route — so it cannot check out the matching kit, and checking a plugin
+> against the wrong kit is worse than not checking it. `SCOPE.md` §11.2.1 has the
+> measurement. **The gates were never what failed.** A caller always knows what it
+> pinned, because it is in its own `Cargo.toml`.
+
+### The two gates, in the plugin's own CI
+
+**Copy this rather than paraphrasing it.** A recipe somebody restates is how three
+plugins end up running three different checks.
 
 ```yaml
 # .github/workflows/ci.yml in the plugin
-name: CI
-on:
-  push:
-  pull_request:
 jobs:
-  conformance:
-    uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-ci.yml@0.3.0
+  kit-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # 🚨 Load-bearing. The version gate reads tag history, and a shallow
+          # clone lets it pass by seeing no releases at all.
+          fetch-depth: 0
+
+      # The tag comes from this plugin's own dependency pin, read through
+      # cargo rather than out of the TOML. `--no-deps` needs no network and no
+      # lockfile, and it answers for a workspace-inherited dependency, which a
+      # regex over Cargo.toml does not.
+      - id: kit
+        run: |
+          source=$(cargo metadata --no-deps --format-version 1 | python3 -c '
+          import json, sys
+          for package in json.load(sys.stdin)["packages"]:
+              for dependency in package["dependencies"]:
+                  if dependency["name"] == "herdr-plugin-kit":
+                      print(dependency.get("source") or "")
+          ' | head -1)
+          case "$source" in
+            *\?tag=*) tag="${source##*\?tag=}" ;;
+            *) tag='' ;;
+          esac
+          if [ -z "$tag" ]; then
+            echo "this plugin does not pin herdr-plugin-kit to a tag." >&2
+            echo "cargo reports its source as: ${source:-<none>}" >&2
+            echo "A branch, a commit or a path pin has no version to check" >&2
+            echo "against, so nothing is guessed here. Pin a tag." >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        with:
+          repository: mike-bronner/herdr-plugin-kit
+          ref: ${{ steps.kit.outputs.tag }}
+          path: kit
+
+      - run: python3 kit/templates/sync_bin.py . --check
+      - run: python3 kit/tools/plugin_gate.py versions .
 ```
 
-There are no required inputs. Every fact it needs is already stated in the plugin's own
-manifests, and an input repeating one of them is a second copy that can disagree with the
-first. The one optional input is `test_os`, for a plugin whose suite cannot run on Linux.
+Three things in it are load-bearing:
 
-It runs the suite, the formatting, clippy with warnings denied, a compile of all six
-targets, and two conformance checks that have no local equivalent:
+- 🚨 **`fetch-depth: 0`.** The version gate reads tag history, and a shallow clone lets it
+  pass by seeing no releases at all.
+- **The tag comes from your own dependency pin**, read through `cargo metadata` rather
+  than out of the TOML, so it works for a workspace-inherited dependency too and needs no
+  network.
+- **A pin that is not a tag stops the job**, rather than checking out nothing. A branch or
+  a commit pin has no version to check against.
+
+What the two commands settle:
 
 - **`bin/` still matches the kit.** Without it the kit is a suggestion, and drift becomes
   a discovery rather than a failing build.
 - **The versions and the tag form agree.** `herdr-plugin.toml`, `Cargo.toml`, the binary
   cargo builds, and the repository's release tags all have to say the same thing.
 
+Your suite, your formatting and your lint are your own business: they need nothing from
+the kit.
+
 > **Trigger on `push` as well as `pull_request`.** When a pull request cannot compute a
 > merge ref against `main`, Actions skips its `pull_request` workflows entirely — no run,
 > no error, and the checks simply never appear. The push trigger is what keeps a
 > conflicted branch covered.
 
-### Release, on a tag
+### Releasing a plugin
 
-```yaml
-# .github/workflows/release.yml in the plugin
-name: Release
-on:
-  release:
-    types: [created]
-permissions:
-  contents: write
-jobs:
-  release:
-    uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-release.yml@0.3.0
-    permissions:
-      contents: write
+The kit ships no release workflow, and download-by-default means a plugin that publishes
+nothing has every install compiling from source. `SCOPE.md` §11.5 lists what a release
+job has to do; the two pieces the kit provides are:
+
+```sh
+python3 kit/tools/plugin_gate.py matrix                            # the six build rows
+python3 kit/tools/plugin_gate.py asset-name . --target <triple>    # what to call each file
 ```
 
-> 🚨 **The caller must grant `contents: write`.** A called workflow runs on the caller's
-> permissions and cannot raise its own, so a caller that omits it fails before the run
-> starts. It is needed to create the release and attach the twelve files to it.
-
-It builds six targets on native runners and publishes a raw binary and a `.sha256` beside
-it for each, named exactly as `bin/build` asks for them:
+🚨 **`asset-name` is the producing half of a two-sided agreement.** The consuming half is
+the shim asking GitHub for that exact file, and `tools/test_plugin_gate.py` runs both and
+compares. Get it wrong and GitHub answers 404, `bin/build` compiles instead, the plugin
+still works, and nobody finds out.
 
 ```
 https://github.com/<owner>/<repo>/releases/download/<version>/
   <binary>-<platform>-<commit12>            and .sha256 beside each
 ```
 
-Nothing is published unless all six arrive. Five platforms published and a sixth missing
-is not a partial success — it is one platform silently compiling on every install, and
-nothing would say so.
+Nothing should be published unless all six arrive. Five platforms published and a sixth
+missing is not a partial success — it is one platform silently compiling on every
+install, and nothing would say so.
 
 ## Layout
 
@@ -519,7 +564,7 @@ crates/herdr-plugin-kit-build/  the build-script stamp, a build-dependency only
 codegen/                        the five-stage pipeline and its tests
 templates/                      the shell shims every plugin's bin/ is synced from
 tools/                          the mutation harness and the plugin conformance gate
-.github/workflows/              the kit's own CI, and the two reusable workflows
+.github/workflows/              the kit's own CI, fast and slow
 SCOPE.md                        the specification
 justfile                        task wrappers, all one line each
 ```
@@ -531,16 +576,10 @@ just test          # or run the five entry points the recipe wraps, directly
 just check         # formatting, lints, and every suite
 ```
 
-Six suites, because an untested guard is a claim rather than a check: the codegen
+Five suites, because an untested guard is a claim rather than a check: the codegen
 guards, the shell templates, the mutation harness's own tests, the plugin conformance
-gate, the kit-ref resolution, and the Rust suite. None needs a network, and none of the
-five Python ones needs anything beyond the standard library.
-
-The kit-ref suite is the odd one. Every other piece of CI logic lives in `tools/` because
-YAML cannot be run, and this one cannot: it decides which kit to check out, so it runs
-before there is a `tools/` to call. So the test goes to it — extracting the block from
-both reusable workflows, proving the two copies are identical, and running the real text
-against fabricated GitHub contexts.
+gate, and the Rust suite. None needs a network, and none of the four Python ones needs
+anything beyond the standard library.
 
 The conformance gate's suite runs both sides of every agreement it asserts. It extracts
 the release workflow's own asset-naming line and executes it, then asks the real shim

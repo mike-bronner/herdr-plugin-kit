@@ -39,21 +39,21 @@ check-bin plugin:
 
 # Ask whether a plugin's manifests, its tags and its binary name still agree.
 #
-# The other half of what a plugin's own CI runs, through
-# .github/workflows/plugin-ci.yml. Every disagreement it names is silent in
-# production: the install still works and simply stops downloading.
+# The other half of what a plugin's own CI runs, beside `check-bin`. SCOPE.md
+# §11 carries the two-command recipe verbatim, because a paraphrase is how
+# three plugins end up running three different checks. Every disagreement this
+# names is silent in production: the install still works and simply stops
+# downloading.
 gate plugin:
     python3 tools/plugin_gate.py versions {{plugin}}
 
 # Run every test: the codegen guards, the shell templates, the mutation
-# harness's own tests, the plugin conformance gate, the one block of logic
-# that has to live in YAML, then the Rust suite.
+# harness's own tests, the plugin conformance gate, then the Rust suite.
 test:
     python3 codegen/test_codegen.py
     python3 templates/test_templates.py
     python3 tools/test_mutate.py
     python3 tools/test_plugin_gate.py
-    python3 tools/test_workflow_ref.py
     cargo test --features dialog
 
 # Check the tests actually test: break one thing at a time and confirm the

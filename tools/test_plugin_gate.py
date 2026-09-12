@@ -217,36 +217,33 @@ class TheReleaseNamesWhatTheShimAsksFor(GateFixture):
     character different, GitHub answers 404, and every install compiles. The
     plugin still works, so nothing surfaces.
 
-    ⚠️ The workflow's own naming line is extracted and executed rather than
-    read. A test asserting that the file *contains* a string would pass
-    against a line that never runs, and a test rebuilding the name in Python
-    would agree with itself.
+    ⚠️ **Both sides are executed, never read.** The producing side is
+    ``plugin_gate.py asset-name``, run as a plugin's own release job runs it,
+    and the consuming side is the real shim. A test asserting that a file
+    *contains* a string would pass against a line that never runs, and a test
+    rebuilding the name itself would agree with itself.
+
+    ➕ **The producer moved here on 2026-09-12.** It was a line inside
+    ``plugin-release.yml`` until the kit stopped running CI for other
+    repositories (§11). The agreement is unchanged and still two-sided: Python
+    on the producing side, shell on the consuming side, neither reading the
+    other.
     """
 
-    WORKFLOW = REPO_ROOT / ".github" / "workflows" / "plugin-release.yml"
-
-    def naming_line(self):
-        found = re.findall(r'^\s*(asset="[^"]*")$', self.WORKFLOW.read_text(), re.M)
-        # Pinned at one. Two would mean the release names assets in two
-        # places, and this test would then check whichever came first.
-        self.assertEqual(1, len(found), f"expected one asset= line, found {found}")
-        return found[0]
-
-    def published_name(self, platform, suffix):
-        script = f'set -eu\n{self.naming_line()}\nprintf %s "$asset"'
+    def published_name(self, target):
         return subprocess.run(
-            ["sh", "-c", script],
-            cwd=str(self.plugin.root),
+            [
+                sys.executable,
+                str(REPO_ROOT / "tools" / "plugin_gate.py"),
+                "asset-name",
+                str(self.plugin.root),
+                "--target",
+                target,
+            ],
             capture_output=True,
             text=True,
             check=True,
-            env={
-                "PATH": LAUNCHD_PATH,
-                "BINARY": self.plugin.binary,
-                "PLATFORM": platform,
-                "ASSET_SUFFIX": suffix,
-            },
-        ).stdout
+        ).stdout.strip()
 
     def requested_name(self, system, machine):
         self.plugin.stub(
@@ -274,7 +271,7 @@ class TheReleaseNamesWhatTheShimAsksFor(GateFixture):
             system, machine = hosts[row["platform"]]
             self.assertEqual(
                 self.requested_name(system, machine),
-                self.published_name(row["platform"], row["asset_suffix"]),
+                self.published_name(row["target"]),
                 row["platform"],
             )
 
@@ -283,7 +280,7 @@ class TheReleaseNamesWhatTheShimAsksFor(GateFixture):
         # asking for it. A checkout one commit past the tag asks for a file
         # that does not exist, and compiling is the correct answer.
         head = git(self.plugin.root, "rev-parse", "HEAD").stdout.strip()
-        published = self.published_name("macos-arm64", "")
+        published = self.published_name("aarch64-apple-darwin")
         self.assertTrue(published.endswith(head[:12]), published)
         self.assertNotIn(head[:13], published)
 
@@ -291,7 +288,7 @@ class TheReleaseNamesWhatTheShimAsksFor(GateFixture):
         # The one platform whose name nothing has ever exchanged. Structural on
         # the consuming side, but the producing side really runs here.
         row = next(row for row in plugin_gate.matrix() if row["platform"] == "windows-x64")
-        published = self.published_name(row["platform"], row["asset_suffix"])
+        published = self.published_name(row["target"])
         self.assertTrue(published.endswith(plugin_gate.WINDOWS_ASSET_EXTENSION), published)
 
 
