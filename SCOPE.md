@@ -1813,6 +1813,23 @@ command = ["powershell", "-File", "bin/build.ps1"]
 platforms = ["windows"]
 ```
 
+#### 🚨 `platforms` works on `[[build]]` and `[[startup]]`, and is rejected on `[[panes]]`
+
+✅ **Measured by project-finder, 2026-09-13**, on its own 0.9.0 manifest. ⚠️ **The kit has
+not reproduced it**, and states it as reported for the same reason §14.2 states the
+unrun Windows path as reported: the measurement is real, the reproduction is not ours.
+
+Doubling a `[[panes]]` entry the way the `[[build]]` block above is doubled makes the
+whole manifest fail to load with `duplicate pane id 'picker'`. **Pane ids resolve before
+platforms are filtered**, so both halves of the pair exist at the moment the check runs
+and collide. Herdr then falls back to a cached older copy of the manifest, which is worse
+than a refusal: the plugin keeps working, as an earlier version, with nothing saying so.
+
+🔑 **Nothing about this is the kit's fault, and the kit documented the opposite by
+omission.** The block above shows the doubling pattern without saying where it stops, and
+a reader generalising it to their panes gets a plugin that silently runs stale. **Double
+`[[build]]` and `[[startup]]`. Do not double `[[panes]]`.**
+
 ⚠️ **The earlier sequencing recommendation is withdrawn.** It said to take Windows in the
 Rust transport (section 4.2) and the CI matrix (section 11) now, and to defer the PowerShell
 shims and the `platforms = [..., "windows"]` declaration in the plugins until someone could
@@ -2073,6 +2090,28 @@ Three things in it are load-bearing and none is obvious:
 `gates` job ran them and it was the one part that worked, but nothing about it needed the
 kit: it is `cargo test` and `cargo clippy` on the runner's own toolchain.
 
+#### 🔑 Sync `bin/` from the tag you pin, never from the kit's `main`
+
+➕ **Reached independently by both migrating plugins, 2026-09-13**, which is as close to
+confirmation as two consumers get.
+
+**The check above reads a tag; `just sync-bin` reads a working tree.** The recipe
+resolves the pin, checks the kit out at that ref, and runs `sync_bin.py --check` against
+**that** tree. A tag is immutable, so whatever `main` says is invisible to it.
+
+🪤 **So syncing from `main` is the one action that turns a passing check into a failing
+one**, and it fails naming the file it has just "fixed". A template change on `main`
+cannot reach a plugin until the plugin asks for it.
+
+✅ **Which means a plugin picks a template fix up at the pin bump, and not before.** One
+action, one diff, one review — rather than a sync now and a bump later that may not agree
+with each other.
+
+⚠️ **This corrects an inference, not a measurement.** A source change in `templates/`
+was read as consumer drift without asking what the check compares against, and the answer
+was thirty lines away in the recipe itself. **Ask what a check reads before predicting
+what it will say.**
+
 ### 11.4 The version-agreement gate is load-bearing
 
 Assert that `herdr-plugin.toml`, `Cargo.toml`, and the git tag all state the same version.
@@ -2171,21 +2210,37 @@ green release with no assets, which is one nobody notices until every install co
 human-created release with no assets attached. The workflow cannot prevent that — the
 release existed before it ran — and its loudness is the red run beside it.
 
-🚨 **The worked example is live.** ✅ project-finder cannot compile for **either** Windows
-target: `src/layout.rs` uses `std::os::unix::fs::PermissionsExt` to test executability
-and `std::os::unix::process::CommandExt` with `setsid` to detach a child. Tagging it today
-would publish **zero** assets rather than four, and every install of that release would
-compile from source — which is exactly the silent fallback §9 exists to prevent, arriving
-loudly instead. 🔑 **Mike's decision: port `layout.rs` rather than narrow the matrix.**
-The six targets stay.
+🚨 **The worked example was live and is now closed.** project-finder could not compile
+for **either** Windows target: `src/layout.rs` reached for
+`std::os::unix::fs::PermissionsExt` to test executability and
+`std::os::unix::process::CommandExt` with `setsid` to detach a child. 🔑 **Mike's
+decision: port `layout.rs` rather than narrow the matrix.** ✅ Both reaches are now
+`#[cfg]`-split, the six targets stay, and all six compile and link.
 
-⚠️ **This is read off the file and GitHub's documented `needs` and matrix semantics.
-Nothing here has been observed**, because the workflow has still never completed a run.
+⚠️ **The chain above is still read off the file, and that caveat narrows rather than
+disappears.** ✅ What is now observed is the **success** path. **No leg has failed in a
+real run**, so every row in that table except the first remains GitHub's documented
+`needs` and matrix semantics rather than something anybody has watched happen.
 
-🚧 **It has still never run.** Its first call failed at the resolution step that has now
-been replaced, and nothing has exercised the six build legs or the publish job. ⚠️ **The
-first migrated plugin release is what settles it**, and under download-by-default that
-release must produce assets, so this has to be correct before it rather than after.
+#### ✅ It has run — measured 2026-09-13
+
+Verified against GitHub rather than reported: project-finder's **0.9.0**, run
+`34762541628`, conclusion **success**, event `release`, published `2026-09-13T14:23:49Z`
+with **12 assets** — six platforms, a binary and a `.sha256` each, every one keyed on
+commit `0837eb5571b6`.
+
+| What that settles | How |
+|---|---|
+| The six build legs | All six native runners produced a binary |
+| The publish job | The all-six count passed and the upload ran |
+| §9.6's commit-keyed convention | Every published name carries the same 12 characters |
+| `asset-name` as the producing half | The names GitHub holds are the ones it emits |
+| The `.exe` recommendation, **naming half only** | Both Windows assets published as `.exe` (§14.2) |
+
+🔑 **project-finder also fetched what the real `asset_url` named and matched its sha256
+against the published one.** That is the round trip `tools/test_plugin_gate.py`
+structurally cannot do: the suite runs both halves of the naming agreement and compares
+them, and nothing in it can ask GitHub whether the file is actually there.
 
 ### 11.6 Build matrix — native runners, not cross-compilation
 
@@ -2579,22 +2634,28 @@ and nobody on this project has Windows hardware. §10.1 and the README both say 
 | # | Question | Note |
 |---|---|---|
 | 1 | Attestation signing later? | Needs `gh`, which is not on launchd's PATH. §9.7 states the limit checksums do and do not cover |
-| 2 | Does a Windows asset name carry `.exe`? | ➕ **Recommended `.exe` on 2026-09-11, not confirmed.** See below |
+| 2 | Does a Windows asset **run**? | ➕ **Narrowed 2026-09-13.** The naming half is answered; the running half is untouched. See below |
 | 3 | Is the socket reachable at `[[startup]]`? | ✅ **No longer a correctness question** (§8.3). Purely an optimisation now: measuring it could save a `plugin.list` call |
 
-⚠️ **Question 2 has an answer and still has no measurement, and the difference matters.**
-The reason is that a file without that extension is not executable on Windows, and
-somebody downloading from the releases page should get something that runs. Nobody on
-this project has Windows hardware, so nothing has produced or consumed one of these names
-and nothing about it is measured. **Reversing it is one line in each of two places**
-(§9.6), and being wrong costs a 404 and a compile, never a wrong binary.
+✅ **The naming half closed on 2026-09-13.** project-finder's 0.9.0 published
+`pick-project-windows-arm64-0837eb5571b6.exe` and its x64 sibling, so the extension is no
+longer a recommendation: it is what the producing and consuming halves both say, on a
+real release (§11.5). **Reversing it is still one line in each of two places** (§9.6).
 
-💰 **A live instance is the cheapest confirmation available.** The first plugin release
-to publish assets publishes two Windows ones. Downloading one and running it on any
-Windows machine settles this for good. ⚠️ **Nothing blocks it in the kit**:
-`plugin-release.yml` builds and publishes both Windows assets. What it waits on is a
-plugin that can compile for those two targets — project-finder cannot today (§11.5) —
-and a first run, which that workflow has never had.
+🚨 **The running half is untouched, and it is the half that matters.** Both Windows
+binaries **compiled, linked and published. Nobody has run one.** Nobody on this project
+has Windows hardware.
+
+⚠️ **And there is a specific reason to expect trouble rather than a general one**, raised
+by project-finder: **Windows has no session concept.** `DETACHED_PROCESS` gives a child
+its own process group and no console, which is what `setsid` is being replaced with — but
+it does **not** exempt that child from a parent job object. If Herdr runs plugin panes
+inside a kill-on-close job, a detached layout child dies with the picker that spawned it,
+on Windows only, and every Unix test passes.
+
+💰 **A live instance is still the cheapest confirmation available**, and now there is
+something to download: running either published `.exe` on any Windows machine answers the
+half that is open.
 
 ---
 

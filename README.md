@@ -606,12 +606,15 @@ nothing would say so.
 failed leg fails the build job, the publish job needs it and is skipped, and nothing
 creates a release or uploads a file. That is deliberate: five platforms published and a
 sixth missing is one platform compiling on every install forever, with nothing to say so.
-✅ It is also live — project-finder cannot build for either Windows target today, so
-tagging it would publish zero assets rather than four.
+⚠️ So a plugin that cannot build for every target cannot release at all until it can —
+project-finder split its two Unix-only reaches behind `#[cfg]` for exactly that reason.
 
-> 🚧 **It has never run.** Its first call failed at a resolution step that has since been
-> replaced, and nothing has exercised the build legs or the publish job. The failure
-> chain above is read off the file rather than observed.
+✅ **It works, measured 2026-09-13.** project-finder's 0.9.0 published **12 assets**, six
+platforms with a `.sha256` beside each, every name keyed on the same commit. It then
+fetched what its own shim would ask for and matched the checksum.
+
+> 🚧 **No leg has failed in a real run.** The success path is measured; the failure chain
+> above is read off the workflow rather than watched.
 
 ## Layout
 
