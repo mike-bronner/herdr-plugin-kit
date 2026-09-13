@@ -2213,6 +2213,26 @@ call the kit, because it is deciding which kit to fetch. This can, so it lives i
 the two that were noticed. A fork whose name merely starts the same is excluded by an
 anchored match, because a prefix test is not a name test.
 
+##### ⚠️ The gate cannot judge this repository, and that is why the examples are tested
+
+✅ **Measured 2026-09-13.** `python3 tools/plugin_gate.py kit-pins .` here exits **1**
+with *"nothing in . pins mike-bronner/herdr-plugin-kit, so there is no kit version to
+agree about."* Correct: the kit is not a plugin and pins nothing. The usage comment in
+`plugin-release.yml` is a comment, not a live `uses:`, and the gate does not match one.
+
+🚨 **But the kit produces the pins a consumer holds.** A plugin copies the README's
+dependency line into `Cargo.toml` and its release snippet into a workflow — two files,
+two pins, and `kit-pins` requires them to agree **in that plugin's release**. So a sweep
+here that bumps one and misses the other fails on somebody else's machine, at their
+release, with nothing in this repository having noticed.
+
+🔑 **So the examples are held against the crate's own version by a test**
+(`tools/test_plugin_gate.py`), which reads that version from cargo rather than carrying
+it, because a literal would be one more place a sweep has to reach and sweeps missing
+places is the failure being guarded. ⚠️ Both shapes and both carriers are asserted to
+match something, after neutering one pattern left the comparison green: a pattern that
+matches nothing finds no disagreement.
+
 ### 11.5 `plugin-release.yml` ✅ **restored 2026-09-12**
 
 Tag-triggered, cross-repository, and the one workflow the kit still runs for a plugin.

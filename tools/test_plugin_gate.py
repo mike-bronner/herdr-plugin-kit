@@ -292,6 +292,94 @@ class TheReleaseNamesWhatTheShimAsksFor(GateFixture):
         self.assertTrue(published.endswith(plugin_gate.WINDOWS_ASSET_EXTENSION), published)
 
 
+class TheKitsOwnExamplesNameItsOwnVersion(unittest.TestCase):
+    """The kit hands consumers two pins, and its own gate cannot see them.
+
+    🚨 A plugin copies `Cargo.toml`'s dependency line from the README and the
+    `uses:` from the release snippet, into two different files. ``kit-pins``
+    then requires those two to agree — **in the plugin's release, not here**.
+
+    ✅ Measured 2026-09-13: running ``plugin_gate.py kit-pins .`` against this
+    repository exits 1 with "nothing in . pins mike-bronner/herdr-plugin-kit".
+    That is correct — the kit is not a plugin and pins nothing — and it is
+    exactly why these examples need a check of their own. **The gate that would
+    catch a mismatch runs in the consumer, and the mismatch is produced here.**
+
+    ⚠️ SCOPE.md is deliberately not read. Its version mentions are history —
+    which release was the first patch, which one a rule failed to cover — and
+    history does not move when the crate does.
+    """
+
+    #: The two files a consumer copies a pin out of.
+    CARRIERS = (
+        REPO_ROOT / "README.md",
+        REPO_ROOT / ".github" / "workflows" / "plugin-release.yml",
+    )
+
+    #: A cargo git dependency on this kit, and the tag it pins. The closing
+    #: quote after the URL is load-bearing: without it a fork's URL, which
+    #: starts the same, would match.
+    TAG_IN_DEPENDENCY = re.compile(
+        re.escape("https://github.com/" + plugin_gate.KIT_REPOSITORY)
+        + r'"\s*,\s*tag\s*=\s*"(?P<version>[^"]+)"'
+    )
+
+    #: A `uses:` naming one of this kit's workflows, and the ref it pins.
+    TAG_IN_USES = re.compile(
+        re.escape(plugin_gate.KIT_REPOSITORY)
+        + r"/\.github/workflows/[^@\s]+@(?P<version>[^\s`'\"]+)"
+    )
+
+    def crate_version(self):
+        """What this kit is, asked of cargo rather than written down here.
+
+        A literal would be a fourth place a version sweep has to reach, and
+        the point of this test is that sweeps miss places.
+        """
+        packages = plugin_gate.cargo_metadata(REPO_ROOT)["packages"]
+        return next(
+            package["version"]
+            for package in packages
+            if package["name"] == "herdr-plugin-kit"
+        )
+
+    def examples(self):
+        """Every version example, as (carrier, which shape found it, version)."""
+        found = []
+        for path in self.CARRIERS:
+            text = path.read_text(encoding="utf-8")
+            for shape, pattern in (
+                ("dependency", self.TAG_IN_DEPENDENCY),
+                ("uses", self.TAG_IN_USES),
+            ):
+                for matched in pattern.finditer(text):
+                    found.append((path.name, shape, matched.group("version")))
+        return found
+
+    def test_every_version_example_names_the_version_this_kit_is(self):
+        # 🪤 The failure this prevents: a sweep bumps the crate pin and misses
+        # the workflow pin, every plugin copying both fails kit-pins on its
+        # first release, and nothing here notices because the kit pins nothing.
+        found = self.examples()
+
+        self.assertTrue(found, "the kit shows a consumer how to pin it somewhere")
+        self.assertEqual(
+            {version for _, _, version in found},
+            {self.crate_version()},
+            f"version examples disagree with the crate: {found}",
+        )
+
+    def test_both_carriers_and_both_shapes_are_actually_matched(self):
+        # 🪤 A pattern that matches nothing passes the test above by finding no
+        # disagreement. Neutering the dependency regex left it green, because
+        # the `uses:` shape appears in both carriers and covered for it. A
+        # check that checks nothing is the third member of §11.2.1's family.
+        found = self.examples()
+
+        self.assertEqual({name for name, _, _ in found}, {"README.md", "plugin-release.yml"})
+        self.assertEqual({shape for _, shape, _ in found}, {"dependency", "uses"})
+
+
 class EveryKitPinAgrees(GateFixture):
     """One plugin names this kit three times, and nothing compared them.
 
