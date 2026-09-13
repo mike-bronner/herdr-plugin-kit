@@ -22,6 +22,7 @@ Nobody on this project can check more than that.
 
 import json
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -289,6 +290,173 @@ class TheReleaseNamesWhatTheShimAsksFor(GateFixture):
         row = next(row for row in plugin_gate.matrix() if row["platform"] == "windows-x64")
         published = self.published_name(row["target"])
         self.assertTrue(published.endswith(plugin_gate.WINDOWS_ASSET_EXTENSION), published)
+
+
+class EveryKitPinAgrees(GateFixture):
+    """One plugin names this kit three times, and nothing compared them.
+
+    🚨 project-finder pins the runtime crate, the build crate, and the `uses:`
+    calling the release workflow. A release built by one kit version while the
+    crate depends on another publishes assets from a tree the plugin does not
+    use, and the only thing that noticed was a test that plugin wrote itself.
+    """
+
+    KIT = "https://github.com/mike-bronner/herdr-plugin-kit"
+
+    def a_plugin(self, crate="0.4.1", build="0.4.1", workflow="0.4.1", repository=None):
+        """A checkout naming this kit in the three places a plugin does.
+
+        Any argument set to ``None`` leaves that pin out entirely.
+        """
+        repository = repository or self.KIT
+        root = Path(tempfile.mkdtemp(prefix="kit-pins-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        (root / "src").mkdir(parents=True)
+        (root / "src" / "main.rs").write_text("fn main() {}\n")
+
+        dependencies = ""
+        if crate is not None:
+            dependencies += f'herdr-plugin-kit = {{ git = "{repository}", {crate} }}\n'
+        if build is not None:
+            dependencies += f'herdr-plugin-kit-build = {{ git = "{repository}", {build} }}\n'
+        (root / "Cargo.toml").write_text(
+            '[package]\nname = "a-plugin"\nversion = "0.0.0"\nedition = "2021"\n\n'
+            f"[dependencies]\n{dependencies}"
+        )
+
+        workflows = root / ".github" / "workflows"
+        workflows.mkdir(parents=True)
+        if workflow is not None:
+            (workflows / "release.yml").write_text(
+                "jobs:\n  release:\n    uses: mike-bronner/herdr-plugin-kit"
+                f"/.github/workflows/plugin-release.yml@{workflow}\n"
+            )
+        return root
+
+    def tag(self, version):
+        return f'tag = "{version}"'
+
+    # ---- what it accepts -------------------------------------------------
+
+    def test_three_pins_that_agree_are_accepted(self):
+        # 🔑 The case every correctly-pinned plugin is in. It must see nothing.
+        root = self.a_plugin(self.tag("0.4.1"), self.tag("0.4.1"), "0.4.1")
+
+        self.assertEqual(plugin_gate.check_kit_pins(root, None), [])
+        self.assertEqual(plugin_gate.check_kit_pins(root, "0.4.1"), [])
+
+    def test_all_three_pins_are_found(self):
+        root = self.a_plugin(self.tag("0.4.1"), self.tag("0.4.1"), "0.4.1")
+
+        found = plugin_gate.kit_pins(root)
+
+        self.assertEqual(sorted(ref for _, ref in found), ["0.4.1"] * 3)
+        self.assertEqual(len(found), 3)
+
+    def test_a_fork_whose_name_starts_the_same_is_a_different_kit(self):
+        # ⚠️ A prefix test is not a name test. `herdr-plugin-kit-fork` contains
+        # this kit's name, and its tags say nothing about this kit's.
+        root = self.a_plugin(
+            self.tag("9.9.9"), None, None, repository=self.KIT + "-fork"
+        )
+
+        self.assertEqual(plugin_gate.kit_pins(root), [])
+
+    # ---- what it refuses -------------------------------------------------
+
+    def test_a_workflow_pinned_apart_from_the_crate_is_refused(self):
+        # The hole exactly: the release workflow at one version, the crate at
+        # another, and assets built by a kit the plugin does not depend on.
+        root = self.a_plugin(self.tag("0.4.1"), self.tag("0.4.1"), "0.4.0")
+
+        problems = plugin_gate.check_kit_pins(root, "0.4.1")
+
+        self.assertEqual(len(problems), 1)
+        self.assertIn("release.yml's call to plugin-release.yml", problems[0])
+        # Both values, or nobody can act on it.
+        self.assertIn("'0.4.0'", problems[0])
+        self.assertIn("'0.4.1'", problems[0])
+
+    def test_the_build_crate_pinned_apart_is_refused_too(self):
+        # ➕ Wider than the reported hole. The build stamp comes from the kit
+        # as much as the runtime crate does.
+        root = self.a_plugin(self.tag("0.4.1"), self.tag("0.3.0"), "0.4.1")
+
+        problems = plugin_gate.check_kit_pins(root, "0.4.1")
+
+        self.assertEqual(len(problems), 1)
+        self.assertIn("herdr-plugin-kit-build", problems[0])
+
+    def test_pins_that_agree_with_each_other_and_not_with_the_release_are_refused(self):
+        # The anchor is what this run actually checked out, so three pins
+        # agreeing on the wrong version is still wrong.
+        root = self.a_plugin(self.tag("0.4.0"), self.tag("0.4.0"), "0.4.0")
+
+        problems = plugin_gate.check_kit_pins(root, "0.4.1")
+
+        self.assertEqual(len(problems), 3)
+
+    def test_a_pin_naming_no_tag_is_refused(self):
+        root = self.a_plugin('branch = "main"', self.tag("0.4.1"), "0.4.1")
+
+        problems = plugin_gate.check_kit_pins(root, "0.4.1")
+
+        self.assertTrue(any("without pinning a tag" in problem for problem in problems))
+
+    #: A `repository:` input, or the owner/repo prefix of a `uses:` path.
+    #: Both allow a leading `#`, because a usage comment names it too.
+    NAMES_A_REPOSITORY = (
+        re.compile(r"^\s*#?\s*repository:\s*(?P<repository>\S+)\s*$"),
+        re.compile(
+            r"^\s*#?\s*(?:-\s*)?uses:\s*(?P<repository>[^/\s]+/[^/\s]+)/\.github/workflows/"
+        ),
+    )
+
+    def test_every_mention_of_this_kit_in_the_workflow_is_this_kit(self):
+        # 🪤 The comment on KIT_REPOSITORY used to claim a test held these
+        # together, and none did — inside the commit that closes a hole made by
+        # unchecked duplication. A claim is not a check.
+        #
+        # ⚠️ A rule rather than a count. Asserting "three" goes stale the moment
+        # a fourth is added; asserting that every one equals the constant does
+        # not, and it catches the fourth for free.
+        workflow = (
+            REPO_ROOT / ".github" / "workflows" / "plugin-release.yml"
+        ).read_text()
+
+        named = []
+        for line in workflow.splitlines():
+            for pattern in self.NAMES_A_REPOSITORY:
+                matched = pattern.match(line)
+                if matched and "herdr-plugin-kit" in matched.group("repository"):
+                    named.append(matched.group("repository"))
+
+        self.assertTrue(named, "the workflow names this kit somewhere")
+        # Whole value, never a substring: `herdr-plugin-kit-fork` contains it.
+        self.assertEqual(set(named), {plugin_gate.KIT_REPOSITORY})
+
+    def test_the_release_guard_actually_runs_this(self):
+        # 🪤 Every test above passes while nothing calls the gate. Replacing
+        # `python3` with `true` in the workflow left the whole suite green
+        # until this existed, which is the shape of a check nobody runs.
+        workflow = (
+            REPO_ROOT / ".github" / "workflows" / "plugin-release.yml"
+        ).read_text()
+
+        self.assertIn("python3 kit/tools/plugin_gate.py kit-pins plugin", workflow)
+        # Anchored to the kit this run checked out, not to the release tag,
+        # which the step above it uses and which means something else.
+        self.assertIn("--tag '${{ steps.kit.outputs.tag }}'", workflow)
+
+    def test_a_plugin_naming_the_kit_nowhere_is_refused(self):
+        # Fails closed. A plugin reaching this check called the workflow, so
+        # something named the kit; finding nothing means this cannot see it.
+        root = self.a_plugin(None, None, None)
+
+        problems = plugin_gate.check_kit_pins(root, "0.4.1")
+
+        self.assertEqual(len(problems), 1)
+        self.assertIn("pins", problems[0])
 
 
 class TheVersionsAgree(GateFixture):

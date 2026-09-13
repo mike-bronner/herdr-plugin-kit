@@ -2003,6 +2003,13 @@ metadata` at the same moment §11.2.1 concluded that nothing could. Both were wr
 same afternoon. **A conclusion of the form "there is no way to do X" deserves one pass
 over what was just built for somebody else.**
 
+🪤 **Cover the invocation as well as the logic, and mutate both.** ✅ Measured
+2026-09-13 while building §11.4.1's gate: replacing `python3` with `true` in the workflow
+step left **every other test green**, because seven tests covered what the gate decides
+and none covered whether anything called it. **A gate nobody runs passes every test
+written about it.** The same shape reached a comment claiming a test that did not exist:
+a claim is not a check, and neither is a tested function nobody invokes.
+
 ⚠️ **Keep this subsection through any rewrite of §11**, both halves of it. The
 measurement is the reason the sections around it changed, and the correction is the
 reason one of them changed back.
@@ -2150,6 +2157,36 @@ shell* — applied one directory over.
 and the tag being pushed, `main` advertises an unreleased version. Assertion 4 permits it
 deliberately, because it is the ordinary state of a bumped tree. Push the bump and the
 tag together, or trigger the release from the bump commit.
+
+#### 🚨 11.4.1 Every pin naming the kit names the same kit
+
+➕ **Added 2026-09-13, and it closes a hole in the kit rather than in a plugin.**
+
+A plugin names this kit in **three** places: the runtime crate, the build crate, and the
+`uses:` that calls the release workflow. ✅ Measured on project-finder: all three, and
+nothing compared them. **A release built by one kit version while the crate depends on
+another publishes assets from a tree the plugin does not use**, and §11.4's gate does not
+look at it because it compares the plugin's own versions rather than the kit's.
+
+🔑 **The evidence that it is the kit's hole**: project-finder's caller carried *"Nothing
+in the kit's own gates compares them, so tests/packaging.rs does."* A consumer patching a
+hole in the thing it depends on is how three plugins end up with three different tests,
+which is the argument §11.3's recipe rests on.
+
+⚠️ **The workflow's own ref is not recoverable from the Actions context.** ✅ Measured
+2026-09-12 (§11.2.1): `job_workflow_sha` empty, `job_workflow_ref` absent, and
+`workflow_ref` naming the **caller's** entry workflow. So the check does not ask what
+version it is. It reads every pin out of the plugin's own checkout and compares them to
+the kit that was actually checked out — the same route as the pin resolution, and the one
+the first successful release proved.
+
+⚠️ **It runs after the kit checkout, so it is not YAML logic.** The pin resolution cannot
+call the kit, because it is deciding which kit to fetch. This can, so it lives in
+`tools/plugin_gate.py` with everything else (§11.2.1).
+
+➕ **Wider than the hole reported.** The rule is *every* pin naming this repository, not
+the two that were noticed. A fork whose name merely starts the same is excluded by an
+anchored match, because a prefix test is not a name test.
 
 ### 11.5 `plugin-release.yml` ✅ **restored 2026-09-12**
 
@@ -2486,6 +2523,23 @@ tag form when recent-spaces migrates (§13).
   minor bump. And restoring it is additive **against the release that removed it**, not
   against the release that had it: the interval a version describes is the one since the
   last tag, never the last time the tree looked this way.
+- ➕ **The commit type and the version number answer different questions, and may
+  disagree**, added 2026-09-13. The type says **what the change is**; the number says
+  **what a correct upgrade asks of a consumer**. ⚠️ Conventional Commits maps `feat:` to
+  a minor, and this project does not follow that mapping, because the clause below
+  governs the number. ✅ Both directions are already in this history: **0.3.0 was a
+  `fix:` at a minor** (widening `f32` to `f64` broke every consumer) and **0.4.1 was a
+  `feat:` at a patch** (three additions broke none). 🔑 Forcing them to agree would have
+  mis-numbered one of those two.
+- ➕ **What decides the number is whether a *correct* upgrade needs work**, added
+  2026-09-13, and it is the class the three clauses above were reaching for. A change
+  that asks something of a consumer who upgrades **correctly** is a minor at minimum:
+  0.2.0's turbofish, 0.3.0's `f32` to `f64`, 0.4.0's deleted caller. A change that only
+  refuses an upgrade done **incorrectly** is a patch, because a consumer doing it right
+  sees nothing. 🔑 **0.4.3 is the first of the second kind**: a plugin whose three kit
+  pins agree is unaffected, and one that bumps only some of them was already publishing
+  assets from a kit it does not depend on. ⚠️ **"It can make a build fail" is not the
+  test**, or every new check would be a break and no check would ever ship.
 - ➕ **A consumer may pin any kind of tag**, added 2026-09-12. All three of this kit's
   releases are annotated tags, and ✅ the probe in §11.2.1 measured both kinds behaving
   identically. `actions/checkout` takes either, and a `cargo` git dependency takes either.

@@ -141,6 +141,21 @@ jobs:
           python3 kit/tools/plugin_gate.py versions plugin
           --tag '${{ steps.tag.outputs.tag }}'
 
+      # 🚨 A plugin names this kit more than once: the runtime crate, the build
+      # crate, and the `uses:` above that called this file. Nothing compared
+      # them, so a release could be built by one kit version while the crate
+      # depended on another, and the assets would come from a tree the plugin
+      # does not use. project-finder wrote its own test for this, which is how
+      # three plugins end up with three different tests.
+      #
+      # ⚠️ It runs after the checkout on purpose. The pin resolution above
+      # cannot call the kit — it is deciding which kit to fetch — but this can,
+      # so it lives in tools/ with the rest of the logic (§11.2.1).
+      - name: Every pin naming the kit names the same kit
+        run: >-
+          python3 kit/tools/plugin_gate.py kit-pins plugin
+          --tag '${{ steps.kit.outputs.tag }}'
+
       - name: What to build, and what to call it
         id: facts
         run: |

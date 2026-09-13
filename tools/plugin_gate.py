@@ -121,6 +121,112 @@ WINDOWS_ASSET_EXTENSION = ".exe"
 CARGO_EXE_SUFFIX = ".exe"
 
 
+#: This kit's own repository, as a consumer names it in a pin.
+#:
+#: ⚠️ **Named again in `.github/workflows/plugin-release.yml`**, and
+#: `tools/test_plugin_gate.py` holds every mention there to this value by whole
+#: value rather than by substring, because `herdr-plugin-kit-fork` contains
+#: this string and is a different kit.
+#:
+#: 🪤 That comment claimed the test before the test existed, in the commit that
+#: closes a hole made by unchecked duplication. **A claim is not a check**, and
+#: it counted the copies wrongly while it was at it. The rule the test asserts
+#: names no count, so a fourth copy is covered the day it appears.
+KIT_REPOSITORY = "mike-bronner/herdr-plugin-kit"
+
+#: A cargo source naming this kit, and the tag it pins.
+#:
+#: Anchored at both ends on purpose: a fork whose name merely starts the same
+#: is a different kit, and taking its tag would compare two unrelated things.
+KIT_SOURCE = re.compile(
+    r"^git\+https://github\.com/"
+    + re.escape(KIT_REPOSITORY)
+    + r"(?:\.git)?(?:\?(?P<query>[^#]*))?(?:#|$)"
+)
+
+#: A `uses:` line calling one of this kit's reusable workflows.
+KIT_USES = re.compile(
+    r"^\s*(?:-\s*)?uses:\s*[\'\"]?"
+    + re.escape(KIT_REPOSITORY)
+    + r"/\.github/workflows/(?P<file>[^@\'\"]+)@(?P<ref>[^\s\'\"]+)"
+)
+
+#: Where GitHub runs a workflow from, and the only place it looks.
+WORKFLOW_DIRECTORY = "workflows"
+
+
+def kit_pins(target: Path) -> List[Tuple[str, str]]:
+    """Every pin in *target* naming this kit, as (what named it, its ref).
+
+    🚨 **A plugin names this kit in more than one place and nothing made them
+    agree.** project-finder carries three: the runtime crate, the build crate,
+    and the `uses:` calling the release workflow. A release built by one kit
+    version while the crate pins another publishes assets from a tree the
+    plugin does not depend on, and nothing said so until that plugin wrote its
+    own test for it.
+
+    A ref of `""` means the pin exists and names no tag.
+    """
+    found = []
+    for package in cargo_metadata(target).get("packages", []):
+        for dependency in package.get("dependencies", []):
+            matched = KIT_SOURCE.match(dependency.get("source") or "")
+            if matched is None:
+                continue
+            query = matched.group("query") or ""
+            tag = ""
+            for field in query.split("&"):
+                if field.startswith("tag="):
+                    tag = field[len("tag="):]
+            found.append((f"Cargo.toml's {dependency['name']} dependency", tag))
+
+    directory = target / ".github" / WORKFLOW_DIRECTORY
+    for path in sorted(directory.glob("*.yml")) + sorted(directory.glob("*.yaml")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            matched = KIT_USES.match(line)
+            if matched is not None:
+                found.append(
+                    (f"{path.name}'s call to {matched.group('file')}", matched.group("ref"))
+                )
+    return found
+
+
+def check_kit_pins(target: Path, tag: Optional[str]) -> List[str]:
+    """Every pin naming this kit has to name the same version of it.
+
+    *tag* is what the release workflow resolved and checked the kit out at, so
+    it is the anchor when it is given. Without one, the pins only have to agree
+    with each other, which is what a human running this by hand wants.
+    """
+    pins = kit_pins(target)
+    if not pins:
+        return [
+            f"nothing in {target} pins {KIT_REPOSITORY}, so there is no kit "
+            f"version to agree about. A plugin reaching this check names it at "
+            f"least once, in Cargo.toml or in a workflow's `uses:`."
+        ]
+
+    problems = [
+        f"{what} names {KIT_REPOSITORY} without pinning a tag, so nothing can "
+        f"say which kit it means"
+        for what, ref in pins
+        if not ref
+    ]
+
+    anchor = tag or pins[0][1]
+    named_by = "the kit this release checked out" if tag else pins[0][0]
+    for what, ref in pins:
+        if ref and ref != anchor:
+            problems.append(
+                f"{what} pins {ref!r} and {named_by} pins {anchor!r}. Every pin "
+                f"naming {KIT_REPOSITORY} has to name the same version of it: a "
+                f"release built by one kit while the crate depends on another "
+                f"publishes assets from a tree this plugin does not use. Change "
+                f"whichever is wrong so that all {len(pins)} agree."
+            )
+    return problems
+
+
 def is_windows(target: str) -> bool:
     return "windows" in target
 
@@ -372,6 +478,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     facts = subcommands.add_parser("binary-name", help="print the binary cargo builds")
     facts.add_argument("plugin", type=Path, help="a plugin checkout")
 
+    pins = subcommands.add_parser(
+        "kit-pins", help="check every pin naming this kit agrees with the others"
+    )
+    pins.add_argument("plugin", type=Path, help="a plugin checkout")
+    pins.add_argument(
+        "--tag",
+        help="the kit version this run checked out, which every pin must match",
+    )
+
     asset = subcommands.add_parser("asset-name", help="print the asset a release publishes")
     asset.add_argument("plugin", type=Path, help="a plugin checkout")
     asset.add_argument("--target", required=True, help="one of the six target triples")
@@ -391,6 +506,18 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 0
         if arguments.command == "binary-name":
             print(cargo_facts(arguments.plugin)[1])
+            return 0
+        if arguments.command == "kit-pins":
+            found = kit_pins(arguments.plugin)
+            problems = check_kit_pins(arguments.plugin, arguments.tag)
+            for problem in problems:
+                print(f"plugin-gate: {problem}", file=sys.stderr)
+            if problems:
+                return 1
+            print(
+                f"plugin-gate: {len(found)} pins name {KIT_REPOSITORY}, "
+                f"all at {found[0][1]}"
+            )
             return 0
         if arguments.command == "asset-name":
             commit = arguments.commit or head_commit(arguments.plugin)
