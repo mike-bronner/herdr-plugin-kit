@@ -1820,10 +1820,20 @@ not reproduced it**, and states it as reported for the same reason §14.2 states
 unrun Windows path as reported: the measurement is real, the reproduction is not ours.
 
 Doubling a `[[panes]]` entry the way the `[[build]]` block above is doubled makes the
-whole manifest fail to load with `duplicate pane id 'picker'`. **Pane ids resolve before
-platforms are filtered**, so both halves of the pair exist at the moment the check runs
-and collide. Herdr then falls back to a cached older copy of the manifest, which is worse
-than a refusal: the plugin keeps working, as an earlier version, with nothing saying so.
+whole manifest fail to load with `duplicate pane id 'picker'`. Herdr then falls back to a
+cached older copy of the manifest, which is worse than a refusal: the plugin keeps
+working, as an earlier version, with nothing saying so.
+
+🔑 **The usable rule: a pane id must be unique across every `[[panes]]` entry, whatever
+platform each one declares.** ⚠️ **It is refused even when the two platform lists are
+disjoint**, which is the case a reader would most expect to work and the reason the rule
+is stated as an absolute rather than as a conflict between overlapping declarations.
+
+🪤 **A mechanism was stated here and is withdrawn.** This section said pane ids resolve
+before platforms are filtered, so both halves exist when the check runs. That explains
+the outcome, and **nobody measured it** — project-finder wrote it, cut it from their own
+notes as an inference, and it reached this document anyway. The disjoint case is the
+thing it does not predict. §11.2.1 carries the shape.
 
 🔑 **Nothing about this is the kit's fault, and the kit documented the opposite by
 omission.** The block above shows the doubling pattern without saying where it stops, and
@@ -2007,8 +2017,23 @@ over what was just built for somebody else.**
 2026-09-13 while building §11.4.1's gate: replacing `python3` with `true` in the workflow
 step left **every other test green**, because seven tests covered what the gate decides
 and none covered whether anything called it. **A gate nobody runs passes every test
-written about it.** The same shape reached a comment claiming a test that did not exist:
-a claim is not a check, and neither is a tested function nobody invokes.
+written about it.**
+
+🚨 **Three members of one family, all found on 2026-09-13.** Each reads as established
+because it is specific, and each is unbacked:
+
+| What it looked like | What it was |
+|---|---|
+| A comment saying a test held four copies together | No such test existed, and it miscounted the copies |
+| Seven green tests over a gate | Nothing called the gate |
+| "Pane ids resolve before platforms are filtered" (§10.1) | An inference explaining a real measurement, never measured |
+
+🔑 **The third is the hardest to catch, because an inference that explains a measurement
+wears the measurement's authority.** It arrived inside a section whose whole purpose is
+separating what was measured from what was read, with a caveat beneath it saying the kit
+had not reproduced *it* — while the strongest sentence in the paragraph was not a
+measurement at all. **A claim is not a check, a tested function nobody invokes is not a
+check, and an explanation of a measurement is not a measurement.**
 
 ⚠️ **Keep this subsection through any rewrite of §11**, both halves of it. The
 measurement is the reason the sections around it changed, and the correction is the
