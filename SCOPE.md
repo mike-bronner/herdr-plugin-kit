@@ -1330,21 +1330,45 @@ popup machinery.
 - **Timer:** a stamp file in `HERDR_PLUGIN_STATE_DIR`, checked at launch against a
   minimum interval. Default 24 hours. No new process for the two on-demand plugins.
   recent-spaces folds the check into its existing poll loop.
-- **Check:** `git ls-remote --tags` against the plugin's origin. No auth, no rate limit.
-  ⚠️ **Safe here only because of the bullets around it, and wrong on the bootstrap path.**
-  §9.6 rejects it for `bin/build` on three grounds. Two of the three apply here as well.
+- **Check:** the newest **release** on the plugin's origin, not its newest tag.
+  🔑 **Decided by Mike 2026-09-13, and it is a decision about what the question means.**
+  ⚠️ This said `git ls-remote --tags`, which answers a different question: under
+  download-by-default the thing a user can install is a **release with commit-keyed
+  assets** (§9.6), and a tag without one prompts an update that then compiles from
+  source — the silent fallback §9 exists to prevent, reached by way of the thing meant to
+  prevent it. **The cost accepted is an API call in place of a free git call**, with the
+  rate-limit consequence below.
+
+  Two of §9.6's three grounds for rejecting `ls-remote` on the bootstrap path still
+  apply, and the third changes shape:
 
   | Ground for rejecting it in `bin/build` | Applies to this check? |
   |---|---|
   | A network round trip on a hot path, and `bin/build` runs at every server start | ❌ no. This one is on a timer and detached |
-  | ⚠️ It can **hang** on an ssh remote, waiting for a passphrase | ✅ yes. A detached spawn that hangs leaks a process, so give it a timeout |
-  | ⚠️ It is **wrong for a fork**, whose tag points at different code | ✅ yes. A fork's tag says nothing about the upstream release |
+  | ⚠️ It can **hang** on an ssh remote, waiting for a passphrase | ✅ yes for `ls-remote`, and an HTTPS API call has its own timeout to set. A detached spawn that hangs leaks a process either way |
+  | ⚠️ It is **wrong for a fork** | ⚠️ **narrower than this said.** See below |
+
+  🪤 **The fork trap, re-read rather than repeated.** This said a fork's tag says nothing
+  about the upstream release, which describes checking *upstream*. The check reads the
+  plugin's **own origin**, so a fork is compared with itself, which is what a fork's user
+  wants. **The trap that exists is narrower**: a fork that inherited upstream's tags at
+  fork time and has cut no release of its own. Its newest tag is upstream's, its newest
+  release is either upstream's or nothing, and neither describes the code the user is
+  running. ✅ Asking for releases rather than tags shrinks that case without closing it.
 
 - **Never block a launch.** Spawn detached, write the result to the stamp file, prompt on
   the *next* launch.
-- **Prompt:** a popup through `report`, never a toast.
+- **Prompt:** ✅ **`dialog::ask`, which already exists.** `crates/herdr-plugin-kit/src/dialog.rs`
+  ships `ask` at line 719 taking `Buttons` (489) and answering `Answer` (654), and
+  `notify` at 692. ⚠️ This said "a popup through `report`, never a toast", which was
+  written before `dialog` existed and made `report` look like a prerequisite. **It is
+  not**: the prompt channel is built, mouse-first, and §13 holds `report` for its own
+  reasons.
 - **Apply:** managed installs re-run `$HERDR_BIN_PATH plugin install owner/repo --yes`,
-  the documented refresh path.
+  the documented refresh path. 🚨 **Nobody has run it against an already-installed
+  plugin, and nothing here should until that is measured on a target that is not a
+  working checkout.** §8.3 records that all three plugins are `local:` links, and this
+  call is what would convert one into a managed install.
 
 ### 8.3 Local installs: ask Herdr, and only where the question is live
 
