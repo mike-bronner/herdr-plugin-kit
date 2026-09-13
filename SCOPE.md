@@ -924,8 +924,20 @@ env -i HOME="$HOME" PATH="$PATH" HERDR_SOCKET_PATH=<probe socket> <command>
 ```
 
 🚨 **A shell inside a Herdr pane is the dangerous case and the usual one.** ✅ Confirmed
-2026-09-09: it carries `HERDR_SOCKET_PATH`, `HERDR_PANE_ID`, `HERDR_WORKSPACE_ID`,
-`HERDR_TAB_ID` and `HERDR_BIN_PATH`, all pointing at the **live** server.
+2026-09-09 and re-measured 2026-09-13: it carries **six** variables, all pointing at the
+**live** server — `HERDR_SOCKET_PATH`, `HERDR_PANE_ID`, `HERDR_WORKSPACE_ID`,
+`HERDR_TAB_ID`, `HERDR_BIN_PATH`, and ➕ **`HERDR_ENV`**.
+
+🪤 **This said five one commit ago, and the miscount is the argument rather than a dent
+in it.** A named-unset list is defeated by exactly one variable nobody listed, and the kit
+published the wrong list within a day of publishing the rule. **An allowlist cannot be
+wrong about a variable it never had to know.**
+
+⚠️ **`HERDR_ENV` is the sharpest possible example, because this document already knew
+about it.** §5.1 cut it from the kit's constants on a measurement: **no plugin reads it**.
+That is still true, and it is why a *reader* does not need it — but a **scrub** is not a
+reader. It has to handle every variable Herdr sets, whether or not anything consumes it,
+and a list built from what plugins read will miss exactly this class.
 
 ⚠️ **Unsetting by name is the weaker fallback and it fails on the variable nobody thought
 of.** ✅ Seen 2026-09-09 on project-finder: `HERDR_PLUGIN_CONFIG_DIR` survived a round of
@@ -1452,11 +1464,51 @@ popup machinery.
   written before `dialog` existed and made `report` look like a prerequisite. **It is
   not**: the prompt channel is built, mouse-first, and §13 holds `report` for its own
   reasons.
-- **Apply:** managed installs re-run `$HERDR_BIN_PATH plugin install owner/repo --yes`,
-  the documented refresh path. 🚨 **Nobody has run it against an already-installed
-  plugin, and nothing here should until that is measured on a target that is not a
-  working checkout.** §8.3 records that all three plugins are `local:` links, and this
-  call is what would convert one into a managed install.
+- **Apply:** managed installs re-run
+  `$HERDR_BIN_PATH plugin install owner/repo --ref <version> --yes`.
+  🚨 **`--ref` is not optional, and that is the finding of the measurement below.**
+
+#### ✅ 8.2.1 What the refresh actually does — measured 2026-09-13
+
+Against **Herdr 0.9.0**, in an isolated probe server stood up by §5.3's method:
+`XDG_CONFIG_HOME` with `--session`, every client command through the `env -i` allowlist,
+and the live `plugins.json` hashed before and after — **byte-identical**, as was the whole
+live config root. project-finder served as the subject, upgraded **0.8.1 → 0.9.1**.
+
+| Question | Measured answer |
+|---|---|
+| Does it succeed on an already-installed plugin? | ✅ Yes, in 1.96s. No refusal |
+| Does it move the version? | ✅ 0.8.1 → 0.9.1, announced as `replaces: …@0.8.1` |
+| Replace, merge, or stale files? | ✅ **Replace.** Two planted markers, one at the root and one in `src/`, were both gone. The directory **path is reused** and its contents wiped |
+| Does `source.kind` survive? | ✅ Stays `github` |
+| Does it re-run `[[build]]`? | ✅ Yes, and it took the **download** branch |
+| Anything outside the probe root? | ✅ Nothing. All 16 files of the live config root unchanged |
+
+##### 🚨 A refresh erases the pin, which is why `--ref` is mandatory
+
+✅ Installing with `--ref 0.8.1` records `requested_ref: "0.8.1"` in `plugins.json`.
+Refreshing with the documented command and **no** `--ref` produces a record with **no
+`requested_ref` at all**, leaving only `resolved_commit`.
+
+🔑 **So the documented refresh silently converts a pinned install into a floating one.**
+An update that does that has removed the only thing saying which version the user chose,
+and every later refresh then takes whatever is newest — which is the state §12's pin
+discipline exists to prevent everywhere else in this design. **The apply step therefore
+passes `--ref` explicitly, so an update *moves* a pin rather than deleting it.**
+
+##### 🔑 Every update is a fetch-or-build decision, and §9.6 is on the update path
+
+`[[build]]` re-running means §9's whole distribution path runs on every update, not only
+on first install. ✅ **And it cannot strand a stale binary beside new source**, because
+the directory is replaced wholesale rather than merged — which is the failure
+`needs_build()` exists to prevent, ruled out here by construction rather than by timing.
+
+##### ⚠️ Not tested: a refresh against a `local:` install
+
+Everything above is a `github:` install. **The `local:` case is the one §8.3 cares about
+most and it is untested**, because all three plugins are `local:` links to working
+repositories and the call is what would convert one into a managed install. That it would
+behave the same is an **inference**, not a measurement.
 
 ### 8.3 Local installs: ask Herdr, and only where the question is live
 
@@ -1717,6 +1769,34 @@ become visible rather than something you have to notice.
 
 ### 9.6 Asset convention: keyed on the commit, not on the version
 
+#### ✅ Confirmed end to end on a real install — 2026-09-13
+
+**The first time this convention has been observed working rather than compared.**
+Measured against Herdr 0.9.0 during §8.2.1's run, in an isolated server (§5.3).
+
+Installing project-finder 0.9.1 produced a binary and, beside it, the provenance note
+§6.3 specifies:
+
+```
+version=0.9.1
+asset=pick-project-macos-arm64-a1bdbb74550b
+sha256=283239ee6a29d843424b23e31ceab2e4e176b331e64a948a494aa67df473fa8d
+url=…/releases/download/0.9.1/pick-project-macos-arm64-a1bdbb74550b
+```
+
+✅ **That sha256 matched the installed binary, hashed independently.** ✅ And the 0.8.1
+install produced **1,755,584 bytes**, which is the published 0.8.1 asset's size exactly.
+So the commit-keyed name, the checksum gate and the provenance note are confirmed
+together, on a file that came from GitHub.
+
+🚨 **`tools/test_plugin_gate.py` structurally cannot do this.** It runs both halves of the
+naming agreement and compares their answers, which is what catches a producer and a
+consumer drifting apart. **It cannot ask GitHub whether the file is there**, so a name
+both halves agree on and nothing publishes would pass it. This run is the other half, and
+it is not repeatable in a suite.
+
+
+
 **Corrected 2026-09-10.** This section specified `<bin>-<version>-<triple>.tar.gz` plus a
 matching `.sha256`. ✅ **project-finder shipped something different, and it works.** Its
 0.8.0 release carries eight assets. Verified by reading the release and all 320 lines of
@@ -1927,9 +2007,19 @@ platforms = ["windows"]
 
 #### 🚨 `platforms` works on `[[build]]` and `[[startup]]`, and is rejected on `[[panes]]`
 
-✅ **Measured by project-finder, 2026-09-13**, on its own 0.9.0 manifest. ⚠️ **The kit has
-not reproduced it**, and states it as reported for the same reason §14.2 states the
-unrun Windows path as reported: the measurement is real, the reproduction is not ours.
+✅ **Measured twice, by two observers, on two different paths**, both 2026-09-13 against
+Herdr 0.9.0.
+
+| Observer | Path | What it saw |
+|---|---|---|
+| project-finder | **manifest load**, on its own 0.9.0 | The manifest is refused and Herdr serves a cached older copy |
+| this kit | **install**, `plugin install … --ref 0.9.0 --yes` in an isolated server (§5.3) | `Error: "duplicate pane id 'picker'"`, and **0.9.0 cannot be installed at all** |
+
+🔑 **Two observations of one behaviour, rather than one repeated.** The earlier caveat —
+that the kit had not reproduced this — is retired: it has, on a path nobody had tried,
+and the install path adds a fact the manifest path could not show. ⚠️ A release carrying
+this defect is not merely degraded for existing users: **it cannot be installed by a new
+one.**
 
 Doubling a `[[panes]]` entry the way the `[[build]]` block above is doubled makes the
 whole manifest fail to load with `duplicate pane id 'picker'`. Herdr then falls back to a
