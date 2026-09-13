@@ -1876,7 +1876,7 @@ named.
 
 ---
 
-## 11. CI ✅ **built 2026-09-11**, 🔻 **plugin-facing half removed 2026-09-12**
+## 11. CI ✅ **built 2026-09-11**, 🔻 **plugin testing removed, releases kept**
 
 🔑 **Decided by Mike 2026-09-12, and corrected the same day.** The kit does not run
 **tests** for other repositories: `plugin-ci.yml` is gone and stays gone. It does
@@ -2383,9 +2383,9 @@ Two requirements follow, and both are requirements rather than advice:
 - ➕ ✅ **The gate must reject one of the two forms.** Tolerating both `0.8.0` and
   `v0.8.0` is exactly how two conventions drift apart and then disagree without saying
   so. **Done 2026-09-11**: `TAG_PREFIX` in `tools/plugin_gate.py` is one named constant,
-  and the gate refuses the other form by name rather than ignoring it. ➕ It sat in the
-  release workflow until 2026-09-12 and now sits in the plugin's own release job (§11.5),
-  which changes who runs it and nothing about what it asserts.
+  and the gate refuses the other form by name rather than ignoring it. It runs in
+  `plugin-release.yml`'s guard job (§11.5), which is the one place that publishes and so
+  the one place that can stop the two conventions crossing.
 
 ⚠️ **Live instance to carry.** recent-spaces' own `bin/build` builds
 `releases/download/v$version/...`, and that repo still tags with a `v` (§13.1). The two
@@ -2548,7 +2548,7 @@ Last measured 2026-09-11. **Re-measure rather than trust it.**
 - ✅ **Agreement is a property, not a number.** It is what §11.4's gate asserts, and the
   gate is unchanged by any release either side of it cuts.
 - ⚠️ **A repo publishing no assets cannot be retrofitted.** Its first migrated version has
-  to be a new release cut through the plugin's own release job (§11.5), because there is
+  to be a new release cut through `plugin-release.yml` (§11.5), because there is
   nothing to attach commit-keyed assets to retrospectively.
 - ⚠️ **Two of the three tags still carry a `v`.** §12 governs which form is right, and
   §12.2 records why crossing the two fails silently rather than loudly.
@@ -2591,9 +2591,10 @@ and nothing about it is measured. **Reversing it is one line in each of two plac
 
 💰 **A live instance is the cheapest confirmation available.** The first plugin release
 to publish assets publishes two Windows ones. Downloading one and running it on any
-Windows machine settles this for good. ⚠️ That release is further away than it was: the
-kit no longer ships the workflow that would have produced it (§11.5), so a plugin builds
-its own release job first.
+Windows machine settles this for good. ⚠️ **Nothing blocks it in the kit**:
+`plugin-release.yml` builds and publishes both Windows assets. What it waits on is a
+plugin that can compile for those two targets — project-finder cannot today (§11.5) —
+and a first run, which that workflow has never had.
 
 ---
 

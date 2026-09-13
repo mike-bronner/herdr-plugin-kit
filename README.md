@@ -30,7 +30,7 @@ order `SCOPE.md` section 13 sets out.
 | Shell templates — `bin/build`, the launcher, and their sync task | ✅ |
 | PowerShell templates | ⚠️ shipped **unrun**, see below |
 | `report`, `update` | ⏳ held until one real consumer proves the boundaries |
-| CI workflows | ✅ the kit's own. 🔻 The plugin-facing pair was removed 2026-09-12, see below |
+| CI workflows | ✅ the kit's own, and `plugin-release.yml` for a plugin. 🔻 No plugin test workflow, see below |
 
 Generated against **Herdr `v0.9.0`**, protocol 22, schema version 1.
 
@@ -465,15 +465,17 @@ reach none, so the drawn path stays for that case permanently.
 
 ## Continuous integration
 
-**The kit runs nothing for anybody.** It ships gates, and a plugin runs them against a
-kit it checks out at its own pin.
+**The kit runs your release and none of your tests.** It ships two gates you run
+yourself, against a kit you check out at your own pin, and it publishes your assets
+through a reusable workflow you call.
 
-> 🔻 **Two reusable workflows did this until 2026-09-12, and they are gone.** A called
-> workflow cannot discover which of its own versions a caller pinned — measured, twice,
-> and there is no route — so it cannot check out the matching kit, and checking a plugin
-> against the wrong kit is worse than not checking it. `SCOPE.md` §11.2.1 has the
-> measurement. **The gates were never what failed.** A caller always knows what it
-> pinned, because it is in its own `Cargo.toml`.
+> 🔻 **A second reusable workflow ran the tests, and it is gone.** Not because it could
+> not work: the kit does not run another repository's tests, which is a scope decision.
+> ⚠️ It was deleted believing the problem was technical — a called workflow is told
+> nothing about which of its own versions a caller pinned — and that turned out to be
+> solvable. It reads the pin out of your `Cargo.toml`, because your repository is the
+> one checked out in front of it. `SCOPE.md` §11.2.1 has the measurement and the
+> correction.
 
 ### The two gates, in the plugin's own CI
 

@@ -218,16 +218,15 @@ class TheReleaseNamesWhatTheShimAsksFor(GateFixture):
     plugin still works, so nothing surfaces.
 
     ⚠️ **Both sides are executed, never read.** The producing side is
-    ``plugin_gate.py asset-name``, run as a plugin's own release job runs it,
+    ``plugin_gate.py asset-name``, run the way the release workflow runs it,
     and the consuming side is the real shim. A test asserting that a file
     *contains* a string would pass against a line that never runs, and a test
     rebuilding the name itself would agree with itself.
 
-    ➕ **The producer moved here on 2026-09-12.** It was a line inside
-    ``plugin-release.yml`` until the kit stopped running CI for other
-    repositories (§11). The agreement is unchanged and still two-sided: Python
-    on the producing side, shell on the consuming side, neither reading the
-    other.
+    🔑 **The agreement is two-sided and stays that way**: Python on the
+    producing side, shell on the consuming side, neither reading the other.
+    ``plugin-release.yml`` calls the producer rather than carrying its own copy
+    of the name, which is what keeps this comparison worth running.
     """
 
     def published_name(self, target):

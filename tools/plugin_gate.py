@@ -132,10 +132,10 @@ def is_windows(target: str) -> bool:
 #: for at install time, and ``tools/test_plugin_gate.py`` runs both and
 #: compares their answers.
 #:
-#: ⚠️ It lived in ``.github/workflows/plugin-release.yml`` until 2026-09-12,
-#: when the kit stopped running CI for other repositories (§11). A plugin's
-#: own release job calls ``asset-name`` here instead, so the convention stays
-#: in one runnable place rather than becoming a line three plugins copy.
+#: ⚠️ **One runnable place rather than a line three plugins copy.**
+#: ``.github/workflows/plugin-release.yml`` calls ``asset-name`` rather than
+#: building the name itself, so a release and a shim cannot disagree about it
+#: by drifting apart.
 COMMIT_CHARACTERS = 12
 
 
