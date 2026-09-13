@@ -36,11 +36,10 @@
 //!
 //! SCOPE.md §4.2.1 requires any error-code match to be hand-maintained beside
 //! the transport, carrying the measurement that put it there. ✅ The kit has
-//! exactly one such code, `dialog::BUSY_CODE`, and it already carries
-//! its measurement. [`Client`]'s `dialog::Transport` implementation
-//! routes through `dialog::OpenError::from_error` rather than
-//! matching the string a second time. A second list here would be a structure
-//! pretending to be a policy.
+//! exactly one such code, `surface::BUSY_CODE`, and it already carries its
+//! measurement. [`Client`]'s `surface::Transport` implementation routes through
+//! `surface::OpenError::from_error` rather than matching the string a second
+//! time. A second list here would be a structure pretending to be a policy.
 //!
 //! Everywhere else the code and message are handed back verbatim in
 //! [`CallError::Server`], for the caller to read or ignore.
@@ -62,12 +61,12 @@ use crate::api::generated::{
 use crate::api::{Request, ResponseVariant};
 use crate::env::{Environment, SOCKET_PATH_VAR};
 
-#[cfg(feature = "dialog")]
+#[cfg(any(feature = "dialog", feature = "report"))]
 use crate::api::generated::{
     NotificationShowAnswer, NotificationShowParams, NotificationShowReason, PluginPaneOpenParams,
 };
-#[cfg(feature = "dialog")]
-use crate::dialog::{OpenError, Transport};
+#[cfg(any(feature = "dialog", feature = "report"))]
+use crate::surface::{OpenError, Transport};
 
 /// The documented default socket, relative to the user's home directory.
 ///
@@ -243,8 +242,8 @@ pub enum CallError {
     /// Herdr answered, and the answer was a refusal.
     ///
     /// The code and message are verbatim. Nothing in the kit interprets them
-    /// except `dialog::OpenError::from_error`, which owns the one
-    /// measured code the kit matches.
+    /// except `surface::OpenError::from_error`, which owns the one measured
+    /// code the kit matches.
     Server(ErrorBody),
 }
 
@@ -387,7 +386,7 @@ struct Answer {
 /// ⚠️ It is not [`serde::de::IgnoredAny`], which would accept a bare number or
 /// a string. A Herdr result carries a `type`, and an answer without one is
 /// malformed rather than unread.
-#[cfg(feature = "dialog")]
+#[cfg(any(feature = "dialog", feature = "report"))]
 #[derive(Debug, Deserialize)]
 pub(crate) struct AnySuccess {
     /// Read by nothing, and required by everything: its presence is the only
@@ -396,7 +395,7 @@ pub(crate) struct AnySuccess {
     _tag: String,
 }
 
-#[cfg(feature = "dialog")]
+#[cfg(any(feature = "dialog", feature = "report"))]
 impl ResponseVariant for AnySuccess {}
 
 /// Reads one result payload into the type the caller named.
@@ -680,12 +679,17 @@ impl Client {
     }
 }
 
-/// The kit's own client, answering the two calls a dialog needs.
+/// The kit's own client, answering the two calls a user-facing module needs.
 ///
 /// 🔑 **This is what SCOPE.md §7.5.6 was waiting for.** The trait was not a
-/// workaround for the transport being unbuilt, so nothing in [`crate::dialog`]
-/// changes now that it exists. A consumer supplies nothing.
-#[cfg(feature = "dialog")]
+/// workaround for the transport being unbuilt, so nothing in `dialog` changed
+/// when it landed. A consumer supplies nothing.
+///
+/// 🔑 **One implementation serves both callers**, which is why [`Transport`]
+/// lives in `surface` rather than in `dialog`. `report` sends the same two
+/// calls in the opposite order, and a second near-identical impl here would be
+/// a second place for §7.2's rule to rot.
+#[cfg(any(feature = "dialog", feature = "report"))]
 impl Transport for Client {
     /// ⚠️ **Any success answers `Ok`, and that is deliberate.** The trait
     /// promises that Herdr accepted the request, not that a pane appeared. ✅

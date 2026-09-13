@@ -88,6 +88,7 @@ herdr-plugin-kit/
 │   │   │   │   └── client.rs         # transport
 │   │   │   ├── env.rs
 │   │   │   ├── version.rs
+│   │   │   ├── surface.rs           # the two user-facing calls, shared — §7.5.6
 │   │   │   ├── dialog.rs             # feature: "dialog"
 │   │   │   ├── report.rs             # feature: "report"
 │   │   │   └── update.rs             # feature: "update"
@@ -96,6 +97,8 @@ herdr-plugin-kit/
 │   │   └── tests/
 │   │       ├── client.rs             # the transport, against a scripted server
 │   │       ├── dialog.rs             # the dialogs, against a fake opener
+│   │       ├── report.rs             # the issue reports, against a fake sender
+│   │       ├── update.rs             # the update check, against two fake seams
 │   │       ├── method_sweep.rs       # generated, the 102-discriminator sweep
 │   │       └── response_sweep.rs     # generated, the 64-result sweep
 │   └── herdr-plugin-kit-build/       # build-dependency crate only
@@ -122,7 +125,9 @@ herdr-plugin-kit/
 │   ├── test_plugin_gate.py           # both sides of every agreement, run
 │   └── mutations/
 │       ├── client.json               # the transport's 20 mutations
-│       └── dialog.json               # the dialogs' 25 mutations
+│       ├── dialog.json               # the dialogs' 24 mutations
+│       ├── report.json               # the issue reports' 19 mutations
+│       └── surface.json              # the shared seam's 2 mutations
 ├── .github/workflows/
 │   ├── kit-ci.yml                    # the kit's own, fast
 │   └── kit-mutation.yml              # the kit's own, slow — §11.8
@@ -484,10 +489,12 @@ tell the two apart.
 
 ##### ✅ Settled 2026-09-11: the list already existed, so a second one was not built
 
-**The kit matches exactly one error code, and it is `dialog::BUSY_CODE`.** That constant
-already sits beside its measurement (§7.5.3), and `dialog::OpenError::from_error` is
+**The kit matches exactly one error code, and it is `surface::BUSY_CODE`.** That constant
+already sits beside its measurement (§7.5.3), and `surface::OpenError::from_error` is
 already the function that reads it. §4.2's client routes through that rather than
-matching `ui_busy` a second time.
+matching `ui_busy` a second time. ➕ **Both were `dialog::` until 2026-09-13**, when the
+seam holding them moved to a module `report` could reach as well (§7.4.1). The clause
+below is what governed the move: the list stayed one list, and followed its readers.
 
 🔑 **This clause governs where a list lives, not whether one must exist.** A second list
 in `client.rs` with nothing in it would be a structure pretending to be a policy, and
@@ -1080,7 +1087,7 @@ clearest single argument for templating these files rather than hand-maintaining
 
 ---
 
-## 7. Module: `report` (feature-gated)
+## 7. Module: `report` (feature-gated) — **built 2026-09-13**
 
 Promoted from agentic-panes-layout's `issues.rs`.
 
@@ -1196,6 +1203,46 @@ matching `[[panes]]` entry, which a crate cannot supply.
 
 Feature-gated, because recent-spaces is a headless watcher and should not carry popup
 machinery.
+
+#### 7.4.1 What was built, 2026-09-13
+
+✅ `src/report.rs` behind the `report` feature, with 30 tests and 19 mutation checks. One
+public entry point, `send`, which hands back the `NotificationShowReason` and opens a pane
+when the reason says nothing was delivered. Every row of §7.2's table is a test, and every
+row is a mutation.
+
+✅ **The feature costs no dependency, and that was measured rather than assumed.**
+`cargo tree --features report` lists no `crossterm`; `--features dialog` does. §7.4 asks
+for a popup through `plugin.pane.open`, which is a socket call, so nothing here draws
+anything. recent-spaces, a headless watcher, pays nothing for reporting its issues.
+
+🔑 **The `Transport` seam moved out of `dialog` into `src/surface.rs`, and `dialog`
+re-exports it.** `report` needs the same two calls, and the reason is written in the
+trait's own documentation: `show_notification`'s contract *is* §7.2's, which is this
+section rather than `dialog`'s. The seam was specified against a module that did not
+exist yet, so sharing it is what was designed rather than a coincidence noticed later. A
+second trait of the same two methods would be a second place for the rule about
+discarding the reason to rot, which is the exact defect §7.2 exists to fix. `dialog`'s
+24 mutations and 52 tests are unchanged by the move.
+
+⚠️ **One row is not in §7.2's table: a notification that could not be sent at all.** The
+table routes on reasons Herdr returned, and a send that failed produced no reason. It
+falls back, because it is the one case where non-delivery is certain rather than reported,
+and the `Err` still reaches the caller so nothing is hidden by the fallback.
+
+🔑 **The caller has to say whether a message is cosmetic**, because one row of the table
+depends on what the message is rather than on what Herdr answered. That is `Kind`, and it
+exists for that row alone.
+
+⚠️ **The issues file is never removed.** The popup outlives the call and reads the file
+afterwards, so there is no moment in this module at which deleting it is safe. That is why
+it lives in the temp directory rather than anywhere the kit would have to keep tidy, and
+it is the one place `report` and `dialog` differ on the filesystem: `dialog` makes a
+directory it removes once the answer arrives.
+
+⚠️ **Nothing here has run against a live Herdr.** The sender is a fake answering what a
+measured Herdr answers. The pane half is only as good as the `[[panes]]` entry each plugin
+declares, which a crate cannot supply and this kit cannot test.
 
 ### 7.5 Module: `dialog` (feature-gated) — **built 2026-09-11**
 
@@ -1383,6 +1430,10 @@ behind the `dialog` feature, so the dialog module still knows nothing about tran
 Herdr accepted the request, not that a pane appeared. ✅ A popup answers `{"type":"ok"}`
 and an overlay answers `plugin_pane_opened`, both measured 2026-09-11, and reading the
 shape here would refuse a placement the trait never restricted.
+
+➕ **Moved 2026-09-13 to `src/surface.rs`, shared with `report`, and re-exported here.**
+Everything above still describes it, including the name: it is named for what its callers
+require, and there are now two of them. §7.4.1 has the reason.
 
 #### 7.5.7 Costs, recorded rather than discovered later
 
@@ -2603,7 +2654,7 @@ which is the defect that prompted the job. This kit documents its private functi
 carefully as its public ones, so those links earn the same check.
 
 🚨 **The mutation runs are a separate workflow, and that placement is the decision.** The
-harness recompiles once per mutation and there are 42 of them. Two failures were weighed:
+harness recompiles once per mutation and there are 65 of them. Two failures were weighed:
 
 - Folding it into the fast gate makes every pull request wait twenty minutes, and **a
   check people wait twenty minutes for is a check people learn to route around.**
@@ -2615,7 +2666,7 @@ the harness, and on demand. Landing on `main` is where this repository actually 
 today, so it is the tightest automatic trigger available, and it reports rather than
 gates. 🔑 **It is its own file because a `paths` filter applies to a workflow and never
 to one job inside it** — otherwise a documentation commit triggers twenty minutes of
-recompiling. The two specs run as two legs, so the wall clock is one spec rather than both.
+recompiling. The four specs run as four legs, so the wall clock is the slowest spec rather than the sum.
 
 ### 11.8.1 🔑 No minimum-toolchain job, because there is no minimum to assert
 
@@ -2850,6 +2901,11 @@ the mechanism and the kit's own figures.
 one real consumer has proven the boundaries. Designing abstractions with no consumer is
 how they come out wrong.
 
+➕ **The hold was overridden three times and now holds nothing.** `dialog` on 2026-09-11,
+`update` and `report` on 2026-09-13. The rule stays written here rather than deleted,
+because the rule is what makes the exceptions legible, and because it is the bar the
+first migration will test.
+
 #### The hold was overridden once, for `dialog`, on 2026-09-11
 
 🔑 **Decided by Mike, deliberately and for that module alone.** The rule above still
@@ -2872,6 +2928,26 @@ himself and can look at.
 ⚠️ **`report` and `update` have neither half.** Nothing about this exception transfers to
 them, and §7.5's mechanism being proven says nothing about §7.2's fall-back policy or
 §8's updater.
+
+#### The hold was overridden again on 2026-09-13, for `update` and `report`
+
+🔑 **Decided by Mike, for both modules, with the sentence above unchanged and unmet.**
+The same split as `dialog` applies, and it lands differently in each.
+
+| Module | The half with a consumer | The half without |
+|---|---|---|
+| `report` | ✅ The pane mechanism, promoted from agentic-panes-layout's `issues.rs`: a temp file, a popup, and nothing waited on | ❌ §7.2's fallback policy. Mike's decision, and no plugin has run it |
+| `update` | ❌ Nothing. No donor plugin has an updater at all | ❌ All of it |
+
+⚠️ **`update` is the only module here with no donor code.** Its boundaries were drawn
+from measurement instead: §8.2.1's refresh against a live Herdr, §8.3's install kinds out
+of the schema, and the rate-limit budget off the documented API. That is a different
+basis from a proven consumer rather than a substitute for one. A measurement establishes
+what Herdr does, and it establishes nothing about what a caller wants — which is the half
+the bar was asking about.
+
+🚨 **So the first migration is now the test of three modules rather than one.** §13's
+order puts recent-spaces first, and it is the plugin `update` was designed around.
 
 **Consequences accepted with the override:**
 
@@ -3039,7 +3115,7 @@ The same session, later. §4.2 and §4.3 moved from specified to built.
 | 4.2 | Off Unix there is **no** fallback socket: `interprocess` refuses any path that does not already start `\\.\pipe\`, so reusing the Unix default would fail opaquely and inventing a pipe name would fail plausibly | 📏 measurement + 🔑 decision |
 | 4.2 | The answer's id is checked against the request's, which is what makes the atomic counter load-bearing rather than decorative | 🔧 design |
 | 4.2 | A receive timeout arrives as `WouldBlock` on macOS, established against a deliberately wedged server rather than inferred from the API | 📏 measurement |
-| 4.2.1 | No second error-code list was built. `dialog::BUSY_CODE` already is that list, and the client routes through it | 🔑 decision |
+| 4.2.1 | No second error-code list was built. `BUSY_CODE` already is that list, and the client routes through it | 🔑 decision |
 | 4.3 | A mismatch is a returned value, never a side effect, following §6.2, §7.2 and §7.5 rather than departing from them | 🔑 decision |
 | 7.5.6 | The `Transport` seam met a real client. No caller changed, as §7.5.6 predicted | ✅ confirmation |
 

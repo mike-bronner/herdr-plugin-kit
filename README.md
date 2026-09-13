@@ -15,8 +15,10 @@ across three repositories.
 
 ## Status
 
-Early. The report and update modules and the CI workflows land in later stages, in the
-order `SCOPE.md` section 13 sets out.
+Early. Every module `SCOPE.md` section 13 plans is now built. The transport has still
+**never run against a live server**, which is the gap that matters most: every module
+that sends anything is exercised against fakes answering what a measured Herdr answers,
+and no further. See below.
 
 | Piece | State |
 |---|---|
@@ -29,7 +31,8 @@ order `SCOPE.md` section 13 sets out.
 | `herdr-plugin-kit-build` — the build-script stamp | ✅ |
 | Shell templates — `bin/build`, the launcher, and their sync task | ✅ |
 | PowerShell templates | ⚠️ shipped **unrun**, see below |
-| `report`, `update` | ⏳ held until one real consumer proves the boundaries |
+| `report` — the delivery reason, and a pane when nothing was delivered | ✅ feature-gated, off by default. Needs a `[[panes]]` entry in the plugin, which a crate cannot supply |
+| `update` — the release check and the refresh | ✅ feature-gated, off by default. Answers a decision and acts only when told to |
 | CI workflows | ✅ the kit's own, and `plugin-release.yml` for a plugin. 🔻 No plugin test workflow, see below |
 
 Generated against **Herdr `v0.9.0`**, protocol 22, schema version 1.
@@ -659,8 +662,10 @@ itself against a server that accepts a connection and then says nothing. So the 
 builds exactly that server and times the call.
 
 ```sh
-just mutate tools/mutations/client.json   # the transport's 20 guards
-just mutate tools/mutations/dialog.json   # the dialogs' 25
+just mutate tools/mutations/client.json    # the transport's 20 guards
+just mutate tools/mutations/dialog.json    # the dialogs' 24
+just mutate tools/mutations/report.json    # the issue reports' 19
+just mutate tools/mutations/surface.json   # the shared seam's 2
 ```
 
 The template suite drives the real shims against fixture plugin trees, on Herdr's own

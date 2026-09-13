@@ -53,13 +53,20 @@ jobs:
         spec:
           - tools/mutations/client.json
           - tools/mutations/dialog.json
+          - tools/mutations/report.json
+          - tools/mutations/surface.json
     steps:
       - uses: actions/checkout@v7
 
       # Warm the build once, so the per-mutation cost is an incremental
-      # rebuild rather than a cold one forty-two times over.
+      # rebuild rather than a cold one sixty-five times over.
+      #
+      # `--all-features` rather than each spec's own set: it warms every
+      # dependency for every job, and a named list goes stale the day a feature
+      # is added. The crate itself still compiles once per feature set, which is
+      # one build rather than one per mutation.
       - name: Build the unmutated tree first
-        run: cargo test --locked --features dialog --no-run
+        run: cargo test --locked --all-features --no-run
 
       - name: Break one thing at a time
         run: python3 tools/mutate.py ${{ matrix.spec }}

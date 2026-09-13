@@ -11,11 +11,6 @@
   ],
   "mutations": [
     {
-      "name": "the busy code is matched exactly",
-      "find": "BUSY_CODE => OpenError::Busy,",
-      "replace": "\"ui_bus\" => OpenError::Busy,"
-    },
-    {
       "name": "only the exact primary word acts",
       "find": "PRIMARY_WORD => Answer::Primary,",
       "replace": "\"prim\" => Answer::Primary,"

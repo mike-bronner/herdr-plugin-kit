@@ -1,0 +1,24 @@
+{
+  "file": "crates/herdr-plugin-kit/src/surface.rs",
+  "command": [
+    "cargo",
+    "test",
+    "--features",
+    "dialog",
+    "--lib",
+    "--test",
+    "dialog"
+  ],
+  "mutations": [
+    {
+      "name": "the busy code is matched exactly",
+      "find": "BUSY_CODE => OpenError::Busy,",
+      "replace": "\"ui_bus\" => OpenError::Busy,"
+    },
+    {
+      "name": "anything that is not the busy code stays a plain failure",
+      "find": "other => OpenError::Failed(format!(\"{}: {}\", other, message)),",
+      "replace": "_ => OpenError::Busy,"
+    }
+  ]
+}

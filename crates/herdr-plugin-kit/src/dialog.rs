@@ -160,6 +160,16 @@ use crate::api::generated::{
 };
 use crate::env::Environment;
 
+/// The seam this module sends through, shared with `report`.
+///
+/// 🔑 **Re-exported rather than referenced, so `dialog::Transport` still
+/// resolves.** The trait was declared here first and is documented from here in
+/// SCOPE.md §7.5.6. It moved to [`crate::surface`] when `report` turned out to
+/// need the same two calls for the same stated reason: `show_notification`'s
+/// contract is §7.2's, which is `report`'s own section. A consumer that already
+/// writes `impl dialog::Transport for MyClient` is unaffected.
+pub use crate::surface::{OpenError, Transport, BUSY_CODE};
+
 /// The pane entrypoint every consuming plugin declares for its dialogs.
 ///
 /// The kit fixes the convention so the two halves cannot disagree. Each plugin
@@ -215,32 +225,6 @@ pub const PRIMARY_KEY: &str = "\u{21b5}";
 /// A word rather than a glyph, because no single character means Escape and an
 /// invented one would have to be learned.
 pub const CANCEL_KEY: &str = "esc";
-
-/// The one Herdr error code this module matches, and the measurement behind it.
-///
-/// ✅ Reproduced verbatim 2026-09-11 on Herdr 0.9.0, protocol 22, macOS, by
-/// opening a second popup while one was up:
-///
-/// ```text
-/// {"code":"ui_busy","message":"a popup pane is already open"}
-/// ```
-///
-/// 🚨 **The single-popup limit is global, not per workspace.** Measured
-/// 2026-09-11. So an unanswered dialog in one workspace blocks dialogs in
-/// **every** workspace, with nothing on screen to explain it, and the kit
-/// cannot even say where the blocker is: a popup has no pane id and is absent
-/// from `pane.list`. `ui_busy` is therefore not a rare race to guard against
-/// defensively, it is a state a user can sit in indefinitely without knowing.
-/// That is what makes the notification fallback worth an extra socket call
-/// rather than a nicety.
-///
-/// ⚠️ **The schema enumerates no error code anywhere** (SCOPE.md §3.5), so
-/// nothing here is generatable and nothing here is checkable against the
-/// published contract. §4.2.1 is why this constant carries its measurement
-/// rather than standing alone: an entry with no measurement beside it is a
-/// claim rather than a check, and no guard in the pipeline can tell the two
-/// apart.
-pub const BUSY_CODE: &str = "ui_busy";
 
 /// The popup's requested width, as a percentage of the tab.
 ///
@@ -504,80 +488,6 @@ impl Buttons {
             },
         }
     }
-}
-
-/// Why `plugin.pane.open` did not open a popup.
-///
-/// 🔑 **`Busy` is separate on purpose.** Only one popup exists at a time, so a
-/// caller that loses that race has to be able to learn it did. Flattening
-/// `ui_busy` into a generic failure is the same defect SCOPE.md §7.2 was
-/// written to fix for notifications: a dropped message and a delivered one
-/// indistinguishable to the caller, from information the caller already
-/// received.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum OpenError {
-    /// ✅ Herdr refused because a popup pane is already open ([`BUSY_CODE`]).
-    Busy,
-    /// Anything else, carrying whatever the sender can say about it.
-    Failed(String),
-}
-
-impl OpenError {
-    /// Classifies a Herdr error body into [`Busy`](OpenError::Busy) or not.
-    ///
-    /// Implementors of [`Transport`] call this rather than matching the string
-    /// themselves, so the one hand-maintained error code in this module lives
-    /// in one place with its measurement beside it.
-    pub fn from_error(code: &str, message: &str) -> OpenError {
-        match code {
-            BUSY_CODE => OpenError::Busy,
-            other => OpenError::Failed(format!("{}: {}", other, message)),
-        }
-    }
-}
-
-/// The two socket calls a dialog needs, and deliberately no more.
-///
-/// 🔑 **Named for what this module requires, not for the transport behind
-/// it.** Calling it `Herdr` would overclaim: it holds two of the protocol's
-/// hundred and two methods, and a consumer reading `impl Herdr for MyClient`
-/// would reasonably expect far more. A name describing the requirement also
-/// survives dialogs needing a third call later, where `Herdr` would have been
-/// wrong the whole time and never said so.
-///
-/// The answer file and the process-id marker stay outside this trait. They are
-/// filesystem work, and not something a transport owns.
-///
-/// This shape is not a workaround for the kit's transport being unbuilt. A
-/// module that takes its sender as a trait is how this would be designed even
-/// with `client.rs` in place, because it is what makes every path here testable
-/// without a live server. When SCOPE.md §4.2 lands, the kit's own client
-/// implements this trait and no caller changes.
-pub trait Transport {
-    /// Sends `plugin.pane.open`. `Ok(())` means Herdr accepted the request.
-    ///
-    /// ⚠️ **An `Ok` is not evidence that a pane appeared.** `plugin.pane.open`
-    /// answers `{"type":"ok"}` for a popup whether or not the process starts,
-    /// and carries no handle to ask with. The started marker is what decides
-    /// that, and [`ask`] is what reads it.
-    fn open_pane(&mut self, params: PluginPaneOpenParams) -> Result<(), OpenError>;
-
-    /// Sends `notification.show`, and answers **what Herdr said about
-    /// delivery** rather than a bare success.
-    ///
-    /// 🚨 **Returning the reason is the contract, not a convenience.** SCOPE.md
-    /// §7.2 exists because both plugins that send a toast today discard the
-    /// whole response, so a dropped message and a delivered one are
-    /// indistinguishable from information the caller already received. An
-    /// implementation that throws the reason away and answers `Shown`
-    /// reintroduces exactly that defect inside the module that fixes it.
-    ///
-    /// `Err` is for a notification that could not be sent at all, which is a
-    /// different fact from one Herdr accepted and chose not to display.
-    fn show_notification(
-        &mut self,
-        params: NotificationShowParams,
-    ) -> Result<NotificationShowReason, String>;
 }
 
 /// What became of a notification sent because a popup was unavailable.

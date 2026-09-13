@@ -1,0 +1,109 @@
+{
+  "file": "crates/herdr-plugin-kit/src/report.rs",
+  "command": [
+    "cargo",
+    "test",
+    "--features",
+    "report",
+    "--lib",
+    "--test",
+    "report"
+  ],
+  "mutations": [
+    {
+      "name": "a delivered notification opens nothing",
+      "find": "NotificationShowReason::Shown => false,",
+      "replace": "NotificationShowReason::Shown => true,"
+    },
+    {
+      "name": "a disabled diagnostic overrides the preference",
+      "find": "NotificationShowReason::Disabled => matches!(kind, Kind::Diagnostic),",
+      "replace": "NotificationShowReason::Disabled => false,"
+    },
+    {
+      "name": "a disabled cosmetic message respects the preference",
+      "find": "NotificationShowReason::Disabled => matches!(kind, Kind::Diagnostic),",
+      "replace": "NotificationShowReason::Disabled => true,"
+    },
+    {
+      "name": "every reason that means undelivered falls back",
+      "find": "        | NotificationShowReason::Busy => true,",
+      "replace": "        | NotificationShowReason::Busy => false,"
+    },
+    {
+      "name": "a notification that could not be sent falls back too",
+      "find": "        Err(_) => true,\n    };",
+      "replace": "        Err(_) => false,\n    };"
+    },
+    {
+      "name": "the reason the caller is handed is the one Herdr gave",
+      "find": "    sent\n}",
+      "replace": "    sent.map(|_| NotificationShowReason::Shown)\n}"
+    },
+    {
+      "name": "the counter makes every path unique within one process",
+      "find": "let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);",
+      "replace": "let n = NEXT.load(std::sync::atomic::Ordering::SeqCst);"
+    },
+    {
+      "name": "the process id is in the path",
+      "find": "        std::process::id(),\n        n\n    ))",
+      "replace": "        0,\n        n\n    ))"
+    },
+    {
+      "name": "an empty detail writes the summary rather than nothing",
+      "find": "        true => report.summary,",
+      "replace": "        true => report.detail,"
+    },
+    {
+      "name": "a file that cannot be written opens no pane",
+      "find": "    let Ok(path) = write_issues(dir, report) else {\n        return;\n    };",
+      "replace": "    let path = write_issues(dir, report).unwrap_or_else(|_| dir.join(\"x\"));"
+    },
+    {
+      "name": "a pane that will not open is silent",
+      "find": "    let _ = transport.open_pane(open_params(plugin_id, report, &path));",
+      "replace": "    transport.open_pane(open_params(plugin_id, report, &path)).unwrap();"
+    },
+    {
+      "name": "the popup entrypoint is the fixed convention",
+      "find": "        entrypoint: ENTRYPOINT.to_string(),",
+      "replace": "        entrypoint: \"dialog\".to_string(),"
+    },
+    {
+      "name": "the placement is a popup",
+      "find": "        placement: Some(PluginPanePlacement::Popup),",
+      "replace": "        placement: None,"
+    },
+    {
+      "name": "the popup takes focus",
+      "find": "        focus: true,",
+      "replace": "        focus: false,"
+    },
+    {
+      "name": "the file variable names the file",
+      "find": "    env.insert(FILE_VAR.to_string(), path.to_string_lossy().into_owned());",
+      "replace": "    env.insert(FILE_VAR.to_string(), String::new());"
+    },
+    {
+      "name": "the heading variable carries the title",
+      "find": "    env.insert(HEADING_VAR.to_string(), report.title.to_string());",
+      "replace": "    env.insert(HEADING_VAR.to_string(), report.summary.to_string());"
+    },
+    {
+      "name": "a size the schema accepts survives into the request",
+      "find": "    PopupSizeString::try_from(percent)\n        .ok()\n        .map(PopupSize::String)",
+      "replace": "    let _ = percent;\n    None"
+    },
+    {
+      "name": "the notification carries the summary as its body",
+      "find": "        body: Some(report.summary.to_string()),",
+      "replace": "        body: None,"
+    },
+    {
+      "name": "the notification carries the title",
+      "find": "        title: report.title.to_string(),",
+      "replace": "        title: report.summary.to_string(),"
+    }
+  ]
+}

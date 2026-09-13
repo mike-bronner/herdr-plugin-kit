@@ -17,6 +17,16 @@ path = "src/lib.rs"
 default = []
 dialog = ["dep:crossterm"]
 
+# Costs no dependency: SCOPE.md §7.4 opens its popup through `plugin.pane.open`,
+# which is a socket call rather than terminal drawing.
+#
+# ⚠️ It does **not** turn on `dialog`, and that was checked rather than assumed.
+# `crossterm` is used in `dialog` only from the raw-mode and key-decoding code,
+# never from the `Transport` seam, so the seam moved to `surface` and `report`
+# reaches it without pulling the dependency in. recent-spaces is a headless
+# watcher and pays nothing for reporting its issues.
+report = []
+
 # 🔑 Costs no dependency. The release check shells out to curl (SCOPE.md §9.8)
 # and the apply step spawns Herdr's own CLI, so a consumer that wants updates
 # does not pay for an HTTP stack.

@@ -61,10 +61,10 @@ test:
 # Check the tests actually test: break one thing at a time and confirm the
 # suite reddens.
 #
-# One spec per module, and this takes one of them. There are two:
-# `tools/mutations/dialog.json` and `tools/mutations/client.json`. The harness
-# reads a single spec by design, so run it twice rather than teaching this
-# recipe to loop.
+# One spec per file, and this takes one of them. There are four:
+# `tools/mutations/client.json`, `dialog.json`, `report.json` and
+# `surface.json`. The harness reads a single spec by design, so run it once per
+# spec rather than teaching this recipe to loop.
 #
 # Not part of `check`, because it recompiles once per mutation and takes
 # minutes rather than seconds. Run it when adding or changing a guard.
