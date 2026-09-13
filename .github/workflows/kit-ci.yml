@@ -64,7 +64,7 @@ jobs:
 
 
       - name: The Rust suite
-        run: cargo test --locked --features dialog
+        run: cargo test --locked --all-features
 
   gates:
     name: Formatting and lint
@@ -78,12 +78,12 @@ jobs:
       - name: Check the formatting
         run: cargo fmt --all -- --check
 
-      # ⚠️ `--features dialog` is load-bearing. `dialog` is off by default, so
+      # ⚠️ `--all-features` is load-bearing. `dialog` is off by default, so
       # without it clippy never compiles dialog.rs and never lints a line of
       # it. The justfile's `lint` recipe carries the same flag, because a gate
       # stricter than what a developer runs by hand surprises them in CI.
       - name: Lint with warnings denied
-        run: cargo clippy --all-targets --features dialog --locked -- -D warnings
+        run: cargo clippy --all-targets --all-features --locked -- -D warnings
 
   docs:
     name: Documentation
@@ -141,7 +141,7 @@ jobs:
           for target in $(python3 tools/plugin_gate.py targets); do
             echo "::group::$target"
             rustup target add "$target"
-            cargo clippy --all-targets --features dialog --locked \
+            cargo clippy --all-targets --all-features --locked \
               --target "$target" -- -D warnings
             echo "::endgroup::"
           done

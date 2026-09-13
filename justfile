@@ -56,7 +56,7 @@ test:
     python3 tools/test_mutate.py
     python3 tools/test_plugin_gate.py
     python3 tools/test_kit_pin.py
-    cargo test --features dialog
+    cargo test --all-features
 
 # Check the tests actually test: break one thing at a time and confirm the
 # suite reddens.
@@ -84,12 +84,16 @@ fmt-check:
 
 # Lint with warnings denied.
 #
-# ⚠️ `--features dialog` is load-bearing, not thoroughness. `dialog` is off by
-# default, so without it clippy never compiles dialog.rs and never lints a line
-# of it. CI carries the same flag: a gate stricter than what a developer runs
-# by hand surprises them in CI instead of at their desk.
+# ⚠️ `--all-features` is load-bearing, not thoroughness. Every feature is off by
+# default, so without them clippy never compiles those files and never lints a
+# line of them. CI carries the same flag: a gate stricter than what a developer
+# runs by hand surprises them in CI instead of at their desk.
+#
+# 🔑 `--all-features` rather than naming them, because a named list goes stale
+# the day a feature is added and says nothing when it does. `update` was added
+# to a list that read `--features dialog`.
 lint:
-    cargo clippy --all-targets --features dialog -- -D warnings
+    cargo clippy --all-targets --all-features -- -D warnings
 
 # Build the documentation, and fail on anything rustdoc complains about.
 #

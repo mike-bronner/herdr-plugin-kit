@@ -17,6 +17,7 @@
 //! | Feature | Turns on | Cost |
 //! |---|---|---|
 //! | `dialog` | `dialog`, the four-state popup dialogs | `crossterm`, for raw mode |
+//! | `update` | `update`, the release check and the refresh | nothing |
 //!
 //! 🔑 Gated because recent-spaces is a headless watcher, and should carry
 //! neither popup machinery nor a terminal library.
@@ -46,4 +47,6 @@ pub mod api;
 #[cfg(feature = "dialog")]
 pub mod dialog;
 pub mod env;
+#[cfg(feature = "update")]
+pub mod update;
 pub mod version;

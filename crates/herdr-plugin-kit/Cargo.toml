@@ -17,6 +17,16 @@ path = "src/lib.rs"
 default = []
 dialog = ["dep:crossterm"]
 
+# 🔑 Costs no dependency. The release check shells out to curl (SCOPE.md §9.8)
+# and the apply step spawns Herdr's own CLI, so a consumer that wants updates
+# does not pay for an HTTP stack.
+#
+# ⚠️ It does **not** turn on `dialog`. SCOPE.md §8.2 names `dialog::ask` as the
+# prompt channel, and that is what a plugin calls: `update` answers a value and
+# the plugin decides. Prompting from inside would pull `crossterm` into every
+# consumer that wanted updates, including a headless watcher.
+update = []
+
 # Draws every dialog combination locally, so judging the palette does not need
 # a temporary plugin linked into a live Herdr server. It is what the palette
 # was reviewed and approved from on 2026-09-11, after three trips to a live
