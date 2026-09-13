@@ -240,10 +240,17 @@ fn an_empty_owner_or_repository_is_skipped_as_well() {
 // ------------------------------------------------------------- the timer
 
 #[test]
-fn the_stamp_is_written_before_the_call_rather_than_after() {
+fn a_refused_call_still_records_the_attempt() {
     // 🚨 The finding this module exists to encode. A 403 that left the timer
     // unadvanced turns one attempt a day into one attempt a launch, against a
     // budget of 60 an hour that is shared per IP and already exhausted.
+    //
+    // ⚠️ **Renamed 2026-09-13 from `the_stamp_is_written_before_the_call_
+    // rather_than_after`**, which promised an ordering nothing can observe:
+    // moving `stamp_attempt` below the call still writes the stamp on every
+    // path, so no test could tell. What is observable, and what the 403 defect
+    // actually needs, is that a *refused* call records the attempt. SCOPE.md
+    // §15.7 carries the finding.
     let directory = TempDir::new("stamp-on-failure");
     let releases = Answers::refused("403 rate limit exceeded");
 

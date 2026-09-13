@@ -2273,7 +2273,7 @@ step left **every other test green**, because seven tests covered what the gate 
 and none covered whether anything called it. **A gate nobody runs passes every test
 written about it.**
 
-🚨 **Three members of one family, all found on 2026-09-13.** Each reads as established
+🚨 **Four members of one family, all found on 2026-09-13.** Each reads as established
 because it is specific, and each is unbacked:
 
 | What it looked like | What it was |
@@ -2281,6 +2281,7 @@ because it is specific, and each is unbacked:
 | A comment saying a test held four copies together | No such test existed, and it miscounted the copies |
 | Seven green tests over a gate | Nothing called the gate |
 | "Pane ids resolve before platforms are filtered" (§10.1) | An inference explaining a real measurement, never measured |
+| A test named `the_stamp_is_written_before_the_call_rather_than_after` | An ordering nothing can observe. The test proves something else, and something better |
 
 🔑 **The third is the hardest to catch, because an inference that explains a measurement
 wears the measurement's authority.** It arrived inside a section whose whole purpose is
@@ -2288,6 +2289,17 @@ separating what was measured from what was read, with a caveat beneath it saying
 had not reproduced *it* — while the strongest sentence in the paragraph was not a
 measurement at all. **A claim is not a check, a tested function nobody invokes is not a
 check, and an explanation of a measurement is not a measurement.**
+
+🪤 **The fourth arrived by a route the other three did not: writing the mutation.** ✅
+2026-09-13. The spec was asked for a mutation moving `stamp_attempt` below the network
+call, and it cannot be written, because the stamp is then still written on every path
+including the refused one. **The mutation would have survived, and a surviving mutation
+reads as a coverage gap rather than as a name describing nothing.** What the code
+protects is that a *refused* call records the attempt, which is the 403 defect exactly
+and which dies immediately. ⚠️ So a test name is a claim like any other, and **a name is
+checkable only by asking what would have to break for the test to fail**. The mutation
+harness asks that question by construction, which is why it found this and four rounds of
+reading did not.
 
 ⚠️ **Keep this subsection through any rewrite of §11**, both halves of it. The
 measurement is the reason the sections around it changed, and the correction is the
@@ -3234,3 +3246,162 @@ predicted were all measurements that contradicted a plausible expectation.
 64 per-variant types are exercised by a schema-derived fixture each rather than by a real
 answer. A fixture proves the shapes agree with the schema; it does not prove the schema
 agrees with the server.
+
+### 15.7 Extended 2026-09-12 to 2026-09-13: a span rather than a session
+
+🔑 **This entry is a different shape from §15.1 to §15.6, deliberately.** Each of those
+describes one design session with one question, which is why a table works there: every
+row traces to one investigation. This span holds six pieces of work with no shared
+question, and a single table of thirty rows whose only common factor is the date, with a
+`§` column pointing at seven sections, would be a changelog wearing a provenance header.
+§13.1 already deleted a version table for being exactly that. So each piece gets a
+sub-heading answering §15's own question — what was measured, what was decided, what it
+cost — and a table only where one earns it.
+
+#### ✅ The first defect found by talking to a real server (§3.2.1)
+
+**Measured** against Mike's live 0.9.0 through this kit's own client: Herdr declares
+`"format": "float"` eight times and `"double"` never, and an `f32` cannot hold what the
+server sends. `0.69` reads back as `0.6899999976158142`.
+
+**Decided**: the extract stage rewrites `float` to `double` before generation, which is
+the one place the pipeline says something the published schema does not.
+
+**Cost**: a breaking change for any consumer that bound a generated number to an `f32`,
+and a fourth guard that fails closed when it widens nothing — because a rewrite matching
+nothing looks exactly like a rewrite working.
+
+🚨 **The part worth carrying: deserialization succeeded.** Nothing errored, nothing
+warned, and four methods round-tripped clean in the same probe because their ratios sat
+on an exact 50/50 split and 0.5 is representable in an `f32`. Only `session.snapshot`,
+spanning twelve workspaces, reached a number that was not. **A defect that needs the
+right data to appear is not found by a scripted peer**, and this one had been documented
+from the write side in another plugin's notes for weeks.
+
+#### 🔻 Plugin testing removed, releases restored (§11, §11.2.1)
+
+**Measured**: `job_workflow_sha` empty and `job_workflow_ref` absent, twice, at a branch
+and at a tag. A reusable workflow cannot learn which of its own versions a caller pinned
+*from the Actions context*.
+
+**Decided by Mike**: the kit does not run tests for other repositories. `plugin-ci.yml`
+is gone and stays gone, and that is a scope decision rather than a technical one.
+`plugin-release.yml` came back the same day, once the lookup turned out to be solvable.
+
+**Cost**: almost nothing, and the reason is §11.2.1's older decision. The workflows were
+wrappers around `tools/plugin_gate.py`, so deleting them deleted wrappers. Every check
+still exists, still has its tests, and is now invoked by the plugin.
+
+🪤 **"So there is no route" was written, and corrected an hour later.** The callee has the
+caller's checkout, so it reads the pin out of `Cargo.toml` exactly as §11.3 tells plugins
+to. The answer was already written down one subsection away, for a different audience,
+the same afternoon.
+
+#### 🚨 `kit-pins`, a hole in the kit rather than in a plugin (§11.4.1)
+
+**Measured** on project-finder: three pins name this kit — the runtime crate, the build
+crate, and the `uses:` — and nothing compared them. A release built by one kit version
+while the crate depends on another publishes assets from a tree the plugin does not use.
+
+**The evidence that it was the kit's hole**: project-finder's own caller carried a
+comment saying *"Nothing in the kit's own gates compares them, so tests/packaging.rs
+does."* A consumer patching a hole in the thing it depends on is how three plugins end up
+with three different tests.
+
+**Cost**: the gate cannot judge this repository, because the kit is not a plugin and pins
+nothing. So the examples the kit publishes are held against its own version by a separate
+test instead, reading that version from cargo rather than carrying a literal.
+
+#### ✅ A live measurement run against Herdr 0.9.0 (§5.3, §8.2.1)
+
+**Measured** in an isolated probe server: `XDG_CONFIG_HOME` with `--session`, every client
+command through an `env -i` allowlist, and the live `plugins.json` hashed before and
+after — byte-identical, as was the whole live config root. project-finder went 0.8.1 →
+0.9.1 in 1.96s, the plugin directory was replaced wholesale rather than merged,
+`source.kind` survived, and `[[build]]` re-ran and took the download branch.
+
+**The finding that changed a design**: installing with `--ref` records `requested_ref`,
+and refreshing without it produces a record carrying none. ⚠️ **The documented refresh
+silently converts a pinned install into a floating one.** So `update` passes `--ref`
+explicitly, and an update *moves* a pin rather than deleting it.
+
+**Cost**: the `local:` case is still unmeasured, because measuring it means running a
+refresh against a working repository and that is the one action nobody was willing to
+take. §8.3's guard is reasoned from the schema instead, and says so.
+
+#### ➕ `update`, the only module with no donor code
+
+**Measured before written**, which had not been true of any module here: the rate-limit
+budget off the documented API, the install kinds out of the schema, the refresh above, and
+the prompt channel read at a line number.
+
+**Decided**: it answers a value and never prompts. That is this kit's shape rather than a
+new choice — `version` formats a report and never prints it, `dialog` answers `Shown`, and
+`Handshake::mismatch` hands back a diagnosis.
+
+**Cost**: the one-consumer bar of §13 is unmet for all of it, and no measurement
+substitutes. A measurement establishes what Herdr does and establishes nothing about what
+a caller wants, which is the half the bar was asking about.
+
+#### ➕ `report`, and a seam that turned out to be shared
+
+**Measured**: `cargo tree --features report` lists no `crossterm`, so the pane costs no
+dependency. The popup is a socket call.
+
+**Decided**: the `Transport` seam moved out of `dialog` into `surface`, shared by both.
+The evidence was inside the trait's own documentation — `show_notification`'s contract is
+§7.2's, which is `report`'s section rather than `dialog`'s — so the seam had been
+specified against a module that did not exist yet. A second trait of the same two methods
+would be a second place for the rule about discarding the reason to rot, which is the
+defect §7.2 exists to fix.
+
+**Cost**: a coupling, bounded by keeping the trait at two methods. A third call `dialog`
+needs later gets declared in `dialog`.
+
+**Not shared**: the temp-file idiom. Both key a path on the pid and a counter, and they
+are still different things — `dialog` makes a directory it removes once the answer
+arrives, and `report` writes one file that must outlive the call. ⚠️ **Two things that
+look alike are not always one thing**, and this kit has been bitten more by premature
+agreement than by duplication.
+
+#### 🔑 What belongs to the span rather than to any piece of it
+
+🚨 **Five corrections this span came from somebody refusing a claim that sounded
+specific.** Every one was caught before it shipped, and four of them by somebody
+declining to accept a claim from somebody holding more context. That is the method
+working rather than a bad run, and it is recorded here because a document whose whole
+purpose is separating measured from read owes an account of how its own claims were
+wrong.
+
+| The claim | Who made it | What it was |
+|---|---|---|
+| A template change on `main` shows up as consumer drift, so two plugins' CI breaks | the orchestrator | An inference about a check nobody had read. A plugin's check compares against its pin, and the answer was thirty lines away in §11.3's own recipe |
+| The isolation recipe is in `§5` | the orchestrator | No such section. It is `agentic-panes-layout/docs/herdr-behaviour.md`, under `## How to measure safely` |
+| Five commits are unpushed | the orchestrator | One. `git log origin/main..main` answers it in one command |
+| A comment saying a test holds four copies together | the kit's own session | No such test, and it miscounted the copies |
+| "Pane ids resolve before platforms are filtered" | the kit's own session | An inference explaining a real measurement, never measured, inside a section about telling those apart |
+
+🔑 **The shape is one thing, not five.** Each claim carried a specific detail — a
+section number, a count, a mechanism, a named test — and the detail is what made it read
+as checked. ⚠️ **A specific claim is easier to believe and no harder to be wrong**, and
+three of the five were answerable by one command or one grep. The cost of checking was
+seconds in every case; the cost of the drift warning alone, had it been acted on, was two
+plugins' CI.
+
+⚠️ **A sixth turned up while this entry was being written, and is left in as the
+cheapest example of the shape.** The row above first cited that recipe as
+`herdr-behaviour.md:14-91`, when the section runs to 106 — a range copied from a note
+rather than read off the file, inside the sentence naming the habit. It is recorded as a
+heading now. **A line range is a claim with a short shelf life**, and a heading is the
+same citation surviving the next edit to the file it points at.
+
+🪤 **The seventh was found by a tool rather than by a reader**, which is why it is filed
+with §11.2.1's family instead of here. Nobody refused that claim: a mutation could not be
+written, because the behaviour the test was named for is unobservable. Four rounds of
+reading had passed over the name. **A name is checkable only by asking what would have to
+break for the test to fail**, which is the question a mutation harness asks by
+construction and the question reading does not.
+
+⚠️ **What is still unmeasured after all of it**: no module in this kit has run against a
+live Herdr server. The transport has talked to one exactly once, in §3.2.1's probe, and
+that one conversation found a defect every scripted peer before it had passed.
