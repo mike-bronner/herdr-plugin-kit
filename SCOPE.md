@@ -877,6 +877,77 @@ silent.
 
 Plugin-specific config parsing stays in the plugin. Only the shared mechanism moves.
 
+### 5.3 ➕ Measuring against an isolated server, which every plugin session needs
+
+✅ **Measured by the agentic-panes-layout sessions, 2026-09-08 and 2026-09-09, against
+Herdr 0.9.0.** ⚠️ **The kit has not reproduced any of it**, and states it as reported in
+the style §10.1 uses: the measurements are real, the reproduction is not ours.
+
+🚨 **It is here because two plugins carry their own copy and the copies have already
+diverged.** `herdr-plugin-agentic-panes-layout/docs/herdr-behaviour.md` runs to 656 lines
+and `herdr-plugin-recent-spaces/docs/herdr-behaviour.md` to 373, and the shorter one
+carries the lever **without the distinction below**. That is the half whose absence
+writes over a live session, so this is not a tidiness argument: it is §1.1's duplication
+with a measured consequence attached.
+
+#### The lever, for a server you start
+
+```sh
+rm -rf /private/tmp/hgeo && mkdir -p /private/tmp/hgeo
+XDG_CONFIG_HOME=/private/tmp/hgeo herdr --session geo server &
+```
+
+`XDG_CONFIG_HOME` moves Herdr's **entire** config root, so the socket, `plugins.json` and
+`session.json` all move together. **Pair it with `--session`**, because an ambient
+`HERDR_SOCKET_PATH` may already point at the live socket and `--session` is what stops the
+probe answering there. ⚠️ Keep the root **short**, under `/private/tmp`: a deep path dies
+with `local socket name length exceeds capacity of sun_path of sockaddr_un`.
+
+#### 🚨 Both halves of the socket rule, or neither
+
+**Starting a server and pointing a client at one are different problems.**
+
+| | Lever |
+|---|---|
+| A server you **start** | ❌ `HERDR_SOCKET_PATH` **cannot** isolate it. It moves only the socket, so the server restores the **live** `session.json`, runs your real workspaces in a second process, and writes its state back over theirs. ✅ Measured 2026-09-08: a throwaway workspace appeared in the live `~/.config/herdr/session.json` |
+| A **client** command against a server something else started | ✅ `HERDR_SOCKET_PATH` alone is correct and sufficient. The CLI finds a server by socket path and by nothing else |
+
+🪤 **Quoting either row alone is the documented failure.** The first without the second
+makes an isolated client command look impossible; the second without the first is how a
+probe server writes over a live session. ❌ `HERDR_CONFIG_PATH` isolates **nothing** — not
+the socket, not the state, whether it names a file or a directory.
+
+#### Scrub with an allowlist, never by name
+
+```sh
+env -i HOME="$HOME" PATH="$PATH" HERDR_SOCKET_PATH=<probe socket> <command>
+```
+
+🚨 **A shell inside a Herdr pane is the dangerous case and the usual one.** ✅ Confirmed
+2026-09-09: it carries `HERDR_SOCKET_PATH`, `HERDR_PANE_ID`, `HERDR_WORKSPACE_ID`,
+`HERDR_TAB_ID` and `HERDR_BIN_PATH`, all pointing at the **live** server.
+
+⚠️ **Unsetting by name is the weaker fallback and it fails on the variable nobody thought
+of.** ✅ Seen 2026-09-09 on project-finder: `HERDR_PLUGIN_CONFIG_DIR` survived a round of
+named unsets and made a settings reader load another plugin's config. An allowlist has no
+such failure mode, which is why it is the recommendation rather than one of two options.
+
+🔑 **Binary selection and server selection are separate axes.** `HERDR_BIN_PATH` decides
+which executable runs; the socket decides which server it reaches. So a client command in
+isolation needs no redirected binary and no shim.
+
+#### Verify three ways before probing, because the failure is silent
+
+1. `workspace list` returns **zero** workspaces. A shared `session.json` restores the live
+   ones, which is the tell.
+2. `plugin list` shows only what you linked.
+3. The live `plugins.json` is **byte-identical afterwards**, by sha256 and mtime.
+
+✅ On 0.9.0 the probe socket is at `<config root>/herdr/sessions/<session>/herdr.sock`,
+measured 2026-09-09.
+
+---
+
 ## 6. Module: `version`
 
 Promoted from recent-spaces, which has the best of the three implementations.
@@ -1330,6 +1401,23 @@ popup machinery.
 - **Timer:** a stamp file in `HERDR_PLUGIN_STATE_DIR`, checked at launch against a
   minimum interval. Default 24 hours. No new process for the two on-demand plugins.
   recent-spaces folds the check into its existing poll loop.
+- 🚨 **The stamp records the attempt, not the result**, decided 2026-09-13 and the one
+  design consequence of asking an API instead of git.
+
+  | | |
+  |---|---|
+  | The budget | **60 requests per hour**, unauthenticated |
+  | Three plugins on a daily timer | 3 per day against 1,440, **0.2%** |
+  | So the plugin count | is **not** the risk |
+
+  ⚠️ **The retry storm is.** A free git call can be retried on failure for nothing. A
+  rate-limited one cannot: a 403 that leaves the timer unadvanced turns one-per-day into
+  **one-per-launch**, against a budget that is already exhausted. Writing the stamp
+  *before* the call is what bounds it, and it costs at most one skipped day.
+
+  🚨 **The 60 is per IP, not per machine.** Behind NAT or a shared gateway the budget is
+  shared with machines this plugin cannot see, so **a 403 reads as "no answer", never as
+  "no update"**. 🔑 The interval is not the lever here; the stamp semantics are.
 - **Check:** the newest **release** on the plugin's origin, not its newest tag.
   🔑 **Decided by Mike 2026-09-13, and it is a decision about what the question means.**
   ⚠️ This said `git ls-remote --tags`, which answers a different question: under
