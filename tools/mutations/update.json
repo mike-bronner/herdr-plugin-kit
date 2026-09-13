@@ -1,0 +1,109 @@
+{
+  "file": "crates/herdr-plugin-kit/src/update.rs",
+  "command": [
+    "cargo",
+    "test",
+    "--features",
+    "update",
+    "--lib",
+    "--test",
+    "update"
+  ],
+  "mutations": [
+    {
+      "name": "a refused call still records the attempt",
+      "find": "    stamp_attempt(stamp, now);\n\n    match releases.latest(owner, repo) {",
+      "replace": "    let answered = releases.latest(owner, repo);\n    if answered.is_ok() {\n        stamp_attempt(stamp, now);\n    }\n\n    match answered {"
+    },
+    {
+      "name": "the attempt is recorded at all",
+      "find": "    stamp_attempt(stamp, now);\n\n    match releases.latest(owner, repo) {",
+      "replace": "    match releases.latest(owner, repo) {"
+    },
+    {
+      "name": "a refusal is never up to date",
+      "find": "        Err(reason) => Decision::NoAnswer(reason),",
+      "replace": "        Err(_) => Decision::UpToDate,"
+    },
+    {
+      "name": "a repository with no releases is up to date rather than a failure",
+      "find": "        Ok(None) => Decision::UpToDate,",
+      "replace": "        Ok(None) => Decision::NoAnswer(\"no releases\".to_string()),"
+    },
+    {
+      "name": "the installed tag is recognised as current",
+      "find": "        Ok(Some(tag)) if tag == plugin.version => Decision::UpToDate,",
+      "replace": "        Ok(Some(tag)) if tag != plugin.version => Decision::UpToDate,"
+    },
+    {
+      "name": "a local install is never checked",
+      "find": "    if !is_managed(plugin) {\n        return Decision::Skipped(Skipped::LocalInstall);",
+      "replace": "    if false {\n        return Decision::Skipped(Skipped::LocalInstall);"
+    },
+    {
+      "name": "a local install is refused by apply as well",
+      "find": "    if !is_managed(plugin) {\n        return Err(format!(",
+      "replace": "    if false {\n        return Err(format!("
+    },
+    {
+      "name": "only a github install is managed",
+      "find": "    matches!(plugin.source.kind, PluginSourceKind::Github)",
+      "replace": "    matches!(plugin.source.kind, PluginSourceKind::Local)"
+    },
+    {
+      "name": "the timer is honoured",
+      "find": "    if !due(stamp, now, interval) {",
+      "replace": "    if false {"
+    },
+    {
+      "name": "the interval is compared rather than ignored",
+      "find": "    elapsed.as_secs().saturating_sub(then) >= interval.as_secs()",
+      "replace": "    elapsed.as_secs().saturating_sub(then) < interval.as_secs()"
+    },
+    {
+      "name": "an unreadable stamp means check rather than stay silent",
+      "find": "    let Ok(text) = fs::read_to_string(stamp) else {\n        return true;\n    };",
+      "replace": "    let Ok(text) = fs::read_to_string(stamp) else {\n        return false;\n    };"
+    },
+    {
+      "name": "a stamp that is not a number means check",
+      "find": "    let Ok(then) = text.trim().parse::<u64>() else {\n        return true;\n    };",
+      "replace": "    let Ok(then) = text.trim().parse::<u64>() else {\n        return false;\n    };"
+    },
+    {
+      "name": "the refresh passes --ref explicitly",
+      "find": "        \"--ref\".to_string(),\n        tag.to_string(),\n",
+      "replace": ""
+    },
+    {
+      "name": "the refresh names the tag rather than the running version",
+      "find": "    installer.install(owner, repo, &update.tag)",
+      "replace": "    installer.install(owner, repo, &update.installed)"
+    },
+    {
+      "name": "the refresh asks for an install rather than something else",
+      "find": "        \"install\".to_string(),",
+      "replace": "        \"link\".to_string(),"
+    },
+    {
+      "name": "a missing repository is skipped rather than guessed",
+      "find": "        (Some(owner), Some(repo)) if !owner.is_empty() && !repo.is_empty() => (owner, repo),",
+      "replace": "        (Some(owner), Some(repo)) => (owner, repo),"
+    },
+    {
+      "name": "a repository with an empty half is refused",
+      "find": "        Some((owner, repo)) if !owner.is_empty() && !repo.is_empty() => (owner, repo),",
+      "replace": "        Some((owner, repo)) => (owner, repo),"
+    },
+    {
+      "name": "a body with no usable tag is a non-answer rather than no releases",
+      "find": "        _ => Err(\"the release document carries no tag_name\".to_string()),",
+      "replace": "        _ => Ok(None),"
+    },
+    {
+      "name": "an empty tag_name is a non-answer too",
+      "find": "        Some(tag) if !tag.is_empty() => Ok(Some(tag.to_string())),",
+      "replace": "        Some(tag) => Ok(Some(tag.to_string())),"
+    }
+  ]
+}

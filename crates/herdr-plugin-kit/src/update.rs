@@ -348,3 +348,39 @@ fn stamp_attempt(stamp: &Path, now: SystemTime) {
     }
     let _ = fs::write(stamp, format!("{}\n", elapsed.as_secs()));
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 🔑 **`tag_of` is private and reached through the network seam, so the
+    /// integration suite cannot drive it.** Its rule — a body carrying no usable
+    /// tag is a *non-answer*, never an absence of releases — is the one that
+    /// decides whether a plugin is told it is up to date. It is checked here
+    /// rather than left to a fake that would have to return the answer under
+    /// test.
+    #[test]
+    fn a_release_document_answers_its_tag() {
+        assert_eq!(
+            tag_of(r#"{"tag_name":"0.9.1"}"#),
+            Ok(Some("0.9.1".to_string()))
+        );
+    }
+
+    #[test]
+    fn a_body_with_no_tag_is_a_non_answer_rather_than_no_releases() {
+        // 🚨 `Ok(None)` here would become `Decision::UpToDate`, which tells a
+        // plugin the opposite of what happened.
+        assert!(tag_of(r#"{"message":"Not Found"}"#).is_err());
+    }
+
+    #[test]
+    fn an_empty_tag_is_a_non_answer_too() {
+        assert!(tag_of(r#"{"tag_name":""}"#).is_err());
+    }
+
+    #[test]
+    fn a_body_that_is_not_json_is_a_non_answer() {
+        assert!(tag_of("rate limit exceeded").is_err());
+    }
+}

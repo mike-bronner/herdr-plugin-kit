@@ -666,7 +666,12 @@ just mutate tools/mutations/client.json    # the transport's 20 guards
 just mutate tools/mutations/dialog.json    # the dialogs' 24
 just mutate tools/mutations/report.json    # the issue reports' 19
 just mutate tools/mutations/surface.json   # the shared seam's 2
+just mutate tools/mutations/update.json    # the update check's 19
 ```
+
+CI reads that directory rather than a list of those five paths. A spec added
+without a matrix entry is a module nobody checks, and that already happened
+once: `update` shipped with no spec at all and the matrix stayed green.
 
 The template suite drives the real shims against fixture plugin trees, on Herdr's own
 launchd `PATH` of `/usr/bin:/bin:/usr/sbin:/sbin`, with stub binaries for `cargo`,

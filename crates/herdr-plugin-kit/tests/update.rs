@@ -209,6 +209,34 @@ fn a_github_install_naming_no_repository_is_skipped_rather_than_guessed() {
     assert!(releases.asked.borrow().is_empty());
 }
 
+#[test]
+fn an_empty_owner_or_repository_is_skipped_as_well() {
+    // ⚠️ A present-but-empty string is a different shape from an absent one,
+    // and `Option` does not tell them apart. Without this, a plugin whose
+    // record carries `""` is asked about as `https://api.github.com/repos///…`.
+    for (owner, repo) in [
+        (Some(String::new()), Some("r".to_string())),
+        (Some("o".to_string()), Some(String::new())),
+    ] {
+        let directory = TempDir::new("emptyrepo");
+        let releases = Answers::newest("0.9.1");
+        let mut nameless = plugin(PluginSourceKind::Github, "0.8.1");
+        nameless.source.owner = owner;
+        nameless.source.repo = repo;
+
+        let decision = check(
+            &nameless,
+            &directory.stamp(),
+            at(1_000_000),
+            DEFAULT_INTERVAL,
+            &releases,
+        );
+
+        assert_eq!(decision, Decision::Skipped(Skipped::NoRepository));
+        assert!(releases.asked.borrow().is_empty());
+    }
+}
+
 // ------------------------------------------------------------- the timer
 
 #[test]
@@ -488,4 +516,27 @@ fn a_repository_that_is_not_owner_slash_repo_is_refused() {
 
     assert!(refused.is_err());
     assert!(spawns.ran.is_empty());
+}
+
+#[test]
+fn a_repository_with_an_empty_half_is_refused_too() {
+    // ⚠️ `"owner/"` splits successfully and yields an empty repo, so the split
+    // alone is not the check. Herdr would be asked to install `owner/`.
+    for repository in ["owner/", "/repo"] {
+        let mut spawns = Spawns::default();
+        let update = Available {
+            installed: "0.8.1".to_string(),
+            tag: "0.9.1".to_string(),
+            repository: repository.to_string(),
+        };
+
+        let refused = apply(
+            &plugin(PluginSourceKind::Github, "0.8.1"),
+            &update,
+            &mut spawns,
+        );
+
+        assert!(refused.is_err(), "{} was accepted", repository);
+        assert!(spawns.ran.is_empty());
+    }
 }

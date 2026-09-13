@@ -4,8 +4,8 @@ name: Mutation
 #
 # 🚨 Separate from kit-ci.yml on purpose, and this is the decision rather than
 # a filing convenience. The harness recompiles the crate once per mutation and
-# there are forty-two of them, so a run costs minutes rather than seconds. Two
-# failures were weighed against each other:
+# there are eighty-four of them, so a run costs minutes rather than seconds.
+# Two failures were weighed against each other:
 #
 #   - Folding it into the fast gate makes every pull request wait for it, and a
 #     check people wait twenty minutes for is a check people learn to route
@@ -22,8 +22,8 @@ name: Mutation
 # workflow, never to one job inside it, so a documentation commit cannot
 # trigger twenty minutes of recompiling from inside kit-ci.yml.
 #
-# The two specs run as two legs rather than one loop: they are independent, and
-# in parallel the wall clock is one spec rather than both.
+# Each spec runs as its own leg rather than in one loop: they are independent,
+# and in parallel the wall clock is the slowest spec rather than the sum.
 
 on:
   push:
@@ -41,25 +41,52 @@ permissions:
   contents: read
 
 jobs:
+  # 🚨 The specs are read from the directory, never listed here, and that is
+  # the same fix `--all-features` was rather than a tidier way to write four
+  # paths. A hand-maintained list says nothing when it goes stale: `update`
+  # shipped with no spec at all, the matrix stayed green across two releases,
+  # and nothing anywhere reported that a module was uncovered. A list of the
+  # things to check cannot itself be the thing that decides what to check.
+  #
+  # ⚠️ An empty result fails loudly instead of producing a matrix of zero jobs.
+  # A workflow that runs nothing and reports success is the same silent green
+  # this job exists to end, and it is the failure mode a glob introduces.
+  discover:
+    name: Find the specs
+    runs-on: ubuntu-latest
+    outputs:
+      specs: ${{ steps.find.outputs.specs }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: find
+        name: List every spec under tools/mutations
+        run: |
+          specs="$(find tools/mutations -maxdepth 1 -name '*.json' \
+            | sort | jq -R -s -c 'split("\n")[:-1]')"
+          if [ "$specs" = '[]' ]; then
+            echo "::error::no mutation specs found under tools/mutations"
+            exit 1
+          fi
+          echo "found $specs"
+          echo "specs=$specs" >> "$GITHUB_OUTPUT"
+
   mutate:
     name: ${{ matrix.spec }}
+    needs: discover
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
-      # A surviving mutation in one module says nothing about the other, and
-      # both answers are wanted in the same run.
+      # A surviving mutation in one module says nothing about the others, and
+      # every answer is wanted in the same run.
       fail-fast: false
       matrix:
-        spec:
-          - tools/mutations/client.json
-          - tools/mutations/dialog.json
-          - tools/mutations/report.json
-          - tools/mutations/surface.json
+        spec: ${{ fromJSON(needs.discover.outputs.specs) }}
     steps:
       - uses: actions/checkout@v7
 
       # Warm the build once, so the per-mutation cost is an incremental
-      # rebuild rather than a cold one sixty-five times over.
+      # rebuild rather than a cold one eighty-four times over.
       #
       # `--all-features` rather than each spec's own set: it warms every
       # dependency for every job, and a named list goes stale the day a feature

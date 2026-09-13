@@ -127,7 +127,8 @@ herdr-plugin-kit/
 │       ├── client.json               # the transport's 20 mutations
 │       ├── dialog.json               # the dialogs' 24 mutations
 │       ├── report.json               # the issue reports' 19 mutations
-│       └── surface.json              # the shared seam's 2 mutations
+│       ├── surface.json              # the shared seam's 2 mutations
+│       └── update.json               # the update check's 19 mutations
 ├── .github/workflows/
 │   ├── kit-ci.yml                    # the kit's own, fast
 │   └── kit-mutation.yml              # the kit's own, slow — §11.8
@@ -2654,7 +2655,7 @@ which is the defect that prompted the job. This kit documents its private functi
 carefully as its public ones, so those links earn the same check.
 
 🚨 **The mutation runs are a separate workflow, and that placement is the decision.** The
-harness recompiles once per mutation and there are 65 of them. Two failures were weighed:
+harness recompiles once per mutation and there are 84 of them. Two failures were weighed:
 
 - Folding it into the fast gate makes every pull request wait twenty minutes, and **a
   check people wait twenty minutes for is a check people learn to route around.**
@@ -2666,7 +2667,16 @@ the harness, and on demand. Landing on `main` is where this repository actually 
 today, so it is the tightest automatic trigger available, and it reports rather than
 gates. 🔑 **It is its own file because a `paths` filter applies to a workflow and never
 to one job inside it** — otherwise a documentation commit triggers twenty minutes of
-recompiling. The four specs run as four legs, so the wall clock is the slowest spec rather than the sum.
+recompiling. Each spec runs as its own leg, so the wall clock is the slowest spec rather than the
+sum.
+
+🚨 **The legs are read from `tools/mutations/`, never listed in the workflow**, and that
+is the same fix `--all-features` was rather than a tidier way to write five paths. ✅ The
+list was hand-maintained until 2026-09-13, and `update` shipped with no spec at all while
+the matrix stayed green across two releases — **a list of the things to check cannot
+itself be the thing that decides what to check.** ⚠️ The glob introduces its own silent
+green, a matrix of zero jobs reporting success, so an empty result fails the run loudly
+instead.
 
 ### 11.8.1 🔑 No minimum-toolchain job, because there is no minimum to assert
 
