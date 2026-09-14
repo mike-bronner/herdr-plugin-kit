@@ -2850,7 +2850,13 @@ tag form when recent-spaces migrates (§13).
   governs the number. ✅ Both directions are already in this history: **0.3.0 was a
   `fix:` at a minor** (widening `f32` to `f64` broke every consumer) and **0.4.1 was a
   `feat:` at a patch** (three additions broke none). 🔑 Forcing them to agree would have
-  mis-numbered one of those two.
+  mis-numbered one of those two. ✅ **0.4.4 is the hardest test of it so far**: two
+  `feat:` commits, adding `report` and `update`, at a patch. Both modules are new,
+  feature-gated, off by default, and ⚠️ **cost no dependency, which was measured rather
+  than argued** — `cargo tree --features report` lists no `crossterm` and `update = []`.
+  So a consumer who upgrades correctly and turns nothing on gets a tree that is byte for
+  byte what they had. **Two new modules can be a patch**, because the number answers what
+  the upgrade asks of them and not how much work went in.
 - ➕ **What decides the number is whether a *correct* upgrade needs work**, added
   2026-09-13, and it is the class the three clauses above were reaching for. A change
   that asks something of a consumer who upgrades **correctly** is a minor at minimum:
@@ -2860,9 +2866,15 @@ tag form when recent-spaces migrates (§13).
   pins agree is unaffected, and one that bumps only some of them was already publishing
   assets from a kit it does not depend on. ⚠️ **"It can make a build fail" is not the
   test**, or every new check would be a break and no check would ever ship.
-- ➕ **A consumer may pin any kind of tag**, added 2026-09-12. All three of this kit's
-  releases are annotated tags, and ✅ the probe in §11.2.1 measured both kinds behaving
-  identically. `actions/checkout` takes either, and a `cargo` git dependency takes either.
+- ➕ **A consumer may pin any kind of tag**, added 2026-09-12. ✅ **Every tag this kit
+  has cut is annotated**, and the probe in §11.2.1 measured both kinds behaving
+  identically. ⚠️ **This clause read "all three of this kit's releases" until
+  2026-09-14**, when there were seven. The count was right the day it was written and
+  nobody re-measured it, which is §13.1's argument arriving in the section next door:
+  **a property stays true or becomes visibly false, and a count just rots.** The
+  re-measurement that caught it was the 0.4.4 sweep, which is the only thing in this
+  repository that reads every line naming a version. `actions/checkout` takes either,
+  and a `cargo` git dependency takes either.
   ⚠️ **If that ever stops being true, it belongs here rather than in whoever happens to
   remember it**: a check that serves one kind of tag is a trap for whoever tags the next
   release without knowing which kind they made.
