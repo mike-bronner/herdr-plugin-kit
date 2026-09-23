@@ -12,12 +12,12 @@
   "mutations": [
     {
       "name": "a refused call still records the attempt",
-      "find": "    stamp_attempt(stamp, now);\n\n    match releases.latest(owner, repo) {",
-      "replace": "    let answered = releases.latest(owner, repo);\n    if answered.is_ok() {\n        stamp_attempt(stamp, now);\n    }\n\n    match answered {"
+      "find": "    write_time(stamp, now);\n\n    match releases.latest(owner, repo) {",
+      "replace": "    let answered = releases.latest(owner, repo);\n    if answered.is_ok() {\n        write_time(stamp, now);\n    }\n\n    match answered {"
     },
     {
       "name": "the attempt is recorded at all",
-      "find": "    stamp_attempt(stamp, now);\n\n    match releases.latest(owner, repo) {",
+      "find": "    write_time(stamp, now);\n\n    match releases.latest(owner, repo) {",
       "replace": "    match releases.latest(owner, repo) {"
     },
     {
@@ -87,8 +87,8 @@
     },
     {
       "name": "a missing repository is skipped rather than guessed",
-      "find": "        (Some(owner), Some(repo)) if !owner.is_empty() && !repo.is_empty() => (owner, repo),",
-      "replace": "        (Some(owner), Some(repo)) => (owner, repo),"
+      "find": "        (Some(owner), Some(repo)) if !owner.is_empty() && !repo.is_empty() => Some((owner, repo)),",
+      "replace": "        (Some(owner), Some(repo)) => Some((owner, repo)),"
     },
     {
       "name": "a repository with an empty half is refused",
@@ -104,6 +104,61 @@
       "name": "an empty tag_name is a non-answer too",
       "find": "        Some(tag) if !tag.is_empty() => Ok(Some(tag.to_string())),",
       "replace": "        Some(tag) => Ok(Some(tag.to_string())),"
+    },
+    {
+      "name": "a detached check saves what it found at all",
+      "find": "    save(result, &decision);\n",
+      "replace": ""
+    },
+    {
+      "name": "an available update is written to the result",
+      "find": "                let _ = write_whole(result, &text);\n",
+      "replace": ""
+    },
+    {
+      "name": "an up-to-date answer clears the older result",
+      "find": "        Decision::Skipped(_) => {}",
+      "replace": "        Decision::Skipped(_) | Decision::UpToDate => {}"
+    },
+    {
+      "name": "a non-answer clears the older result",
+      "find": "        Decision::Skipped(_) => {}",
+      "replace": "        Decision::Skipped(_) | Decision::NoAnswer(_) => {}"
+    },
+    {
+      "name": "a skipped check keeps the last answer",
+      "find": "        Decision::Skipped(_) => {}\n",
+      "replace": ""
+    },
+    {
+      "name": "a saved result is never offered to a local install",
+      "find": "    if !is_managed(plugin) {\n        return None;",
+      "replace": "    if false {\n        return None;"
+    },
+    {
+      "name": "a result saved for another repository is refused",
+      "find": "    if update.repository != format!(\"{}/{}\", owner, repo) {",
+      "replace": "    if false {"
+    },
+    {
+      "name": "a result found against another installed version is stale",
+      "find": "    if update.installed != plugin.version {",
+      "replace": "    if false {"
+    },
+    {
+      "name": "a recent offer is not repeated",
+      "find": "    if !due(offered, now, interval) {",
+      "replace": "    if false {"
+    },
+    {
+      "name": "a shown or declined offer is recorded",
+      "find": "    write_time(offered, now);",
+      "replace": "    let _ = (offered, now);"
+    },
+    {
+      "name": "the stamp keeps its format",
+      "find": "    let _ = fs::write(stamp, format!(\"{}\\n\", elapsed.as_secs()));",
+      "replace": "    let _ = fs::write(stamp, format!(\"{}\", elapsed.as_secs()));"
     }
   ]
 }

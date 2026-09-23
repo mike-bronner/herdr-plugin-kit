@@ -128,7 +128,7 @@ herdr-plugin-kit/
 │       ├── dialog.json               # the dialogs' 59 mutations
 │       ├── report.json               # the issue reports' 19 mutations
 │       ├── surface.json              # the shared seam's 2 mutations
-│       └── update.json               # the update check's 19 mutations
+│       └── update.json               # the update check's 30 mutations
 ├── .github/workflows/
 │   ├── kit-ci.yml                    # the kit's own, fast
 │   └── kit-mutation.yml              # the kit's own, slow — §11.8
@@ -1722,9 +1722,12 @@ with them. Its migration is `src/confirm.rs`, planned against the table above.
 
 ### 8.2 Design
 
-- **Timer:** a stamp file in `HERDR_PLUGIN_STATE_DIR`, checked at launch against a
-  minimum interval. Default 24 hours. No new process for the two on-demand plugins.
-  recent-spaces folds the check into its existing poll loop.
+- **Timer:** a stamp file, checked at launch against a minimum interval. Default 24
+  hours. No new process for the two on-demand plugins. recent-spaces folds the check
+  into its existing poll loop. ⚠️ **The caller passes the path, and every other path
+  below.** This said the stamp lives in `HERDR_PLUGIN_STATE_DIR`, but a Herdr event hook
+  receives neither that variable nor `HERDR_BIN_PATH`, and nobody has confirmed the
+  first is ever set (see `env.rs`). So the module reads no environment variable at all.
 - 🚨 **The stamp records the attempt, not the result**, decided 2026-09-13 and the one
   design consequence of asking an API instead of git.
 
@@ -1768,8 +1771,56 @@ with them. Its migration is `src/confirm.rs`, planned against the table above.
   release is either upstream's or nothing, and neither describes the code the user is
   running. ✅ Asking for releases rather than tags shrinks that case without closing it.
 
-- **Never block a launch.** Spawn detached, write the result to the stamp file, prompt on
-  the *next* launch.
+- **Never block a launch.** Spawn detached, write the result, prompt on the *next*
+  launch. 🔑 **Decided by Mike 2026-09-23: three files, one writer each.** This said
+  "write the result to the stamp file", and the kit up to 0.4.4 could not: `check` wrote
+  only the attempt time and returned the `Decision` in memory, `Available` did not
+  serialize, and `due` was private.
+
+  | File | Written by | Holds |
+  |---|---|---|
+  | The attempt stamp | `check`, **before** the network call | when a check was last attempted, as whole seconds. **Format unchanged** |
+  | The result | `check_and_save`, after the answer | the `Available` found, as JSON |
+  | The offer record | `record_offer`, at the launch that offered | when an offer was last shown or declined |
+
+  🚨 **Why not one file.** A result written after the call could overwrite a newer attempt
+  time, and an attempt that no longer shows is one that happens again: the retry storm
+  above, reopened. Mike also rejected the minimal fix (make `Available` serializable and
+  `due` public), because every plugin would then copy the same state logic.
+
+  The API, all in `update`, none of it prompting:
+
+  | Call | Who calls it | What it does |
+  |---|---|---|
+  | `due(stamp, now, interval)` | a launch | whether a detached check is worth spawning. No network call |
+  | `check_and_save(plugin, stamp, result, now, interval, releases)` | the detached check | `check`, then keeps its answer in `result` |
+  | `offer(plugin, result, offered, now, interval)` | a later launch | the saved `Available` to offer now, or `None`. No network call |
+  | `record_offer(offered, now)` | that launch, once it has shown the offer | starts the interval before the next offer |
+  | `apply(plugin, update, installer)` | that launch, when the user accepts | unchanged |
+
+  What `check_and_save` leaves in `result`, per answer:
+
+  | The check answered | `result` afterwards | Why |
+  |---|---|---|
+  | `Available` | that update, written whole through a rename | a launch reading mid-write sees the old file or the new one |
+  | `UpToDate` | removed | 🚨 an older `Available` left standing would be offered as if still true |
+  | `NoAnswer` | removed | 🚨 the same, and a refusal says nothing about the older find |
+  | `Skipped` | untouched | nothing was asked, so there is nothing to replace the last answer with |
+
+  `offer` refuses, rather than repairs, anything it cannot trust:
+
+  | Saved result | Offered? |
+  |---|---|
+  | absent, unreadable, not JSON, or missing a field | ❌ no |
+  | found for another repository | ❌ no. `apply` would install it under this plugin's name |
+  | found against a version other than the one installed now | ❌ no. 🚨 the plugin was upgraded since, so it describes an install that no longer exists |
+  | any result, on a `local:` install | ❌ no. §8.3, the third entry point to carry the guard |
+  | valid, and `record_offer` wrote less than `interval` ago | ❌ not yet |
+  | valid, and the interval has passed or no offer was ever recorded | ✅ yes |
+
+  ✅ **A declined offer is asked again after the interval**, decided by Mike 2026-09-23 for
+  agentic-panes-layout, over "skip that version until a newer release". The offer record
+  carries a time and no tag, so a newer find does not reset it.
 - **Prompt:** ✅ **`dialog::ask`, which already exists.** `crates/herdr-plugin-kit/src/dialog.rs`
   ships `ask` taking a list of `Button`s and answering `Answer`, beside `notify`. ➕ The
   line numbers this cited went stale when the pair became a list (§7.5.8). ⚠️ This said "a popup through `report`, never a toast", which was

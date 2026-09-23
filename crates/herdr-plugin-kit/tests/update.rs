@@ -19,8 +19,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use herdr_plugin_kit::api::generated::{InstalledPluginInfo, PluginSourceInfo, PluginSourceKind};
 use herdr_plugin_kit::update::{
-    apply, check, install_arguments, is_managed, Available, Decision, Installer, Releases, Skipped,
-    DEFAULT_INTERVAL,
+    apply, check, check_and_save, due, install_arguments, is_managed, offer, record_offer,
+    Available, Decision, Installer, Releases, Skipped, DEFAULT_INTERVAL,
 };
 
 /// A directory that removes itself, so a failing test leaks nothing.
@@ -41,6 +41,14 @@ impl TempDir {
 
     fn stamp(&self) -> PathBuf {
         self.0.join("update-stamp")
+    }
+
+    fn result(&self) -> PathBuf {
+        self.0.join("update-result.json")
+    }
+
+    fn offered(&self) -> PathBuf {
+        self.0.join("update-offered")
     }
 }
 
@@ -546,4 +554,307 @@ fn a_repository_with_an_empty_half_is_refused_too() {
         assert!(refused.is_err(), "{} was accepted", repository);
         assert!(spawns.ran.is_empty());
     }
+}
+
+// ------------------------------------------- carrying it to the next launch
+
+/// The update `check` finds for [`plugin`] at 0.8.1 against a 0.9.1 release.
+fn found() -> Available {
+    Available {
+        installed: "0.8.1".to_string(),
+        tag: "0.9.1".to_string(),
+        repository: "mike-bronner/herdr-plugin-project-finder".to_string(),
+    }
+}
+
+/// A detached check that found `found()`, run at `at(1_000_000)`.
+fn saved_by_a_detached_check(directory: &TempDir) {
+    let decision = check_and_save(
+        &plugin(PluginSourceKind::Github, "0.8.1"),
+        &directory.stamp(),
+        &directory.result(),
+        at(1_000_000),
+        DEFAULT_INTERVAL,
+        &Answers::newest("0.9.1"),
+    );
+    assert_eq!(decision, Decision::Available(found()));
+}
+
+fn offered_now(directory: &TempDir, version: &str) -> Option<Available> {
+    offer(
+        &plugin(PluginSourceKind::Github, version),
+        &directory.result(),
+        &directory.offered(),
+        at(1_000_000 + 60),
+        DEFAULT_INTERVAL,
+    )
+}
+
+#[test]
+fn a_found_update_is_offered_on_a_later_launch() {
+    // 🔑 SCOPE.md §8.2: spawn detached, write the result, offer on the next
+    // launch. `offer` takes no `Releases` at all, so the later launch cannot
+    // make a network call.
+    let directory = TempDir::new("carried");
+    saved_by_a_detached_check(&directory);
+
+    assert_eq!(offered_now(&directory, "0.8.1"), Some(found()));
+}
+
+#[test]
+fn saving_the_result_leaves_the_attempt_stamp_in_its_old_format() {
+    // 🚨 The stamp is the rate-limit guard, and stamps already on users'
+    // machines must keep working. A result written into it would also let a
+    // late result overwrite a newer attempt time.
+    let directory = TempDir::new("stamp-format");
+    saved_by_a_detached_check(&directory);
+
+    assert_eq!(
+        std::fs::read_to_string(directory.stamp()).unwrap(),
+        "1000000\n"
+    );
+    assert_ne!(directory.result(), directory.stamp());
+}
+
+#[test]
+fn a_refused_call_still_records_the_attempt_when_the_result_is_saved() {
+    let directory = TempDir::new("save-stamp-on-failure");
+
+    let decision = check_and_save(
+        &plugin(PluginSourceKind::Github, "0.8.1"),
+        &directory.stamp(),
+        &directory.result(),
+        at(1_000_000),
+        DEFAULT_INTERVAL,
+        &Answers::refused("403 rate limit exceeded"),
+    );
+
+    assert!(matches!(decision, Decision::NoAnswer(_)));
+    assert_eq!(
+        std::fs::read_to_string(directory.stamp()).unwrap(),
+        "1000000\n"
+    );
+}
+
+#[test]
+fn an_update_found_before_the_plugin_was_upgraded_is_not_offered() {
+    // 🚨 The saved answer describes an install that no longer exists. Upgraded
+    // to exactly the offered tag, and upgraded past it, are both stale.
+    for version in ["0.9.1", "0.9.5"] {
+        let directory = TempDir::new("stale");
+        saved_by_a_detached_check(&directory);
+
+        assert_eq!(offered_now(&directory, version), None, "{}", version);
+    }
+}
+
+#[test]
+fn a_result_that_is_absent_unreadable_or_corrupt_is_not_offered() {
+    let directory = TempDir::new("corrupt");
+
+    // Absent.
+    assert_eq!(offered_now(&directory, "0.8.1"), None);
+
+    // Not JSON, JSON of the wrong shape, and a torn write.
+    for text in [
+        "not json at all",
+        r#"{"installed":"0.8.1","tag":"0.9.1"}"#,
+        r#"{"installed":"0.8.1","tag":"0.9.1","repository":"mike-bro"#,
+    ] {
+        std::fs::write(directory.result(), text).unwrap();
+        assert_eq!(offered_now(&directory, "0.8.1"), None, "{}", text);
+    }
+
+    // Unreadable: a directory where the file should be.
+    std::fs::remove_file(directory.result()).unwrap();
+    std::fs::create_dir(directory.result()).unwrap();
+    assert_eq!(offered_now(&directory, "0.8.1"), None);
+}
+
+#[test]
+fn a_result_saved_for_another_repository_is_not_offered() {
+    // ⚠️ Two plugins handed the same result path must not offer each other's
+    // update, which `apply` would then install under this plugin's name.
+    let directory = TempDir::new("foreign");
+    let mut foreign = found();
+    foreign.repository = "mike-bronner/herdr-plugin-recent-spaces".to_string();
+    std::fs::write(directory.result(), serde_json::to_string(&foreign).unwrap()).unwrap();
+
+    assert_eq!(offered_now(&directory, "0.8.1"), None);
+}
+
+#[test]
+fn a_saved_result_is_never_offered_to_a_local_install() {
+    // 🚨 SCOPE.md §8.3, the third entry point to carry the guard.
+    let directory = TempDir::new("local-offer");
+    saved_by_a_detached_check(&directory);
+
+    let offered = offer(
+        &plugin(PluginSourceKind::Local, "0.8.1"),
+        &directory.result(),
+        &directory.offered(),
+        at(1_000_000 + 60),
+        DEFAULT_INTERVAL,
+    );
+
+    assert_eq!(offered, None);
+}
+
+#[test]
+fn a_later_up_to_date_or_non_answer_clears_the_older_result() {
+    // 🚨 An Available left standing after a newer answer would be offered as
+    // if it were still true.
+    for (name, releases) in [
+        ("up to date", Answers::newest("0.8.1")),
+        ("no releases", Answers::none()),
+        ("no answer", Answers::refused("403 rate limit exceeded")),
+    ] {
+        let directory = TempDir::new("cleared");
+        saved_by_a_detached_check(&directory);
+
+        check_and_save(
+            &plugin(PluginSourceKind::Github, "0.8.1"),
+            &directory.stamp(),
+            &directory.result(),
+            at(1_000_000 + DEFAULT_INTERVAL.as_secs()),
+            DEFAULT_INTERVAL,
+            &releases,
+        );
+
+        assert!(!directory.result().exists(), "{}", name);
+        assert_eq!(offered_now(&directory, "0.8.1"), None, "{}", name);
+    }
+}
+
+#[test]
+fn a_skipped_check_keeps_the_last_answer() {
+    // A check inside the interval asked nothing, so it has nothing to replace
+    // the last answer with.
+    let directory = TempDir::new("kept");
+    saved_by_a_detached_check(&directory);
+
+    let decision = check_and_save(
+        &plugin(PluginSourceKind::Github, "0.8.1"),
+        &directory.stamp(),
+        &directory.result(),
+        at(1_000_000 + 60),
+        DEFAULT_INTERVAL,
+        &Answers::refused("must not be asked"),
+    );
+
+    assert_eq!(decision, Decision::Skipped(Skipped::TooSoon));
+    assert_eq!(offered_now(&directory, "0.8.1"), Some(found()));
+}
+
+#[test]
+fn a_newer_find_replaces_the_older_one() {
+    let directory = TempDir::new("replaced");
+    saved_by_a_detached_check(&directory);
+
+    check_and_save(
+        &plugin(PluginSourceKind::Github, "0.8.1"),
+        &directory.stamp(),
+        &directory.result(),
+        at(1_000_000 + DEFAULT_INTERVAL.as_secs()),
+        DEFAULT_INTERVAL,
+        &Answers::newest("0.9.2"),
+    );
+
+    assert_eq!(
+        offered_now(&directory, "0.8.1").map(|update| update.tag),
+        Some("0.9.2".to_string())
+    );
+}
+
+#[test]
+fn a_shown_or_declined_offer_is_asked_again_only_after_the_interval() {
+    let directory = TempDir::new("declined");
+    saved_by_a_detached_check(&directory);
+    let subject = plugin(PluginSourceKind::Github, "0.8.1");
+    let shown = 2_000_000;
+
+    record_offer(&directory.offered(), at(shown));
+
+    let asked_at = |seconds| {
+        offer(
+            &subject,
+            &directory.result(),
+            &directory.offered(),
+            at(seconds),
+            DEFAULT_INTERVAL,
+        )
+    };
+    assert_eq!(asked_at(shown + 60), None, "just declined");
+    assert_eq!(
+        asked_at(shown + DEFAULT_INTERVAL.as_secs() - 1),
+        None,
+        "one second short"
+    );
+    assert_eq!(
+        asked_at(shown + DEFAULT_INTERVAL.as_secs()),
+        Some(found()),
+        "the interval has passed"
+    );
+}
+
+#[test]
+fn recording_an_offer_touches_neither_the_stamp_nor_the_result() {
+    // 🔑 One writer per file. The launch writes only the offer record.
+    let directory = TempDir::new("one-writer");
+    saved_by_a_detached_check(&directory);
+    let result = std::fs::read_to_string(directory.result()).unwrap();
+
+    record_offer(&directory.offered(), at(2_000_000));
+
+    assert_eq!(
+        std::fs::read_to_string(directory.stamp()).unwrap(),
+        "1000000\n"
+    );
+    assert_eq!(std::fs::read_to_string(directory.result()).unwrap(), result);
+    assert_eq!(
+        std::fs::read_to_string(directory.offered()).unwrap(),
+        "2000000\n"
+    );
+}
+
+#[test]
+fn due_answers_without_a_network_call() {
+    // 🔑 Public so a launch can decide whether to spawn a detached check. It
+    // reads a stamp written by an older kit the same way.
+    let directory = TempDir::new("due-public");
+    std::fs::write(directory.stamp(), "1000000\n").unwrap();
+
+    assert!(!due(
+        &directory.stamp(),
+        at(1_000_000 + 60),
+        DEFAULT_INTERVAL
+    ));
+    assert!(due(
+        &directory.stamp(),
+        at(1_000_000 + DEFAULT_INTERVAL.as_secs()),
+        DEFAULT_INTERVAL
+    ));
+    assert!(
+        due(&directory.offered(), at(10), DEFAULT_INTERVAL),
+        "absent"
+    );
+}
+
+#[test]
+fn a_result_that_cannot_be_written_does_not_stop_the_check() {
+    // ⚠️ Like the stamp: the decision still reaches the caller.
+    let directory = TempDir::new("unwritable");
+    std::fs::create_dir(directory.result()).unwrap();
+
+    let decision = check_and_save(
+        &plugin(PluginSourceKind::Github, "0.8.1"),
+        &directory.stamp(),
+        &directory.result(),
+        at(1_000_000),
+        DEFAULT_INTERVAL,
+        &Answers::newest("0.9.1"),
+    );
+
+    assert_eq!(decision, Decision::Available(found()));
+    assert!(directory.stamp().exists());
 }

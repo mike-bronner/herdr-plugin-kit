@@ -34,13 +34,41 @@
 //! running against a working tree is hostile, because a developer who asked to
 //! compile silently gets a binary somebody else built. Herdr answers the
 //! question authoritatively and `PluginSourceKind` **defaults to `Local`**,
-//! which is the safe direction. The guard is checked twice, once in
-//! [`check`] and again in [`apply`], because they can be called independently.
+//! which is the safe direction. The guard is checked three times, in
+//! [`check`], [`offer`] and [`apply`], because each can be called alone.
+//!
+//! # Carrying a found update to the next launch
+//!
+//! SCOPE.md §8.2: the check runs detached, and the offer is made on a *later*
+//! launch. So three files carry state between processes, and 🔑 **each has
+//! exactly one writer**:
+//!
+//! | File | Written by | Holds |
+//! |---|---|---|
+//! | the attempt stamp | [`check`], before the network call | when a check was last attempted |
+//! | the result | [`check_and_save`], after the answer | the [`Available`] it found, or nothing |
+//! | the offer record | [`record_offer`], at the launch that offered it | when an offer was last shown or declined |
+//!
+//! 🚨 **One shared file would reopen the retry storm.** A result written after
+//! the call could overwrite a newer attempt time written by another process,
+//! and an attempt that no longer shows is an attempt that happens again.
+//!
+//! A launch reads the pair back through [`offer`], which makes no network call
+//! and refuses anything it cannot trust: a result that is corrupt, one written
+//! for another plugin, and one made stale because the plugin was upgraded
+//! since. [`due`] answers whether a detached check is worth spawning at all.
+//!
+//! ⚠️ **The caller passes every path.** Nothing here reads
+//! [`crate::env::PLUGIN_STATE_DIR_VAR`], because a Herdr event hook does not
+//! receive it.
 
 use std::fs;
+use std::io;
 use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use serde::{Deserialize, Serialize};
 
 use crate::api::generated::{InstalledPluginInfo, PluginSourceKind};
 
@@ -83,7 +111,9 @@ pub enum Skipped {
 }
 
 /// A newer release, and what applying it would do.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Serializable because [`check_and_save`] keeps it on disk for a later launch.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Available {
     /// What is installed now.
     pub installed: String,
@@ -266,12 +296,8 @@ pub fn check(
     if !is_managed(plugin) {
         return Decision::Skipped(Skipped::LocalInstall);
     }
-    let (owner, repo) = match (
-        plugin.source.owner.as_deref(),
-        plugin.source.repo.as_deref(),
-    ) {
-        (Some(owner), Some(repo)) if !owner.is_empty() && !repo.is_empty() => (owner, repo),
-        _ => return Decision::Skipped(Skipped::NoRepository),
+    let Some((owner, repo)) = repository_of(plugin) else {
+        return Decision::Skipped(Skipped::NoRepository);
     };
     if !due(stamp, now, interval) {
         return Decision::Skipped(Skipped::TooSoon);
@@ -279,7 +305,7 @@ pub fn check(
 
     // 🚨 Before the call, never after. A 403 that left this unwritten would
     // turn one attempt a day into one attempt a launch.
-    stamp_attempt(stamp, now);
+    write_time(stamp, now);
 
     match releases.latest(owner, repo) {
         Err(reason) => Decision::NoAnswer(reason),
@@ -291,6 +317,78 @@ pub fn check(
             repository: format!("{}/{}", owner, repo),
         }),
     }
+}
+
+/// Runs [`check`], then keeps what it learned in `result` for a later launch.
+///
+/// This is what a detached check calls. The attempt stamp is written exactly as
+/// [`check`] writes it, before the network call; `result` is written after.
+///
+/// | The check answered | `result` afterwards |
+/// |---|---|
+/// | [`Decision::Available`] | holds that update |
+/// | [`Decision::UpToDate`] | removed |
+/// | [`Decision::NoAnswer`] | removed |
+/// | [`Decision::Skipped`] | untouched |
+///
+/// 🚨 **A check that found nothing clears the older result.** An `Available`
+/// left standing after the newest answer was "current" or "nobody answered"
+/// would be offered as if it were still true. A skip asked nothing, so it has
+/// nothing to replace the last answer with.
+///
+/// ⚠️ A result that cannot be written or removed is ignored, as the stamp is:
+/// the decision is still returned, and [`offer`] refuses anything it cannot
+/// trust.
+pub fn check_and_save(
+    plugin: &InstalledPluginInfo,
+    stamp: &Path,
+    result: &Path,
+    now: SystemTime,
+    interval: Duration,
+    releases: &impl Releases,
+) -> Decision {
+    let decision = check(plugin, stamp, now, interval, releases);
+    save(result, &decision);
+    decision
+}
+
+/// The saved update to offer at this launch, if there is one to offer now.
+///
+/// Makes no network call. Answers `Some` only when all of these hold:
+///
+/// - `plugin` is a managed install (SCOPE.md §8.3),
+/// - `result` holds a readable [`Available`] for this plugin's repository,
+/// - that `Available` was found against the version installed now, and
+/// - `interval` has elapsed since [`record_offer`] last wrote `offered`.
+///
+/// 🚨 **A result found against another version is stale, and is refused.** The
+/// plugin was upgraded (or reinstalled) since the check, so the saved answer
+/// describes an install that no longer exists. The next check replaces it.
+///
+/// ⚠️ **A result that is absent, unreadable or corrupt is refused** rather than
+/// repaired: offering an update nobody can vouch for is worse than waiting a
+/// day for the next check. An `offered` record that is absent or unreadable
+/// means "never offered", as [`due`] reads any stamp.
+pub fn offer(
+    plugin: &InstalledPluginInfo,
+    result: &Path,
+    offered: &Path,
+    now: SystemTime,
+    interval: Duration,
+) -> Option<Available> {
+    let update = saved(plugin, result)?;
+    if !due(offered, now, interval) {
+        return None;
+    }
+    Some(update)
+}
+
+/// Records that an offer was shown or declined at `now`.
+///
+/// [`offer`] then stays silent until the interval has passed again. Written in
+/// the attempt stamp's format, so [`due`] reads both.
+pub fn record_offer(offered: &Path, now: SystemTime) {
+    write_time(offered, now);
 }
 
 /// Applies an update a caller has decided to take.
@@ -317,11 +415,15 @@ pub fn apply(
     installer.install(owner, repo, &update.tag)
 }
 
-/// Whether the interval has elapsed since the last attempt.
+/// Whether `interval` has elapsed since the time recorded in `stamp`.
+///
+/// Public so a launch can ask whether a detached check is worth spawning
+/// without making the network call [`check`] would make. It reads the attempt
+/// stamp and the offer record alike.
 ///
 /// An unreadable or absent stamp means "never attempted", which is the
 /// direction that checks rather than the one that stays silent forever.
-fn due(stamp: &Path, now: SystemTime, interval: Duration) -> bool {
+pub fn due(stamp: &Path, now: SystemTime, interval: Duration) -> bool {
     let Ok(text) = fs::read_to_string(stamp) else {
         return true;
     };
@@ -334,12 +436,71 @@ fn due(stamp: &Path, now: SystemTime, interval: Duration) -> bool {
     elapsed.as_secs().saturating_sub(then) >= interval.as_secs()
 }
 
-/// Records that an attempt was made, ignoring a failure to write.
+/// The plugin's `owner` and `repo`, when its record names both.
+fn repository_of(plugin: &InstalledPluginInfo) -> Option<(&str, &str)> {
+    match (
+        plugin.source.owner.as_deref(),
+        plugin.source.repo.as_deref(),
+    ) {
+        (Some(owner), Some(repo)) if !owner.is_empty() && !repo.is_empty() => Some((owner, repo)),
+        _ => None,
+    }
+}
+
+/// Keeps what a check learned, per the table on [`check_and_save`].
+fn save(result: &Path, decision: &Decision) {
+    match decision {
+        Decision::Available(update) => {
+            if let Ok(text) = serde_json::to_string(update) {
+                let _ = write_whole(result, &text);
+            }
+        }
+        Decision::Skipped(_) => {}
+        _ => {
+            let _ = fs::remove_file(result);
+        }
+    }
+}
+
+/// The saved update, when it is readable and still describes this install.
+fn saved(plugin: &InstalledPluginInfo, result: &Path) -> Option<Available> {
+    if !is_managed(plugin) {
+        return None;
+    }
+    let (owner, repo) = repository_of(plugin)?;
+    let update: Available = serde_json::from_str(&fs::read_to_string(result).ok()?).ok()?;
+    if update.repository != format!("{}/{}", owner, repo) {
+        return None;
+    }
+    if update.installed != plugin.version {
+        return None;
+    }
+    Some(update)
+}
+
+/// Replaces `path` in one step, so a launch reading it mid-write sees the old
+/// file or the new one and never half of either.
+fn write_whole(path: &Path, text: &str) -> io::Result<()> {
+    if let Some(directory) = path.parent() {
+        fs::create_dir_all(directory)?;
+    }
+    let mut partial = path.as_os_str().to_owned();
+    partial.push(".partial");
+    fs::write(&partial, text)?;
+    fs::rename(&partial, path).inspect_err(|_| {
+        let _ = fs::remove_file(&partial);
+    })
+}
+
+/// Writes `now` as whole seconds since the epoch, ignoring a failure to write.
+///
+/// 🔑 **The attempt stamp's format, unchanged**, so stamps already on users'
+/// machines keep working. The offer record shares it.
 ///
 /// ⚠️ **A stamp that cannot be written must not stop the check**, and it must
 /// not be reported as one either: the worst case is that the next launch asks
 /// again, which is the behaviour without a stamp at all.
-fn stamp_attempt(stamp: &Path, now: SystemTime) {
+fn write_time(stamp: &Path, now: SystemTime) {
     let Ok(elapsed) = now.duration_since(UNIX_EPOCH) else {
         return;
     };
