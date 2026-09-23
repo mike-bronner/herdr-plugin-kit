@@ -11,9 +11,34 @@
   ],
   "mutations": [
     {
-      "name": "only the exact primary word acts",
-      "find": "PRIMARY_WORD => Answer::Primary,",
-      "replace": "\"prim\" => Answer::Primary,"
+      "name": "only an exact index acts",
+      "find": "Ended::Answered(word) => match (0..keys).find(|index| index.to_string() == word) {",
+      "replace": "Ended::Answered(word) => match word.parse::<usize>().ok() {"
+    },
+    {
+      "name": "an index past the last button is not a choice",
+      "find": "match (0..keys).find(|index| index.to_string() == word) {",
+      "replace": "match (0..=keys).find(|index| index.to_string() == word) {"
+    },
+    {
+      "name": "the dismissal word reads as a dismissal",
+      "find": "None if word == DISMISSED_WORD => Answer::Unanswered(Unanswered::Dismissed),",
+      "replace": "None if false => Answer::Unanswered(Unanswered::Dismissed),"
+    },
+    {
+      "name": "the answer counts the keyed buttons rather than the caller's list",
+      "find": "Ok(()) => decide(channel.watch(), Button::keys(buttons).len()),",
+      "replace": "Ok(()) => decide(channel.watch(), buttons.len()),"
+    },
+    {
+      "name": "a question with no buttons is refused before it opens",
+      "find": "    if buttons.is_empty() {\n        return Answer::Unanswered(Unanswered::Failed(",
+      "replace": "    if false {\n        return Answer::Unanswered(Unanswered::Failed("
+    },
+    {
+      "name": "chose answers only its own index",
+      "find": "*self == Answer::Chose(index)",
+      "replace": "matches!(self, Answer::Chose(_))"
     },
     {
       "name": "an unrecognised state warns rather than informs",
@@ -46,9 +71,14 @@
       "replace": "let width = width;"
     },
     {
-      "name": "the buttons stack when they do not both fit a row",
-      "find": "if cells(&primary) + BUTTON_GAP + cells(&cancel) <= text_width {",
+      "name": "the buttons stack when they do not all fit a row",
+      "find": "if together <= text_width {",
       "replace": "if true {"
+    },
+    {
+      "name": "stacked buttons each take their own row",
+      "find": "            row: row as u16,\n            ..alone[0]",
+      "replace": "            row: 0,\n            ..alone[0]"
     },
     {
       "name": "a label too wide for a row of its own is shortened",
@@ -59,6 +89,16 @@
       "name": "a key with no label drops its separator",
       "find": "true => key.to_string(),",
       "replace": "true => format!(\"{} \", key),"
+    },
+    {
+      "name": "only the first button is emphasised",
+      "find": "let first = index == 0;",
+      "replace": "let first = index < 2;"
+    },
+    {
+      "name": "the hovered button is the one marked",
+      "find": "hot == Some(index),",
+      "replace": "hot == Some(0),"
     },
     {
       "name": "the hovered button is marked",
@@ -87,8 +127,8 @@
     },
     {
       "name": "one blank row sits below the buttons",
-      "find": "true => 1,\n        false => VERTICAL_PADDING,",
-      "replace": "true => VERTICAL_PADDING,\n        false => VERTICAL_PADDING,"
+      "find": "false => 1,\n        true => VERTICAL_PADDING,",
+      "replace": "false => VERTICAL_PADDING,\n        true => VERTICAL_PADDING,"
     },
     {
       "name": "a busy bare dialog falls back",
@@ -108,7 +148,7 @@
     {
       "name": "a busy question stays unanswered",
       "find": "Answer::Unanswered(Unanswered::Busy(explain(transport, &dialog.title, &body)))",
-      "replace": "{ let _ = explain(transport, &dialog.title, &body); Answer::Cancel }"
+      "replace": "{ let _ = explain(transport, &dialog.title, &body); Answer::Chose(buttons.len() - 1) }"
     },
     {
       "name": "the notification carries a body",
@@ -117,8 +157,8 @@
     },
     {
       "name": "the notification carries a title",
-      "find": "title: title.to_string(),",
-      "replace": "title: String::new(),"
+      "find": "sound: None,\n        title: title.to_string(),",
+      "replace": "sound: None,\n        title: String::new(),"
     },
     {
       "name": "the danger glyph is its own",
@@ -129,6 +169,141 @@
       "name": "the info glyph is its own",
       "find": "State::Info => \"\\u{229d}\",",
       "replace": "State::Info => \"\\u{2713}\","
+    },
+    {
+      "name": "ctrl-c ends the dialog before anything a caller named",
+      "find": "if matches!(code, KeyCode::Char('c')) && modifiers.contains(KeyModifiers::CONTROL) {",
+      "replace": "if false {"
+    },
+    {
+      "name": "ctrl-c chooses no button, not even the last",
+      "find": "        return Some(DISMISSED_WORD.to_string());\n    }\n    keys.iter()",
+      "replace": "        return Some((keys.len() - 1).to_string());\n    }\n    keys.iter()"
+    },
+    {
+      "name": "every button answers its own key",
+      "find": ".rposition(|key| key.answers(code, modifiers))",
+      "replace": ".rposition(|key| key.answers(code, modifiers))\n        .filter(|index| *index == 0)"
+    },
+    {
+      "name": "enter is a keypress a button can name",
+      "find": "(Key::Enter, KeyCode::Enter) => true,",
+      "replace": "(Key::Enter, KeyCode::Enter) => false,"
+    },
+    {
+      "name": "escape is a keypress a button can name",
+      "find": "(Key::Escape, KeyCode::Esc) => true,",
+      "replace": "(Key::Escape, KeyCode::Esc) => false,"
+    },
+    {
+      "name": "a named key is honoured",
+      "find": ".filter(|key| allowed(*key))",
+      "replace": ".filter(|_| false)"
+    },
+    {
+      "name": "escape never answers the first button",
+      "find": "&& !(index == 0 && key == Key::Escape)",
+      "replace": "&& true"
+    },
+    {
+      "name": "one keypress cannot answer two buttons",
+      "find": "&& !taken.iter().any(|held| held.same_as(key))",
+      "replace": "&& true"
+    },
+    {
+      "name": "a character the frame cannot measure names no key",
+      "find": "Key::Char(character) => Key::named(character).is_some(),",
+      "replace": "Key::Char(_) => true,"
+    },
+    {
+      "name": "the ladder offers escape before enter",
+      "find": "[Key::Escape, Key::Enter]\n        .into_iter()",
+      "replace": "[Key::Enter, Key::Escape]\n        .into_iter()"
+    },
+    {
+      "name": "the ladder runs to the last ascii graphic character",
+      "find": "(b'!'..=b'~')",
+      "replace": "(b'!'..=b'}')"
+    },
+    {
+      "name": "only an ascii graphic character can be a key",
+      "find": "match key.is_ascii_graphic() {",
+      "replace": "match !key.is_whitespace() {"
+    },
+    {
+      "name": "a named character needs its own chord",
+      "find": "modifiers.difference(KeyModifiers::SHIFT).is_empty()",
+      "replace": "!modifiers.contains(KeyModifiers::NONE)"
+    },
+    {
+      "name": "a named character ignores case",
+      "find": "&& typed.eq_ignore_ascii_case(&key)",
+      "replace": "&& typed == key"
+    },
+    {
+      "name": "a collision ignores case as the matching does",
+      "find": "(Key::Char(one), Key::Char(other)) => one.eq_ignore_ascii_case(&other),",
+      "replace": "(Key::Char(one), Key::Char(other)) => one == other,"
+    },
+    {
+      "name": "a new button names no key",
+      "find": "            label: label.to_string(),\n            key: None,",
+      "replace": "            label: label.to_string(),\n            key: Some(Key::Char('y')),"
+    },
+    {
+      "name": "each button travels under its own index",
+      "find": "format!(\"{}{}\", BUTTON_VAR, index)",
+      "replace": "format!(\"{}{}\", BUTTON_VAR, index + 1)"
+    },
+    {
+      "name": "the wire carries the resolved key rather than the named one",
+      "find": "env.insert(button_var(index), keyed(&key.drawn(), &button.label));",
+      "replace": "env.insert(button_var(index), keyed(&button.key.unwrap_or(*key).drawn(), &button.label));"
+    },
+    {
+      "name": "the popup half reads each key rather than assuming one",
+      "find": "key: Key::from_wire(Some(key)),",
+      "replace": "key: None,"
+    },
+    {
+      "name": "the popup half splits at the first space",
+      "find": "drawn.split_once(' ')",
+      "replace": "drawn.rsplit_once(' ')"
+    },
+    {
+      "name": "every button draws the key that answers it",
+      "find": "drawn_button(&key.drawn(), &button.label, first, text_width),",
+      "replace": "drawn_button(ENTER_KEY, &button.label, first, text_width),"
+    },
+    {
+      "name": "enter is drawn as its own glyph",
+      "find": "Key::Enter => ENTER_KEY.to_string(),",
+      "replace": "Key::Enter => ESCAPE_KEY.to_string(),"
+    },
+    {
+      "name": "the enter glyph reads back as enter",
+      "find": "ENTER_KEY => Some(Key::Enter),",
+      "replace": "ENTER_KEY => None,"
+    },
+    {
+      "name": "an empty line is the Enter keypress",
+      "find": "(None, _) => Some(KeyCode::Enter),",
+      "replace": "(None, _) => None,"
+    },
+    {
+      "name": "a one character line is that keypress",
+      "find": "(Some(typed), None) => Some(KeyCode::Char(typed)),",
+      "replace": "(Some(_), None) => None,"
+    },
+    {
+      "name": "a line naming no keypress chooses no button",
+      "find": "        .and_then(|code| key_answer(code, KeyModifiers::NONE, keys))\n        .unwrap_or_else(|| DISMISSED_WORD.to_string())",
+      "replace": "        .and_then(|code| key_answer(code, KeyModifiers::NONE, keys))\n        .unwrap_or_else(|| \"0\".to_string())"
+    },
+    {
+      "name": "end of input chooses no button",
+      "find": "        // End of input is not an answer.\n        return DISMISSED_WORD.to_string();",
+      "replace": "        // End of input is not an answer.\n        return \"0\".to_string();"
     }
   ]
 }

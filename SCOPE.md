@@ -125,7 +125,7 @@ herdr-plugin-kit/
 │   ├── test_plugin_gate.py           # both sides of every agreement, run
 │   └── mutations/
 │       ├── client.json               # the transport's 20 mutations
-│       ├── dialog.json               # the dialogs' 24 mutations
+│       ├── dialog.json               # the dialogs' 59 mutations
 │       ├── report.json               # the issue reports' 19 mutations
 │       ├── surface.json              # the shared seam's 2 mutations
 │       └── update.json               # the update check's 19 mutations
@@ -1254,8 +1254,10 @@ decision, and §13 records which half of that was evidence and which was a choic
 - **Bare** (`notify`): informs, carries no buttons, dismisses on any key or click, and
   **returns at once**. §7.4's rule, applied: a cosmetic warning must not make somebody
   wait on a dialog to get their workspace.
-- **Actioned** (`ask`): a labelable primary button and a labelable cancel, and it returns
-  which one the user chose. This one necessarily waits, because the answer is the point.
+- **Actioned** (`ask`): a list of buttons, each labelled and optionally keyed by the
+  caller, and it returns the index of the one the user chose. This one necessarily waits,
+  because the answer is the point. ➕ **A primary and a cancel until 2026-09-14**; §7.5.8
+  carries the change and what it removed.
 
 #### 7.5.1 The placement decides everything, and it was measured
 
@@ -1297,6 +1299,16 @@ Enter fires the primary button in **every** state, danger included, matching Her
 delete-worktree dialog. Only the left button activates, and a click on the body resolves
 nothing: a misclick must not fire a destructive primary.
 
+➕ **Amended 2026-09-14: those are the defaults for two unnamed buttons, not the only
+keys.** A dialog takes any number of buttons, and a caller names the key on any of them with
+`Button::on_key`. A button that names nothing takes the first key still free, and two
+unnamed buttons resolve to Enter on the first and Escape on the second: exactly the
+paragraph above, drawn and answered as it always was. ✅ **"Every answer is reachable from
+the keyboard alone" survives intact**, because every button answers exactly one key and the
+frame draws it. 🚨 **Ctrl-C always ends the dialog and is never configurable, and it chooses
+no button**: it resolves the dialog unanswered, where 0.4.4 read it as the cancel. It is the
+only key that answers without being drawn. §7.5.8 carries the whole of it.
+
 #### 7.5.3 `ui_busy` is an outcome, and the two variants differ
 
 🚨 ✅ **The single-popup limit is global, not per workspace.** So an unanswered dialog in
@@ -1322,12 +1334,19 @@ Rounded frame in all four states. ⚠️ Varying the corner for danger was propo
 
 Two blank rows inside the border at the top, three columns each side, a blank row
 separating the body from the buttons, and 🔑 **one** blank row beneath the button row
-because it is already visually heavy. The primary renders inverted in the state's colour;
-the cancel is plain text; the hovered one gains an underline.
+because it is already visually heavy. The first button renders inverted in the state's
+colour; every other button is plain text; the hovered one gains an underline.
 
-🔑 **The kit draws each button's key**, so `Buttons::new("close anyway", "keep")` renders
-`↵ close anyway` and `esc keep`. Labels stay the caller's. Callers typing their own glyph
-is how three plugins drift apart on the symbol, which is what this crate exists to end.
+➕ **Amended 2026-09-14: emphasis is positional, and only the first button carries it.**
+Settled with the N-button list (§7.5.8). It was the primary before, and the first
+button is where a caller that ordered its list for reading puts the action the dialog leads
+with. 🔑 **The caller chooses the emphasis by choosing the order**, which is a lever it
+already holds, so the list needs no emphasis field and cannot emphasise two buttons or none.
+
+🔑 **The kit draws each button's key**, so `[Button::new("close anyway"),
+Button::new("keep")]` renders `↵ close anyway` and `esc keep`. Labels stay the caller's.
+Callers typing their own glyph is how three plugins drift apart on the symbol, which is what
+this crate exists to end.
 
 ➕ **Amended 2026-09-11: the buttons stack when a single row cannot hold both labels
 whole**, one per row, each centred, at the cost of one row of height. **Decided by Mike
@@ -1341,9 +1360,13 @@ raising the 24-cell floor means a narrow pane gets no dialog at all rather than 
 one.
 
 ⚠️ **The threshold is measured from the drawn widths, never a constant.** The kit draws
-the key affordances and the labels are the caller's, so the question is whether *these
-two* buttons and the gap between them fit *this* frame. A width alone cannot answer it:
-at 30 cells `Go`/`Stop` share a row and `rebuild anyway`/`keep them` do not.
+the key affordances and the labels are the caller's, so the question is whether *these*
+buttons and the gaps between them fit *this* frame. A width alone cannot answer it:
+at 30 cells `Go`/`Stop` share a row and `rebuild anyway`/`keep them` do not. ➕ With the
+N-button list (§7.5.8) the test is a sum over every button in place of a pair, and the
+answer is still all-or-nothing: **every button shares one row, or every button takes its
+own**. Greedy packing was rejected, because it makes the emphasised button's position
+depend on label lengths and draws ragged rows the approved design never showed.
 
 ⚠️ **Truncation survives as the last resort**, for a single label too wide for a row of
 its own, which no layout can rescue. At the floor the primary still shortens — but to
@@ -1450,7 +1473,244 @@ Verified with `cargo tree -e normal`.
 Feature-gated for §7.4's reason: recent-spaces is a headless watcher and should carry no
 popup machinery.
 
----
+#### 7.5.8 ➕ Any number of buttons, each keyed by the caller — 2026-09-14
+
+**Mike's instruction, in his own words:** "all the buttons should be configurable, and
+default to ENTER/ESC only if no custom key/label settings are provided." 🔑 **It came out
+of a real refusal rather than a preference.** agentic-panes-layout migrated onto 0.4.4 and
+adopted `dialog::ask` for the answer channel, the marker, the liveness check, both
+deadlines and the busy fallback — and **refused `dialog::run`**, keeping a hand-written
+popup, because `key_answer` bound Enter to the primary button unconditionally and that
+plugin's primary destroys a pane running an agent whose work cannot be recovered. That
+plugin binds `y` and leaves Enter inert. The cost of the refusal is that it draws none of
+§7.5.4's approved design.
+
+➕ **Round 4 replaced the pair with a list, the same day.** Three drafts of this section
+described caller-named keys on a fixed primary and cancel (`Buttons`, `on_primary_key`,
+`on_cancel_key`). None of them shipped. Each round deleted the previous round's type rather
+than stacking on it, and a list of buttons, each carrying its own key, is where that line
+was already heading. The shape that ships:
+
+- `Button { label, key: Option<Key> }`, built with `Button::new(label)` and keyed with
+  `Button::on_key(key)`. Both fields are public.
+- `ask(transport, plugin_id, &dialog, &[Button]) -> Answer`.
+- `Answer::Chose(usize)`, the index of the button the user chose, and `Answer::chose(index)`,
+  which answers `false` for every other outcome, including an index the dialog has no button
+  for.
+- `layout` and `render` take `&[Button]`, with hover as `Option<usize>`. `Frame::buttons`
+  holds one `Rect` per drawn button, and `Frame::hit` answers `Option<usize>`.
+
+🔑 **Keys do not move, and that one sentence is the whole rule.** A key answers the button it
+is named on, and nothing else. ⚠️ **Nothing is displaced, so there is no destination to
+argue about** — which is what two earlier drafts of this section spent their length on,
+each with a special case for where a displaced key lands.
+
+🔑 **One ladder resolves every button, with no special case per position.** Each button
+takes the key it named, or **the first key still free** when it named none or cannot have
+the one it named. Free runs **Escape, then Enter, then the ASCII graphic characters in
+codepoint order** (`!` to `~`), skipping every key an earlier button took and skipping
+Escape on the first button.
+
+⚠️ **Escape comes before Enter, and the order is load-bearing.** The first button skips
+Escape and takes Enter, so two unnamed buttons resolve to Enter then Escape, which is what
+this module has always drawn. With Enter first, a first button that names `y` would hand
+Enter to the second, and the second button of that list has always drawn `esc`.
+
+| Buttons, as named | Resolved keys | Enter | Escape |
+|---|---|---|---|
+| unnamed, unnamed | `↵`, `esc` | the first | the second |
+| `Char('y')`, unnamed | `y`, `esc` | nothing | the second |
+| unnamed, `Char('n')` | `↵`, `n` | the first | nothing |
+| `Char('y')`, `Char('n')` | `y`, `n` | nothing | nothing |
+| `Char('y')`, `Enter` | `y`, `↵` | the second | nothing |
+| unnamed, unnamed, unnamed | `↵`, `esc`, `!` | the first | the second |
+| `Char('d')`, unnamed, `Enter` | `d`, `esc`, `↵` | the third | the second |
+
+A caller that names nothing on a pair **draws and answers exactly what 0.4.4 did**. The
+fifth row is the first round's whole requirement — the safe answer under the key people
+press to dismiss what they have not read — and it falls out of the rule instead of sitting
+beside it.
+
+🔑 **Every key the frame draws answers the button it is drawn on, and every key that
+answers is drawn.** Mike's requirement. **The frame never draws a key that answers
+nothing**, which is why a default stops answering when a caller names over it: a frame that
+kept advertising `esc` on a button a named key had taken would be claiming a key that
+reaches nothing. ✅ The property is **derived in a test rather than restated**: for every
+configuration, the key read back from each drawn button is fed through the decoder and has
+to answer that button.
+
+⚠️ **Naming replaces rather than adds, and that has a cost.** Mike's instruction of
+2026-09-14. A button that names a character is a button Enter no longer reaches, and a list
+where no button names or falls to Enter leaves Enter answering nothing at all. The same
+holds for Escape: a list where no button answers it leaves Escape undrawn and inert, and
+**Ctrl-C is then the only undrawn way out**. Both are what the caller asked for, and both
+are visible on the frame.
+
+🚨 **Ctrl-C always ends the dialog, is never configurable, and chooses no button.** It is
+the last way out of a raw-mode dialog: a popup carries no pane id to close, clicks into one
+are unproven (§7.5.1), and **a caller must not be able to take the exit away.** It is
+decided before anything a caller named, so naming `'c'` cannot shadow it, and a bare `c`
+still answers the button it was named on. It **understates** the frame rather than
+contradicting it, and it is what makes naming a key over Escape safe.
+
+🚨 **Decided by Mike: Ctrl-C aborts rather than answering a button.** The popup writes
+`DISMISSED_WORD`, and the waiting half reads it as `Unanswered::Dismissed`. In 0.4.4 it
+answered the cancel. With a list, every candidate target is a real action the user did not
+pick. The rejected alternative, "Ctrl-C fires the last button", reproduces 0.4.4 exactly for
+a pair, and fails on `[Delete, Cancel, Archive]`, where it fires Archive: it is safe only
+when callers order the safe answer last, which the kit can neither enforce nor check.
+Aborting is the rule the kit already applied to a click on the body and to an unbound key,
+**never invent a choice on the user's behalf**. The no-tty fallback and a terminal read
+error follow it for the same reason: "fail closed to the cancel button" has no meaning once
+there is no cancel button.
+
+🚨 **One thing stays unrepresentable: a button no key answers.** Every button answers
+exactly one key, so **the mouse-only dialog Mike rejected on 2026-09-14 cannot be built**.
+It would rest an answer on click forwarding nobody has confirmed (§7.5.1). **Three namings
+cannot be honoured, and each falls down the ladder** rather than leaving a keyless button:
+
+- `Key::Escape` on the first button, because the way out must not fire the action the
+  dialog leads with. It is the same reasoning that keeps Ctrl-C unconfigurable.
+- A `Key::Char` outside the character rule below, because the frame could not draw it at a
+  width it can measure.
+- A key an **earlier** button already took, case included, because one keypress cannot
+  answer two buttons and the frame would have to lie about one of them. `Key::Enter` named on the
+  second button while the first names nothing is this collision: the first already took
+  Enter, so the second falls to Escape.
+
+⚠️ **Resolved rather than refused, and that is a judgement rather than an oversight.** Each
+of the three is a cross-field or value-level condition. Refusing them would need fallible
+builders or private fields, and this module uses neither — `Dialog` and `Button` both carry
+public fields, and `Popup::from_env` builds each `Button` with a struct literal.
+`Button::keys` is how a caller checks what its naming became. 🔑 **The resolution is
+idempotent**, and it has to be: the asking half resolves what the caller built, and the
+popup half resolves again what crossed the wire. ✅ Swept in a test over every triple drawn
+from a set that includes all three hazards.
+
+🚨 **The ladder keys at most 70 buttons, not 96.** It yields 96 keys — Escape, Enter and 94
+characters — but a letter and its capital are one keypress, so 26 of them collide with a key
+already held. ✅ Measured rather than argued: a list of 96 unnamed buttons resolves 70 keys.
+**A list longer than that loses its tail.** The resolved keys are a prefix of the list, and
+everything that draws, sends or hit-tests a button walks that prefix, so a button with no
+key is drawn nowhere, sent nowhere, and an index reaching it reads as `Unrecognised`. No
+consumer is near the limit, and a 71-button dialog would not fit a popup anyway.
+
+🚨 **An empty list is refused rather than opened.** `ask` answers `Unanswered::Failed`
+without calling Herdr. Nobody could answer such a popup, and the single-popup limit is
+global (§7.5.3), so it would block every dialog in every workspace until it timed out.
+
+🚨 **A named key must be an ASCII graphic character, and one predicate carries three
+rules.** `cells` counts characters rather than measuring display width, so:
+
+- such a character is **exactly one cell**, which is what that count assumes;
+- none of them is East Asian Width `Ambiguous`, so no terminal *setting* can decide the
+  width and break the frame — §7.5.4's worst trap, met here in the one place a caller
+  supplies a character;
+- none of them is whitespace, so a button cannot advertise an invisible key, which would
+  be the rejected mouse-only dialog by another route.
+
+Measuring real width instead would cost a runtime `unicode-width`, which §7.5.7 argues
+against and which no consumer's graph carries today. ✅ The rule is **tested against the real
+Unicode data over every codepoint in the set**, which is §7.5.4's method rather than a fresh
+one. The ladder hands out exactly this set, so a key the ladder chose is always drawable.
+
+📏 **A key is paid for in cells, and the stacking threshold moves both ways.** ✅ Measured:
+`↵ Go now` / `esc Stop` share a row from 28 cells, and naming `s` on the second button saves
+the two cells `esc` cost over `s`, so the same pair shares a row from 26. 🔑 **That is
+§7.5.4's rule holding rather than a new one** — the threshold reads the drawn widths, so it
+moves by itself; a threshold read off a constant would not move at all. Both numbers are
+pinned, so a key counted as fewer cells than it draws reddens rather than pushing a row
+through the right border.
+
+🔑 **The keys ride on the buttons rather than on `ask`.** They are a property of the answers
+rather than of the asking, and the list is the one value that already crosses the process
+boundary: `open_params` sends it and `Popup::from_env` reads it back, so **the two halves
+cannot hold different opinions** about which key answers what. ⚠️ **The action cannot ride
+with them as a closure**, because a closure has no string form and cannot cross that
+boundary. A caller maps the index back through its own enum, built beside the list.
+
+**The wire carries what the frame draws, one variable per button.**
+`HERDR_PLUGIN_DIALOG_BUTTON_<n>` (`button_var(n)`, counting from zero) carries the button's
+**resolved** key as `Key::drawn` writes it — the Enter glyph, the Escape word, or one
+character — then a space, then the label. No key contains a space, so the first space is an
+unambiguous split and every label survives verbatim, spaces and all; an empty label travels
+as the key alone. 🔑 **One variable per button, because a label is the caller's string**:
+any separator a single variable used could appear in a label and turn one button into two.
+**The list ends at the first absent index**, and `BUTTON_0`'s absence is what makes a dialog
+bare, so there is no count to disagree with the list. ⚠️ **A value naming no key leaves that
+button unnamed**, so it takes the first free key like any other: one rule pointing the same
+way at every button.
+
+**The answer file carries the chosen index in decimal, or `DISMISSED_WORD`.** The index is
+matched by rebuilding what the popup writes rather than by parsing it, so `00`, `+0` and an
+index past the last keyed button all stay `Unrecognised` rather than becoming a choice.
+
+🔑 **Both input paths, by construction rather than by inspection.** The no-tty fallback turns
+its line into a keypress — an empty line is Enter, one character is that character — and asks
+the **same decoder** raw mode asks. They cannot disagree, and a test measures the agreement
+anyway across every configuration. ⚠️ That path gets one line rather than a loop, so "keep
+waiting" is unavailable to it, and anything that names no keypress writes `DISMISSED_WORD`.
+⚠️ Escape cannot be typed as a line, so a button on Escape has no line that reaches it.
+
+⚠️ **What is not covered.** Every decision above is unit-tested across the configurations and
+mutation-verified (59 mutations on this module, none surviving). That `interact` hands the
+resolved keys to the two decoders is **not** tested, because reaching `interact` needs a pty
+— the same limit `TerminalState` already carries, and the same one the pre-change code had.
+
+📏 **The number this asks for: a minor at minimum, because this is source-breaking.** §12.3's
+rule is whether a **correct** upgrade needs work, and every consumer of `ask` needs work:
+the pair type is gone. **No release number is claimed here** — Mike cuts kit releases.
+
+🚨 **What 0.4.4 had and this removes**, listed for the consumer planning its migration:
+
+| Removed from `dialog` | Replacement |
+|---|---|
+| `Buttons`, its `primary` and `cancel` fields, and `Buttons::new(primary, cancel)` | `[Button::new(primary), Button::new(cancel)]` |
+| `Answer::Primary` and `Answer::Cancel` | `Answer::Chose(0)` and `Answer::Chose(1)` |
+| `Answer::chose_primary()` | `Answer::chose(0)` |
+| `Hot`, with `None`, `Primary` and `Cancel` | `Option<usize>`: `None`, `Some(0)`, `Some(1)` |
+| `Frame::primary` and `Frame::cancel` | `Frame::buttons[0]` and `Frame::buttons[1]` |
+| `PRIMARY_VAR` and `CANCEL_VAR` | `button_var(0)`, `button_var(1)`, and `BUTTON_VAR` |
+| `PRIMARY_WORD` and `CANCEL_WORD` | none: the popup writes the index in decimal, or `DISMISSED_WORD` |
+| `DEFAULT_CANCEL` | none: an empty label is drawn as the key alone rather than defaulted |
+| `PRIMARY_KEY` and `CANCEL_KEY` | `ENTER_KEY` and `ESCAPE_KEY`, with the same values |
+
+| Changed signature | 0.4.4 | Now |
+|---|---|---|
+| `ask` | `buttons: &Buttons` | `buttons: &[Button]` |
+| `layout` | `Option<&Buttons>`, `hot: Hot` | `&[Button]`, `hot: Option<usize>` |
+| `render` | `Option<&Buttons>` | `&[Button]` |
+| `Frame::hit` | `-> Hot` | `-> Option<usize>` |
+| `Popup::buttons` | `Option<Buttons>` | `Vec<Button>`, empty for a bare dialog |
+
+⚠️ **Four behaviours move as well, and none of them is visible to the compiler:**
+
+- **Ctrl-C** answers `Unanswered::Dismissed` where it answered `Answer::Cancel`.
+- **The no-tty fallback** dismisses on end of input and on any line that names no keypress,
+  where it cancelled. A single typed character now answers the button whose key it is, where
+  every non-empty line cancelled.
+- **A terminal read error** in raw mode dismisses, where it cancelled.
+- **An empty or blank second label** is kept as the caller wrote it, where it became
+  `Cancel`. An empty one is drawn as the key alone.
+
+A caller that tested `chose_primary()` and treated everything else as "do nothing" is
+unaffected by all four, because every one of them lands on "not a choice". A caller that
+matched `Answer::Cancel` to do something is not.
+
+Additive: `Button`, `Button::new`, `Button::on_key`, `Button::keys`, `Key` with `drawn` and
+`from_wire`, `button_var`, `BUTTON_VAR` and `DISMISSED_WORD`. 🔑 **Additive surface never
+raises the floor**, so all of it rides free on the minor the removals already spend.
+
+⚠️ **The two halves of one plugin must not straddle the upgrade.** A 0.4.4 popup writes
+`primary` or `cancel`, which the new asking half reads as `Unrecognised`, and each half
+reads the other's environment as a bare dialog, which chooses nothing. Both halves are the
+same binary, so this only arises for a popup that was already open while the plugin was
+replaced, and it fails closed in both directions.
+
+✅ **What this closes.** agentic-panes-layout can delete its own popup half. Named keys put
+`y` on its destructive button and leave Enter inert, Escape answers the safe one, Ctrl-C
+ends the dialog without choosing, and the four styled states and the framed rendering arrive
+with them. Its migration is `src/confirm.rs`, planned against the table above.
 
 ## 8. Module: `update` (feature-gated)
 
@@ -1511,8 +1771,8 @@ popup machinery.
 - **Never block a launch.** Spawn detached, write the result to the stamp file, prompt on
   the *next* launch.
 - **Prompt:** ✅ **`dialog::ask`, which already exists.** `crates/herdr-plugin-kit/src/dialog.rs`
-  ships `ask` at line 719 taking `Buttons` (489) and answering `Answer` (654), and
-  `notify` at 692. ⚠️ This said "a popup through `report`, never a toast", which was
+  ships `ask` taking a list of `Button`s and answering `Answer`, beside `notify`. ➕ The
+  line numbers this cited went stale when the pair became a list (§7.5.8). ⚠️ This said "a popup through `report`, never a toast", which was
   written before `dialog` existed and made `report` look like a prerequisite. **It is
   not**: the prompt channel is built, mouse-first, and §13 holds `report` for its own
   reasons.
@@ -3047,6 +3307,7 @@ and nobody on this project has Windows hardware. §10.1 and the README both say 
 | 1 | Attestation signing later? | Needs `gh`, which is not on launchd's PATH. §9.7 states the limit checksums do and do not cover |
 | 2 | Does a Windows asset **run**? | ➕ **Narrowed 2026-09-13.** The naming half is answered; the running half is untouched. See below |
 | 3 | Is the socket reachable at `[[startup]]`? | ✅ **No longer a correctness question** (§8.3). Purely an optimisation now: measuring it could save a `plugin.list` call |
+| 4 | Which key reaches each button? | ✅ **Opened and answered 2026-09-14**, by Mike, in one day: the caller names it on any button of a list, a button that names nothing takes the first free key, and the kit draws what each button resolved to. Ctrl-C chooses no button. Mouse-only was rejected on §7.5.1's unsettled click forwarding. §7.5.8 carries the mechanism, and the row stays as the record of a question that closed the day it opened |
 
 ✅ **The naming half closed on 2026-09-13.** project-finder's 0.9.0 published
 `pick-project-windows-arm64-0837eb5571b6.exe` and its x64 sibling, so the extension is no

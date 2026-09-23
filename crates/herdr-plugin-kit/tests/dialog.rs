@@ -17,10 +17,10 @@ use herdr_plugin_kit::api::generated::{
     NotificationShowParams, NotificationShowReason, PluginPaneOpenParams, PluginPanePlacement,
 };
 use herdr_plugin_kit::dialog::{
-    ask, layout, notify, render, Answer, Buttons, Dialog, Explained, Hot, OpenError, Popup, Rect,
-    Shown, State, Transport, Unanswered, ANSWER_FILE_VAR, BODY_VAR, BUSY_CODE, CANCEL_KEY,
-    CANCEL_VAR, CANCEL_WORD, DEFAULT_CANCEL, ENTRYPOINT, HEIGHT, PRIMARY_KEY, PRIMARY_VAR,
-    PRIMARY_WORD, STARTED_FILE_VAR, STATE_VAR, TITLE_VAR, WIDTH,
+    ask, button_var, layout, notify, render, Answer, Button, Dialog, Explained, Key, OpenError,
+    Popup, Rect, Shown, State, Transport, Unanswered, ANSWER_FILE_VAR, BODY_VAR, BUSY_CODE,
+    BUTTON_VAR, DISMISSED_WORD, ENTER_KEY, ENTRYPOINT, ESCAPE_KEY, HEIGHT, STARTED_FILE_VAR,
+    STATE_VAR, TITLE_VAR, WIDTH,
 };
 use herdr_plugin_kit::env::Environment;
 
@@ -140,8 +140,52 @@ fn dialog() -> Dialog {
     Dialog::new(State::Warning, "Careful", "Two panes are running agents.")
 }
 
-fn buttons() -> Buttons {
-    Buttons::new("Rebuild", "Leave it")
+/// The two buttons most tests ask with, naming no key.
+fn buttons() -> Vec<Button> {
+    vec![Button::new("Rebuild"), Button::new("Leave it")]
+}
+
+/// Three buttons, for the behaviour a pair cannot show.
+fn three() -> Vec<Button> {
+    vec![
+        Button::new("Delete"),
+        Button::new("Keep"),
+        Button::new("Archive"),
+    ]
+}
+
+/// The lists every wire and drawing test sweeps.
+///
+/// Every pair the round-3 design could express, then lists of three and four
+/// where the ladder reaches past Escape and a later button names Enter.
+fn configurations() -> Vec<Vec<Button>> {
+    let pair = |first: Button, second: Button| vec![first, second];
+    vec![
+        buttons(),
+        pair(
+            Button::new("Rebuild").on_key(Key::Char('y')),
+            Button::new("Leave it"),
+        ),
+        pair(
+            Button::new("Rebuild"),
+            Button::new("Leave it").on_key(Key::Char('n')),
+        ),
+        pair(
+            Button::new("Rebuild").on_key(Key::Char('y')),
+            Button::new("Leave it").on_key(Key::Char('n')),
+        ),
+        pair(
+            Button::new("Rebuild").on_key(Key::Char('y')),
+            Button::new("Leave it").on_key(Key::Enter),
+        ),
+        three(),
+        vec![
+            Button::new("Delete").on_key(Key::Char('d')),
+            Button::new("Keep them all").on_key(Key::Enter),
+            Button::new("Archive"),
+            Button::new(""),
+        ],
+    ]
 }
 
 /// Strips CSI sequences, so a layout assertion reads the characters only.
@@ -170,6 +214,27 @@ fn plain(text: &str) -> String {
 /// this crate carries it.
 fn width_of(line: &str) -> usize {
     unicode_width::UnicodeWidthStr::width(line)
+}
+
+/// The characters a rectangle covers on the frame it was reported for.
+fn span(frame: &str, rect: Rect) -> String {
+    plain(frame)
+        .lines()
+        .nth(rect.row as usize)
+        .expect("a rectangle on a row the frame does not have")
+        .chars()
+        .skip(rect.column as usize)
+        .take(rect.width as usize)
+        .collect()
+}
+
+/// Reads an environment back the way the popup half does.
+fn read_back(env: &std::collections::HashMap<String, String>) -> Popup {
+    let pairs: Vec<(&str, &str)> = env
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect();
+    Popup::from_env(&Environment::from_pairs(&pairs))
 }
 
 // ── The request the opener is handed ──────────────────────────────────────
@@ -230,13 +295,19 @@ fn a_bare_dialog_carries_no_channel_and_no_buttons() {
     let mut opener = Fake::ok();
     notify(&mut opener, PLUGIN, &dialog());
     let env = &opener.only().env;
-    for absent in [ANSWER_FILE_VAR, STARTED_FILE_VAR, PRIMARY_VAR, CANCEL_VAR] {
+    for absent in [ANSWER_FILE_VAR, STARTED_FILE_VAR] {
         assert!(
             !env.contains_key(absent),
             "{} was sent to a bare dialog",
             absent
         );
     }
+    // A bare dialog dismisses on any key, so it sends no button at all.
+    assert!(
+        !env.keys().any(|key| key.starts_with(BUTTON_VAR)),
+        "a button was sent to a bare dialog: {:?}",
+        env.keys().collect::<Vec<_>>()
+    );
     assert_eq!(env.get(STATE_VAR).map(String::as_str), Some("warning"));
     assert_eq!(env.get(TITLE_VAR).map(String::as_str), Some("Careful"));
     assert_eq!(
@@ -246,9 +317,9 @@ fn a_bare_dialog_carries_no_channel_and_no_buttons() {
 }
 
 #[test]
-fn an_actioned_dialog_carries_both_files_and_both_labels() {
+fn an_actioned_dialog_carries_both_files_and_every_button() {
     let mut opener = Fake::ok();
-    ask(&mut opener, PLUGIN, &dialog(), &buttons());
+    ask(&mut opener, PLUGIN, &dialog(), &three());
     let env = &opener.only().env;
     for present in [ANSWER_FILE_VAR, STARTED_FILE_VAR] {
         assert!(
@@ -261,8 +332,247 @@ fn an_actioned_dialog_carries_both_files_and_both_labels() {
         env[ANSWER_FILE_VAR], env[STARTED_FILE_VAR],
         "one file cannot be both the marker and the answer"
     );
-    assert_eq!(env.get(PRIMARY_VAR).map(String::as_str), Some("Rebuild"));
-    assert_eq!(env.get(CANCEL_VAR).map(String::as_str), Some("Leave it"));
+    // One variable per button, each carrying exactly what that button draws.
+    assert_eq!(
+        env.get(&button_var(0)),
+        Some(&format!("{} Delete", ENTER_KEY))
+    );
+    assert_eq!(
+        env.get(&button_var(1)),
+        Some(&format!("{} Keep", ESCAPE_KEY))
+    );
+    assert_eq!(
+        env.get(&button_var(2)).map(String::as_str),
+        Some("! Archive")
+    );
+    // 🔑 The list ends at the first absent index, so nothing past the last
+    // button may be sent.
+    assert!(
+        !env.contains_key(&button_var(3)),
+        "a fourth button was sent"
+    );
+}
+
+#[test]
+fn a_button_variable_is_the_prefix_and_its_index() {
+    assert_eq!(button_var(0), format!("{}0", BUTTON_VAR));
+    assert_eq!(button_var(12), "HERDR_PLUGIN_DIALOG_BUTTON_12");
+}
+
+#[test]
+fn a_named_key_travels_as_what_the_frame_draws() {
+    let mut opener = Fake::ok();
+    ask(
+        &mut opener,
+        PLUGIN,
+        &dialog(),
+        &[
+            Button::new("Rebuild").on_key(Key::Char('y')),
+            Button::new("Leave it").on_key(Key::Enter),
+        ],
+    );
+    let env = &opener.only().env;
+    assert_eq!(
+        env.get(&button_var(0)).map(String::as_str),
+        Some("y Rebuild")
+    );
+    assert_eq!(
+        env.get(&button_var(1)),
+        Some(&format!("{} Leave it", ENTER_KEY)),
+        "the popup was not told that Enter answers the second button"
+    );
+}
+
+#[test]
+fn a_naming_that_cannot_be_honoured_travels_as_what_it_became() {
+    // 🔑 The wire carries the resolved key, never the named one, so the popup
+    // half is told what the naming actually became rather than resolving it a
+    // second time on its own.
+    let mut opener = Fake::ok();
+    ask(
+        &mut opener,
+        PLUGIN,
+        &dialog(),
+        &[
+            Button::new("Delete").on_key(Key::Escape),
+            Button::new("Keep"),
+        ],
+    );
+    let env = &opener.only().env;
+    assert_eq!(
+        env.get(&button_var(0)),
+        Some(&format!("{} Delete", ENTER_KEY)),
+        "Escape travelled on the first button"
+    );
+    assert_eq!(
+        env.get(&button_var(1)),
+        Some(&format!("{} Keep", ESCAPE_KEY))
+    );
+}
+
+#[test]
+fn every_configuration_survives_the_round_trip_through_the_environment() {
+    // The popup half is a separate process, so a naming that does not survive the
+    // environment is one only the asking half believes in. Labels with spaces
+    // and an empty label are in the sweep, because the first space is the split.
+    for buttons in configurations() {
+        let mut opener = Fake::ok();
+        ask(&mut opener, PLUGIN, &dialog(), &buttons);
+        let popup = read_back(&opener.only().env);
+        assert_eq!(
+            Button::keys(&popup.buttons),
+            Button::keys(&buttons),
+            "{:?} did not reach the popup half",
+            Button::keys(&buttons)
+        );
+        let labels = |list: &[Button]| -> Vec<String> {
+            list.iter().map(|button| button.label.clone()).collect()
+        };
+        assert_eq!(labels(&popup.buttons), labels(&buttons));
+    }
+}
+
+#[test]
+fn a_list_longer_than_the_ladder_sends_only_the_buttons_it_could_key() {
+    // ⚠️ A button no key answers is drawn nowhere, so the popup is never told
+    // about it either. 70 is how many keys the ladder can tell apart.
+    let many: Vec<Button> = (0..80).map(|n| Button::new(&format!("b{}", n))).collect();
+    let mut opener = Fake::ok();
+    ask(&mut opener, PLUGIN, &dialog(), &many);
+    let env = &opener.only().env;
+    assert!(
+        env.contains_key(&button_var(69)),
+        "a keyed button was dropped"
+    );
+    assert!(
+        !env.contains_key(&button_var(70)),
+        "a button no key answers was sent"
+    );
+    assert_eq!(read_back(env).buttons.len(), 70);
+}
+
+#[test]
+fn a_variable_naming_no_key_leaves_that_button_to_the_ladder() {
+    let read = |pairs: &[(&str, &str)]| {
+        Button::keys(&Popup::from_env(&Environment::from_pairs(pairs)).buttons)
+    };
+    let (first, second) = (button_var(0), button_var(1));
+
+    // ⚠️ Only the asking half writes these, and it writes what the frame draws. A
+    // value outside that vocabulary is a foreign environment, and one rule points
+    // the same way at every button rather than two rules wearing one name.
+    assert_eq!(
+        read(&[(&first, "yes Delete"), (&second, "\u{4f60} Keep")]),
+        vec![Key::Enter, Key::Escape]
+    );
+    // And a value that names a key is honoured, so the assertion above is about
+    // the vocabulary rather than about the key being ignored.
+    assert_eq!(
+        read(&[(&first, "d Delete"), (&second, "k Keep")]),
+        vec![Key::Char('d'), Key::Char('k')]
+    );
+    // The label is everything after the first space, spaces and all.
+    let popup = Popup::from_env(&Environment::from_pairs(&[(&first, "d close  it now ")]));
+    assert_eq!(popup.buttons[0].label, "close  it now ");
+}
+
+#[test]
+fn the_frame_draws_each_button_with_the_key_that_answers_it() {
+    let drawn = |buttons: &[Button]| plain(&render(&dialog(), buttons, 40));
+
+    // The default frame is exactly what it was before any key was nameable.
+    let default = drawn(&buttons());
+    assert!(default.contains(&format!("{} Rebuild", ENTER_KEY)));
+    assert!(default.contains(&format!("{} Leave it", ESCAPE_KEY)));
+
+    // A named key on the first replaces the Enter glyph, and the untouched
+    // button keeps its own default.
+    let first_named = drawn(&[
+        Button::new("Rebuild").on_key(Key::Char('y')),
+        Button::new("Leave it"),
+    ]);
+    assert!(first_named.contains("y Rebuild"), "{}", first_named);
+    assert!(
+        !first_named.contains(&format!("{} Rebuild", ENTER_KEY)),
+        "the frame still claims Enter reaches the first button:\n{}",
+        first_named
+    );
+    assert!(first_named.contains(&format!("{} Leave it", ESCAPE_KEY)));
+
+    // The second takes the same treatment, Escape included.
+    let second_named = drawn(&[
+        Button::new("Rebuild"),
+        Button::new("Leave it").on_key(Key::Char('n')),
+    ]);
+    assert!(second_named.contains("n Leave it"), "{}", second_named);
+    assert!(
+        !second_named.contains(&format!("{} Leave it", ESCAPE_KEY)),
+        "the frame still claims Escape reaches the second button:\n{}",
+        second_named
+    );
+
+    // And Enter named on the second is drawn there, which is the first round's
+    // whole requirement with no special case left in the drawing.
+    let enter_later = drawn(&[
+        Button::new("Rebuild").on_key(Key::Char('y')),
+        Button::new("Leave it").on_key(Key::Enter),
+    ]);
+    assert!(
+        enter_later.contains(&format!("{} Leave it", ENTER_KEY)),
+        "Enter is not drawn where it answers:\n{}",
+        enter_later
+    );
+    assert!(
+        !enter_later.contains(ESCAPE_KEY),
+        "Escape is drawn where it answers nothing:\n{}",
+        enter_later
+    );
+
+    // Past the pair, the third draws the first free character.
+    let three = plain(&render(&dialog(), &three(), 60));
+    assert!(three.contains("! Archive"), "{}", three);
+}
+
+#[test]
+fn a_key_is_paid_for_in_cells_rather_than_assumed_free() {
+    // ⚠️ Naming a key changes what a button is worth in cells, so the width at
+    // which the buttons stop sharing a row has to move with it. A threshold read
+    // off a constant would not move at all. ✅ Measured: `↵ Go now` / `esc Stop`
+    // share a row from 28 cells, and naming `s` on the second saves the two cells
+    // that `esc` cost over `s`, so the same pair shares a row from 26.
+    let default = vec![Button::new("Go now"), Button::new("Stop")];
+    let named = vec![
+        Button::new("Go now"),
+        Button::new("Stop").on_key(Key::Char('s')),
+    ];
+    let shares_a_row = |buttons: &[Button], width| {
+        plain(&render(&dialog(), buttons, width))
+            .lines()
+            .filter(|line| line.contains("Go") || line.contains("Stop"))
+            .count()
+            == 1
+    };
+
+    assert!(
+        !shares_a_row(&default, 27),
+        "the default pair fits 27 cells"
+    );
+    assert!(shares_a_row(&default, 28), "the default pair lost 28 cells");
+    assert!(
+        shares_a_row(&named, 26),
+        "a one-cell key was not cheaper than `esc`"
+    );
+    assert!(!shares_a_row(&named, 25), "the named pair fits 25 cells");
+
+    // Whatever it costs, every row is still exactly as wide as the frame. That is
+    // what breaks if a drawn key is counted as fewer cells than it occupies.
+    for buttons in [default, named] {
+        for width in [26, 28, 40] {
+            for line in plain(&render(&dialog(), &buttons, width)).lines() {
+                assert_eq!(width_of(line), width, "{:?} drew {:?}", buttons, line);
+            }
+        }
+    }
 }
 
 #[test]
@@ -402,8 +712,9 @@ fn a_bare_dialog_that_opened_or_failed_sends_no_notification() {
     );
     assert!(failed.notified.is_empty(), "a failed open also notified");
 }
+
 #[test]
-fn a_question_that_lost_the_race_is_reported_as_busy_and_not_as_a_refusal() {
+fn a_question_that_lost_the_race_is_reported_as_busy_and_not_as_a_choice() {
     let answer = ask(&mut Fake::busy(), PLUGIN, &dialog(), &buttons());
     assert_eq!(
         answer,
@@ -411,9 +722,10 @@ fn a_question_that_lost_the_race_is_reported_as_busy_and_not_as_a_refusal() {
             NotificationShowReason::Shown
         )))
     );
-    // The distinction that matters: busy is not the user cancelling.
-    assert_ne!(answer, Answer::Cancel);
-    assert!(!answer.chose_primary());
+    // The distinction that matters: busy is not the user choosing any button.
+    for index in 0..buttons().len() {
+        assert!(!answer.chose(index), "busy chose button {}", index);
+    }
 }
 
 #[test]
@@ -440,7 +752,7 @@ fn a_busy_question_explains_itself_without_becoming_a_statement() {
         "the notification does not say why: {:?}",
         body
     );
-    // Neither button label appears, because there is nothing to press.
+    // No button label appears, because there is nothing to press.
     assert!(!body.contains("Rebuild"), "a button leaked into a toast");
     assert!(!body.contains("Leave it"), "a button leaked into a toast");
 }
@@ -464,7 +776,7 @@ fn a_busy_question_reports_whether_its_explanation_reached_anyone() {
             answer,
             Answer::Unanswered(Unanswered::Busy(Explained::Reason(reason)))
         );
-        assert!(!answer.chose_primary());
+        assert!(!answer.chose(0));
     }
 
     let answer = ask(&mut Fake::busy_unreachable(), PLUGIN, &dialog(), &buttons());
@@ -482,6 +794,7 @@ fn a_question_that_failed_to_open_sends_no_notification() {
     ask(&mut opener, PLUGIN, &dialog(), &buttons());
     assert!(opener.notified.is_empty(), "a failed open also notified");
 }
+
 #[test]
 fn a_busy_dialog_is_never_confused_with_one_that_failed_to_open() {
     assert_ne!(
@@ -491,6 +804,27 @@ fn a_busy_dialog_is_never_confused_with_one_that_failed_to_open() {
     assert_ne!(
         notify(&mut Fake::busy(), PLUGIN, &dialog()),
         notify(&mut Fake::failing(), PLUGIN, &dialog())
+    );
+}
+
+#[test]
+fn a_question_with_no_buttons_is_refused_rather_than_opened() {
+    // 🚨 Nobody could answer it, and the single-popup limit is global, so an
+    // unanswerable question would block every dialog in every workspace until
+    // it timed out. It must never reach Herdr at all.
+    let mut opener = Fake::ok();
+    let started = Instant::now();
+    let answer = ask(&mut opener, PLUGIN, &dialog(), &[]);
+    let Answer::Unanswered(Unanswered::Failed(why)) = &answer else {
+        panic!("an empty list was not refused: {:?}", answer);
+    };
+    assert!(!why.is_empty(), "the refusal carries no reason");
+    assert!(opener.seen.is_empty(), "an unanswerable popup was opened");
+    assert!(opener.notified.is_empty(), "the refusal also notified");
+    assert!(
+        started.elapsed() < Duration::from_secs(1),
+        "a refused question waited {:?}",
+        started.elapsed()
     );
 }
 
@@ -529,33 +863,63 @@ fn a_question_that_could_not_be_opened_gives_up_at_once() {
 fn a_popup_that_answers_is_heard_across_the_channel() {
     // End to end through the real files: the marker, the poll, and the answer.
     for (word, expected) in [
-        (PRIMARY_WORD, Answer::Primary),
-        (CANCEL_WORD, Answer::Cancel),
+        ("0", Answer::Chose(0)),
+        ("1", Answer::Chose(1)),
+        ("2", Answer::Chose(2)),
+        // 🚨 What Ctrl-C and every other choiceless ending write.
+        (DISMISSED_WORD, Answer::Unanswered(Unanswered::Dismissed)),
     ] {
         let mut opener = Answering {
             word: word.to_string(),
             marks_started: true,
             delay: Duration::from_millis(50),
         };
-        assert_eq!(ask(&mut opener, PLUGIN, &dialog(), &buttons()), expected);
+        assert_eq!(ask(&mut opener, PLUGIN, &dialog(), &three()), expected);
     }
 }
 
 #[test]
-fn a_popup_answering_a_word_neither_button_uses_does_not_choose_either() {
-    // A popup left over from an older build is the real case. It must not fall
-    // through to the primary button.
-    let mut opener = Answering {
-        word: "rebuild".to_string(),
-        marks_started: true,
-        delay: Duration::from_millis(20),
-    };
-    let answer = ask(&mut opener, PLUGIN, &dialog(), &buttons());
-    assert_eq!(
-        answer,
-        Answer::Unanswered(Unanswered::Unrecognised("rebuild".to_string()))
-    );
-    assert!(!answer.chose_primary());
+fn a_popup_answering_a_word_no_button_uses_does_not_choose_any() {
+    // A popup left over from an older build is the real case: 0.4.4 wrote
+    // `primary` and `cancel`. Neither may fall through to a button, and nor may
+    // an index this dialog has no button for.
+    for word in ["rebuild", "primary", "cancel", "2"] {
+        let mut opener = Answering {
+            word: word.to_string(),
+            marks_started: true,
+            delay: Duration::from_millis(20),
+        };
+        let answer = ask(&mut opener, PLUGIN, &dialog(), &buttons());
+        assert_eq!(
+            answer,
+            Answer::Unanswered(Unanswered::Unrecognised(word.to_string()))
+        );
+        for index in 0..3 {
+            assert!(!answer.chose(index), "{:?} chose button {}", word, index);
+        }
+    }
+}
+
+#[test]
+fn an_index_reaching_a_button_no_key_answers_is_not_a_choice() {
+    // ⚠️ The caller handed in 80 buttons and only 70 were drawn and sent, so a
+    // popup writing the 71st names no button of this dialog. Counting the
+    // caller's list rather than the keyed one would act on a button nobody saw.
+    let many: Vec<Button> = (0..80).map(|n| Button::new(&format!("b{}", n))).collect();
+    for (word, expected) in [
+        ("69", Answer::Chose(69)),
+        (
+            "70",
+            Answer::Unanswered(Unanswered::Unrecognised("70".to_string())),
+        ),
+    ] {
+        let mut opener = Answering {
+            word: word.to_string(),
+            marks_started: true,
+            delay: Duration::from_millis(20),
+        };
+        assert_eq!(ask(&mut opener, PLUGIN, &dialog(), &many), expected);
+    }
 }
 
 #[test]
@@ -565,24 +929,24 @@ fn an_answer_arriving_before_the_marker_is_still_heard() {
     // and exits inside the startup window writes both, and the answer is what
     // decides.
     let mut opener = Answering {
-        word: PRIMARY_WORD.to_string(),
+        word: "0".to_string(),
         marks_started: false,
         delay: Duration::from_millis(20),
     };
     assert_eq!(
         ask(&mut opener, PLUGIN, &dialog(), &buttons()),
-        Answer::Primary
+        Answer::Chose(0)
     );
 }
 
 #[test]
-fn only_an_explicit_primary_answer_ever_chooses_the_primary_button() {
-    // The safety property gathered into one place. Every outcome except the
-    // one exact word must answer false, because the primary button is where a
-    // caller puts the destructive action.
-    assert!(!ask(&mut Fake::busy(), PLUGIN, &dialog(), &buttons()).chose_primary());
-    assert!(!ask(&mut Fake::failing(), PLUGIN, &dialog(), &buttons()).chose_primary());
-    assert!(!Answer::Cancel.chose_primary());
+fn only_an_explicit_choice_ever_chooses_a_button() {
+    // The safety property gathered into one place. Every outcome except the one
+    // exact index must answer false, because the first button is where a caller
+    // usually puts the action.
+    assert!(!ask(&mut Fake::busy(), PLUGIN, &dialog(), &buttons()).chose(0));
+    assert!(!ask(&mut Fake::failing(), PLUGIN, &dialog(), &buttons()).chose(0));
+    assert!(!ask(&mut Fake::ok(), PLUGIN, &dialog(), &[]).chose(0));
     for why in [
         Unanswered::Busy(Explained::Reason(NotificationShowReason::Shown)),
         Unanswered::Busy(Explained::Unreachable("gone".to_string())),
@@ -590,41 +954,65 @@ fn only_an_explicit_primary_answer_ever_chooses_the_primary_button() {
         Unanswered::Dismissed,
         Unanswered::NeverShown,
         Unanswered::TimedOut,
-        Unanswered::Unrecognised(PRIMARY_WORD.to_string()),
+        Unanswered::Unrecognised("0".to_string()),
     ] {
-        assert!(
-            !Answer::Unanswered(why.clone()).chose_primary(),
-            "{:?} chose the primary button",
-            why
-        );
+        for index in 0..3 {
+            assert!(
+                !Answer::Unanswered(why.clone()).chose(index),
+                "{:?} chose button {}",
+                why,
+                index
+            );
+        }
     }
-    assert!(Answer::Primary.chose_primary());
+    // A choice of one button is never a choice of another.
+    assert!(Answer::Chose(0).chose(0));
+    assert!(!Answer::Chose(1).chose(0));
+    assert!(!Answer::Chose(0).chose(1));
 }
 
 // ── The popup half reading its own environment ────────────────────────────
 
 #[test]
-fn the_primary_labels_absence_is_what_makes_a_dialog_bare() {
+fn the_first_buttons_absence_is_what_makes_a_dialog_bare() {
     let bare = Popup::from_env(&Environment::from_pairs(&[
         (STATE_VAR, "danger"),
         (TITLE_VAR, "Stop"),
         (BODY_VAR, "It broke."),
     ]));
-    assert_eq!(bare.buttons, None);
+    assert!(bare.buttons.is_empty(), "a bare dialog read a button");
     assert_eq!(bare.dialog.state, State::Danger);
     assert_eq!(bare.dialog.title, "Stop");
     assert_eq!(bare.dialog.body, "It broke.");
 
     let actioned = Popup::from_env(&Environment::from_pairs(&[
         (STATE_VAR, "danger"),
-        (PRIMARY_VAR, "Delete"),
-        (CANCEL_VAR, "Keep"),
+        (&button_var(0), &format!("{} Delete", ENTER_KEY)),
+        (&button_var(1), &format!("{} Keep", ESCAPE_KEY)),
     ]));
     assert_eq!(
         actioned.buttons,
-        Some(Buttons::new("Delete", "Keep")),
-        "a primary label should have produced buttons"
+        vec![
+            Button::new("Delete").on_key(Key::Enter),
+            Button::new("Keep").on_key(Key::Escape),
+        ],
+        "the button variables did not produce buttons"
     );
+}
+
+#[test]
+fn the_list_ends_at_the_first_absent_index() {
+    // 🔑 No separate count, so nothing can disagree with it. A gap ends the
+    // list rather than being skipped over.
+    let popup = Popup::from_env(&Environment::from_pairs(&[
+        (&button_var(0), "a First"),
+        (&button_var(2), "c Third"),
+    ]));
+    assert_eq!(popup.buttons.len(), 1, "a button past a gap was read");
+
+    // And a second one without a first is no button at all.
+    let popup = Popup::from_env(&Environment::from_pairs(&[(&button_var(1), "b Second")]));
+    assert!(popup.buttons.is_empty());
 }
 
 #[test]
@@ -632,25 +1020,34 @@ fn a_variable_set_but_empty_counts_as_absent() {
     // The idiom `crate::env` documents at nearly every call site. Herdr does
     // inject empty values.
     let popup = Popup::from_env(&Environment::from_pairs(&[
-        (PRIMARY_VAR, ""),
+        (&button_var(0), ""),
         (TITLE_VAR, ""),
         (ANSWER_FILE_VAR, ""),
         (STARTED_FILE_VAR, ""),
     ]));
-    assert_eq!(popup.buttons, None, "an empty label made a button");
+    assert!(popup.buttons.is_empty(), "an empty variable made a button");
     assert!(popup.dialog.title.is_empty());
     assert_eq!(popup.answer_file, None);
     assert_eq!(popup.started_file, None);
 }
 
 #[test]
-fn a_cancel_label_defaults_rather_than_drawing_an_empty_button() {
-    let popup = Popup::from_env(&Environment::from_pairs(&[(PRIMARY_VAR, "Go")]));
-    assert_eq!(
-        popup.buttons.map(|b| b.cancel),
-        Some(DEFAULT_CANCEL.to_string())
+fn an_empty_label_crosses_as_the_key_alone() {
+    // A label is the caller's, and empty is one it may write. It travels as the
+    // key with no separator, and reads back as an empty label on the same key.
+    let mut opener = Fake::ok();
+    ask(
+        &mut opener,
+        PLUGIN,
+        &dialog(),
+        &[Button::new(""), Button::new("keep")],
     );
-    assert_eq!(Buttons::new("Go", "   ").cancel, DEFAULT_CANCEL);
+    let env = &opener.only().env;
+    assert_eq!(env.get(&button_var(0)).map(String::as_str), Some(ENTER_KEY));
+    assert_eq!(
+        read_back(env).buttons[0],
+        Button::new("").on_key(Key::Enter)
+    );
 }
 
 #[test]
@@ -681,8 +1078,8 @@ fn every_row_is_exactly_as_wide_as_the_frame() {
     for width in [24, 30, 53, 80] {
         for state in [State::Info, State::Success, State::Warning, State::Danger] {
             let dialog = Dialog::new(state, "A title", "Some body text that wraps a little.");
-            for buttons in [None, Some(buttons())] {
-                let drawn = render(&dialog, buttons.as_ref(), width);
+            for buttons in [Vec::new(), buttons(), three()] {
+                let drawn = render(&dialog, &buttons, width);
                 for line in plain(&drawn).lines() {
                     assert_eq!(
                         width_of(line),
@@ -704,7 +1101,7 @@ fn the_frame_is_rounded_on_all_four_states() {
     // ⚠️ Varying the corner for danger was proposed and rejected: the glyph is
     // already the non-colour channel, so a second one costs consistency.
     for state in [State::Info, State::Success, State::Warning, State::Danger] {
-        let drawn = plain(&render(&Dialog::new(state, "t", "b"), None, 30));
+        let drawn = plain(&render(&Dialog::new(state, "t", "b"), &[], 30));
         let lines: Vec<&str> = drawn.lines().collect();
         assert!(lines[0].starts_with('╭'), "{:?} top-left", state);
         assert!(lines[0].ends_with('╮'), "{:?} top-right", state);
@@ -727,7 +1124,7 @@ fn each_state_draws_its_own_glyph_in_the_title_line() {
     // cannot separate a warning from a danger.
     let mut seen = Vec::new();
     for state in [State::Info, State::Success, State::Warning, State::Danger] {
-        let drawn = plain(&render(&Dialog::new(state, "Title", "b"), None, 40));
+        let drawn = plain(&render(&Dialog::new(state, "Title", "b"), &[], 40));
         let title = drawn.lines().next().unwrap();
         assert!(
             title.contains(state.glyph()),
@@ -751,7 +1148,7 @@ fn each_state_draws_its_own_glyph_in_the_title_line() {
 fn each_state_draws_its_own_colour() {
     let mut seen = Vec::new();
     for state in [State::Info, State::Success, State::Warning, State::Danger] {
-        let drawn = render(&Dialog::new(state, "t", "b"), None, 30);
+        let drawn = render(&Dialog::new(state, "t", "b"), &[], 30);
         let code = format!("\u{1b}[{}m", state.colour());
         assert!(drawn.contains(&code), "{:?} drew no {} colour", state, code);
         seen.push(state.colour());
@@ -764,7 +1161,7 @@ fn each_state_draws_its_own_colour() {
 #[test]
 fn the_padding_is_two_blank_rows_top_and_three_columns_each_side() {
     let dialog = Dialog::new(State::Info, "T", "Body");
-    let drawn = plain(&render(&dialog, None, 40));
+    let drawn = plain(&render(&dialog, &[], 40));
     let lines: Vec<&str> = drawn.lines().collect();
 
     let blank = format!("│{}│", " ".repeat(38));
@@ -787,12 +1184,12 @@ fn the_bottom_padding_is_two_rows_except_below_a_button_row() {
     let dialog = Dialog::new(State::Info, "T", "Body");
     let blank = format!("│{}│", " ".repeat(38));
 
-    let bare = plain(&render(&dialog, None, 40));
+    let bare = plain(&render(&dialog, &[], 40));
     let bare: Vec<&str> = bare.lines().collect();
     assert_eq!(bare[bare.len() - 2], blank, "bare, second bottom row");
     assert_eq!(bare[bare.len() - 3], blank, "bare, first bottom row");
 
-    let actioned = plain(&render(&dialog, Some(&buttons()), 40));
+    let actioned = plain(&render(&dialog, &buttons(), 40));
     let actioned: Vec<&str> = actioned.lines().collect();
     assert_eq!(
         actioned[actioned.len() - 2],
@@ -810,7 +1207,7 @@ fn the_bottom_padding_is_two_rows_except_below_a_button_row() {
 fn a_blank_row_separates_the_body_from_the_buttons() {
     // Without it the buttons read as another line of body text.
     let dialog = Dialog::new(State::Info, "T", "Body");
-    let drawn = plain(&render(&dialog, Some(&buttons()), 40));
+    let drawn = plain(&render(&dialog, &buttons(), 40));
     let lines: Vec<&str> = drawn.lines().collect();
     let body = lines.iter().position(|l| l.contains("Body")).unwrap();
     let row = lines.iter().position(|l| l.contains("Rebuild")).unwrap();
@@ -821,10 +1218,13 @@ fn a_blank_row_separates_the_body_from_the_buttons() {
 #[test]
 fn a_bare_dialog_draws_no_buttons_and_no_separator() {
     let dialog = Dialog::new(State::Info, "T", "Body");
-    let bare = plain(&render(&dialog, None, 40));
-    let actioned = plain(&render(&dialog, Some(&buttons()), 40));
+    let bare = plain(&render(&dialog, &[], 40));
+    let actioned = plain(&render(&dialog, &buttons(), 40));
     assert!(!bare.contains("Rebuild"), "a bare dialog drew a button");
-    assert!(!bare.contains("Leave it"), "a bare dialog drew a cancel");
+    assert!(
+        !bare.contains("Leave it"),
+        "a bare dialog drew a second button"
+    );
     // The separator and the button row add two rows, and the bottom padding
     // gives one back, so an actioned dialog is exactly one row taller.
     assert_eq!(
@@ -835,26 +1235,34 @@ fn a_bare_dialog_draws_no_buttons_and_no_separator() {
 }
 
 #[test]
-fn the_primary_button_is_inverted_and_the_cancel_is_plain() {
+fn the_first_button_is_inverted_and_every_other_is_plain() {
     // Mike's design: the state's colour as the background with the text
-    // inverted against it, and the cancel as plain text.
-    let drawn = render(&Dialog::new(State::Danger, "T", "B"), Some(&buttons()), 40);
+    // inverted against it on the button the dialog leads with, and plain text
+    // for every other. Emphasis is positional, so three buttons still carry
+    // exactly one inversion.
+    let drawn = render(&Dialog::new(State::Danger, "T", "B"), &three(), 60);
     let row = drawn
         .lines()
-        .find(|line| line.contains("Rebuild"))
+        .find(|line| line.contains("Delete"))
         .expect("no button row");
+    assert!(row.contains("Archive"), "three buttons did not share a row");
+    assert_eq!(
+        row.matches("\u{1b}[7m").count(),
+        1,
+        "not exactly one inversion"
+    );
     let inverted = row
         .split("\u{1b}[7m")
         .nth(1)
-        .expect("the primary button is not inverted");
+        .expect("the first button is not inverted");
     assert!(
-        inverted.starts_with(&format!(" {} Rebuild ", PRIMARY_KEY)),
-        "the inversion does not cover the primary key and label: {:?}",
+        inverted.starts_with(&format!(" {} Delete ", ENTER_KEY)),
+        "the inversion does not cover the first key and label: {:?}",
         inverted
     );
     assert!(
-        !row.split("Leave it").nth(1).unwrap().contains("\u{1b}[7m"),
-        "inversion leaked past the primary button"
+        !row.split("Delete").nth(1).unwrap().contains("\u{1b}[7m"),
+        "inversion leaked past the first button"
     );
 }
 
@@ -862,7 +1270,7 @@ fn the_primary_button_is_inverted_and_the_cancel_is_plain() {
 fn a_long_body_wraps_inside_the_padding_rather_than_overflowing() {
     let body = "one two three four five six seven eight nine ten eleven twelve";
     let dialog = Dialog::new(State::Info, "T", body);
-    let drawn = plain(&render(&dialog, None, 30));
+    let drawn = plain(&render(&dialog, &[], 30));
     assert!(
         drawn.lines().count() > 6,
         "a body that cannot fit one row did not wrap"
@@ -875,7 +1283,7 @@ fn a_long_body_wraps_inside_the_padding_rather_than_overflowing() {
 #[test]
 fn a_title_too_long_for_the_border_is_truncated_rather_than_breaking_the_frame() {
     let long = "a title far longer than any frame this narrow could ever hold";
-    let drawn = plain(&render(&Dialog::new(State::Info, long, "b"), None, 30));
+    let drawn = plain(&render(&Dialog::new(State::Info, long, "b"), &[], 30));
     let title = drawn.lines().next().unwrap();
     assert_eq!(width_of(title), 30);
     assert!(
@@ -891,7 +1299,7 @@ fn a_width_below_the_floor_is_raised_rather_than_drawn_wrong() {
     // Below the floor the borders, the padding and a glyph collide. A frame
     // that cannot be drawn correctly is worse than one wider than asked.
     for asked in [0, 1, 10, 23] {
-        let drawn = plain(&render(&dialog(), Some(&buttons()), asked));
+        let drawn = plain(&render(&dialog(), &buttons(), asked));
         for line in drawn.lines() {
             assert_eq!(
                 width_of(line),
@@ -909,12 +1317,12 @@ fn labels_too_long_for_the_frame_are_shortened_rather_than_breaking_it() {
     // ⚠️ Labels are the caller's, so no frame width makes them safe. A long
     // action name in a narrow terminal would push the button row through the
     // right border and break every row's alignment at once.
-    let long = Buttons::new(
-        "Rebuild every tab in this workspace",
-        "Leave everything exactly as it is",
-    );
+    let long = vec![
+        Button::new("Rebuild every tab in this workspace"),
+        Button::new("Leave everything exactly as it is"),
+    ];
     for width in [24, 30, 40, 60] {
-        let drawn = plain(&render(&dialog(), Some(&long), width));
+        let drawn = plain(&render(&dialog(), &long, width));
         for line in drawn.lines() {
             assert_eq!(width_of(line), width, "at {}: {:?}", width, line);
         }
@@ -925,98 +1333,123 @@ fn labels_too_long_for_the_frame_are_shortened_rather_than_breaking_it() {
     // ⚠️ Not on one row. Labels this long cannot share a row at any of these
     // widths, so they stack, and each is then shortened only because it will
     // not fit a row by itself. Truncation is the last resort here, not the
-    // first: a_frame_that_cannot_hold_both_buttons_stacks_them_and_keeps_the_labels_whole
+    // first: a_frame_that_cannot_hold_every_button_stacks_them_and_keeps_the_labels_whole
     // pins the case stacking alone rescues.
-    let drawn = plain(&render(&dialog(), Some(&long), 40));
+    let drawn = plain(&render(&dialog(), &long, 40));
     assert!(
         drawn.lines().any(|line| line.contains("Rebuild")),
-        "the primary label was erased: {:?}",
+        "the first label was erased: {:?}",
         drawn
     );
     assert!(
         drawn.lines().any(|line| line.contains("Leave")),
-        "the cancel label was erased: {:?}",
+        "the second label was erased: {:?}",
         drawn
     );
 
     // A pair that already fits is left exactly as the caller wrote it.
-    let short = Buttons::new("Go", "Stop");
-    let fits = plain(&render(&dialog(), Some(&short), 40));
+    let short = vec![Button::new("Go"), Button::new("Stop")];
+    let fits = plain(&render(&dialog(), &short, 40));
     assert!(fits.contains(" Go "), "a fitting label was truncated");
     assert!(fits.contains("Stop"), "a fitting label was truncated");
 }
 
 #[test]
-fn a_frame_that_cannot_hold_both_buttons_stacks_them_and_keeps_the_labels_whole() {
+fn a_frame_that_cannot_hold_every_button_stacks_them_and_keeps_the_labels_whole() {
     // 🪤 The defect the preview exposed on 2026-09-11. The old layout kept the
     // border and cut the words instead: at the floor it drew `↵ reb` and
     // `esc kee`, so "rebuild anyway" and "keep them" both arrived as
-    // fragments. Stacking costs one row of height and keeps both labels.
+    // fragments. Stacking costs one row of height per button and keeps every
+    // label.
     //
     // 🔑 Whole is the assertion. The border holding is checked below as well,
     // but a frame whose borders line up around nonsense was the state this
     // came from, so the border alone cannot be what this test asks.
-    let buttons = Buttons::new("rebuild anyway", "keep them");
-    let frame = layout(&dialog(), Some(&buttons), 30, Hot::None);
-    let drawn = plain(&frame.text);
-    let lines: Vec<&str> = drawn.lines().collect();
+    for labels in [
+        vec!["rebuild anyway", "keep them"],
+        vec!["rebuild anyway", "keep them", "archive"],
+        vec!["rebuild anyway", "keep them", "archive", "ask later"],
+    ] {
+        let buttons: Vec<Button> = labels.iter().map(|label| Button::new(label)).collect();
+        let frame = layout(&dialog(), &buttons, 30, None);
+        let drawn = plain(&frame.text);
+        let lines: Vec<&str> = drawn.lines().collect();
+        assert_eq!(frame.buttons.len(), labels.len(), "a button was not drawn");
 
-    let primary = frame.primary.expect("no primary rectangle");
-    let cancel = frame.cancel.expect("no cancel rectangle");
-    assert_eq!(
-        primary.row + 1,
-        cancel.row,
-        "the buttons did not stack: {:?}",
-        drawn
-    );
+        // One row each, consecutive, in the caller's order.
+        for (index, rect) in frame.buttons.iter().enumerate() {
+            assert_eq!(
+                rect.row,
+                frame.buttons[0].row + index as u16,
+                "{:?} did not stack in order: {:?}",
+                labels,
+                drawn
+            );
+            assert!(
+                lines[rect.row as usize].contains(labels[index]),
+                "{:?} did not survive whole: {:?}",
+                labels[index],
+                lines[rect.row as usize]
+            );
+        }
 
-    assert!(
-        lines[primary.row as usize].contains("rebuild anyway"),
-        "the primary label did not survive whole: {:?}",
-        lines[primary.row as usize]
-    );
-    assert!(
-        lines[cancel.row as usize].contains("keep them"),
-        "the cancel label did not survive whole: {:?}",
-        lines[cancel.row as usize]
-    );
-
-    for line in drawn.lines() {
-        assert_eq!(width_of(line), 30, "the border moved: {:?}", line);
+        for line in drawn.lines() {
+            assert_eq!(width_of(line), 30, "the border moved: {:?}", line);
+        }
     }
 }
 
 #[test]
 fn whether_the_buttons_share_a_row_is_decided_by_what_fits_rather_than_by_a_width() {
     // 🔑 The kit draws the key affordances itself and the labels are the
-    // caller's, so one width stacks one pair and not another. A threshold
+    // caller's, so one width stacks one list and not another. A threshold
     // constant could not answer this, and that is the whole reason the
     // condition is measured against the drawn widths.
-    let rows = |buttons: &Buttons, width: usize| {
-        let frame = layout(&dialog(), Some(buttons), width, Hot::None);
-        (
-            frame.primary.expect("no primary rectangle").row,
-            frame.cancel.expect("no cancel rectangle").row,
-        )
+    let rows = |buttons: &[Button], width: usize| -> Vec<u16> {
+        layout(&dialog(), buttons, width, None)
+            .buttons
+            .iter()
+            .map(|rect| rect.row)
+            .collect()
     };
+    let shared = |rows: &[u16]| rows.iter().all(|row| *row == rows[0]);
 
     // The same frame, two pairs of labels, two different answers.
-    let short = Buttons::new("Go", "Stop");
-    let long = Buttons::new("rebuild anyway", "keep them");
-    let (primary, cancel) = rows(&short, 30);
-    assert_eq!(
-        primary, cancel,
+    let short = vec![Button::new("Go"), Button::new("Stop")];
+    let long = vec![Button::new("rebuild anyway"), Button::new("keep them")];
+    assert!(
+        shared(&rows(&short, 30)),
         "a pair that fits its row was stacked anyway"
     );
-    let (primary, cancel) = rows(&long, 30);
-    assert_ne!(primary, cancel, "a pair too wide for its row shared one");
+    assert!(
+        !shared(&rows(&long, 30)),
+        "a pair too wide for its row shared one"
+    );
 
     // The same pair, one cell either side of where it stops fitting. Found by
     // measuring the drawn widths, not asserted from a constant.
-    let (primary, cancel) = rows(&long, 40);
-    assert_ne!(primary, cancel, "still too wide at 40, and it shared a row");
-    let (primary, cancel) = rows(&long, 41);
-    assert_eq!(primary, cancel, "one more cell fits, and it stacked anyway");
+    assert!(
+        !shared(&rows(&long, 40)),
+        "still too wide at 40, and it shared a row"
+    );
+    assert!(
+        shared(&rows(&long, 41)),
+        "one more cell fits, and it stacked anyway"
+    );
+
+    // 🔑 A sum rather than a pair: a third button costs its own width and a gap,
+    // and when the sum does not fit, every button stacks rather than some.
+    let with_third = vec![
+        Button::new("rebuild anyway"),
+        Button::new("keep them"),
+        Button::new("x"),
+    ];
+    assert!(
+        !shared(&rows(&with_third, 41)),
+        "a third button fitted in the width the pair needed"
+    );
+    let stacked = rows(&with_third, 41);
+    assert_eq!(stacked, vec![stacked[0], stacked[0] + 1, stacked[0] + 2]);
 }
 
 // ── The mouse ─────────────────────────────────────────────────────────────
@@ -1027,70 +1460,50 @@ fn the_buttons_report_where_they_were_actually_drawn() {
     // is painted from the pane's origin, so a reported rectangle has to cover
     // exactly the cells the button really occupies, key affordance included.
     for width in [24, 40, 60, 80] {
-        let frame = layout(&dialog(), Some(&buttons()), width, Hot::None);
-        let drawn = plain(&frame.text);
-        let lines: Vec<&str> = drawn.lines().collect();
-        let primary = frame.primary.expect("no primary rectangle");
-        let cancel = frame.cancel.expect("no cancel rectangle");
+        let frame = layout(&dialog(), &three(), width, None);
+        assert_eq!(frame.buttons.len(), 3, "a button was not reported");
 
         // ⚠️ Each rectangle is read from the row *it* reports, never from one
-        // row assumed to hold both. A frame too narrow for a single row stacks
-        // the buttons, and 24 is such a frame, so a reader that assumed one row
-        // would check the cancel rectangle against the primary's characters.
-        let span = |r: Rect| -> String {
-            lines[r.row as usize]
-                .chars()
-                .skip(r.column as usize)
-                .take(r.width as usize)
-                .collect()
-        };
-
-        assert!(
-            span(primary).starts_with(&format!(" {}", PRIMARY_KEY)),
-            "the primary rectangle covers {:?} at width {}",
-            span(primary),
-            width
-        );
-        assert!(
-            span(cancel).starts_with(CANCEL_KEY),
-            "the cancel rectangle covers {:?} at width {}",
-            span(cancel),
-            width
-        );
-        // The rectangles must not overlap, or one button would swallow clicks
-        // meant for the other. Stacked, they are free to share columns —
-        // being on different rows is what separates them there.
-        if primary.row == cancel.row {
+        // row assumed to hold them all. A frame too narrow for a single row
+        // stacks the buttons, and 24 is such a frame.
+        let expected = [
+            format!(" {}", ENTER_KEY),
+            ESCAPE_KEY.to_string(),
+            "!".to_string(),
+        ];
+        for (rect, key) in frame.buttons.iter().zip(&expected) {
             assert!(
-                primary.column + primary.width <= cancel.column,
-                "the rectangles overlap at width {}",
+                span(&frame.text, *rect).starts_with(key.as_str()),
+                "a rectangle covers {:?} at width {}",
+                span(&frame.text, *rect),
                 width
             );
         }
+        // The rectangles must not overlap, or one button would swallow clicks
+        // meant for another. Stacked, they are free to share columns — being on
+        // different rows is what separates them there.
+        for pair in frame.buttons.windows(2) {
+            if pair[0].row == pair[1].row {
+                assert!(
+                    pair[0].column + pair[0].width <= pair[1].column,
+                    "the rectangles overlap at width {}",
+                    width
+                );
+            }
+        }
     }
 
-    // Exactly, where the frame is wide enough for both labels in full.
-    let frame = layout(&dialog(), Some(&buttons()), 60, Hot::None);
-    let drawn = plain(&frame.text);
-    let row: Vec<char> = drawn
-        .lines()
-        .nth(frame.primary.unwrap().row as usize)
-        .unwrap()
-        .chars()
-        .collect();
-    let span = |r: Rect| -> String {
-        row[r.column as usize..(r.column + r.width) as usize]
-            .iter()
-            .collect()
-    };
+    // Exactly, where the frame is wide enough for every label in full.
+    let frame = layout(&dialog(), &three(), 60, None);
     assert_eq!(
-        span(frame.primary.unwrap()),
-        format!(" {} Rebuild ", PRIMARY_KEY)
+        span(&frame.text, frame.buttons[0]),
+        format!(" {} Delete ", ENTER_KEY)
     );
     assert_eq!(
-        span(frame.cancel.unwrap()),
-        format!("{} Leave it", CANCEL_KEY)
+        span(&frame.text, frame.buttons[1]),
+        format!("{} Keep", ESCAPE_KEY)
     );
+    assert_eq!(span(&frame.text, frame.buttons[2]), "! Archive");
 }
 
 #[test]
@@ -1099,17 +1512,17 @@ fn the_kit_draws_each_key_and_the_caller_never_types_one() {
     // eventually disagree about the symbol, the spacing, or whether to bother.
     let drawn = plain(&render(
         &dialog(),
-        Some(&Buttons::new("close anyway", "keep")),
+        &[Button::new("close anyway"), Button::new("keep")],
         60,
     ));
     assert!(
-        drawn.contains(&format!("{} close anyway", PRIMARY_KEY)),
-        "the primary key was not drawn: {:?}",
+        drawn.contains(&format!("{} close anyway", ENTER_KEY)),
+        "the Enter key was not drawn: {:?}",
         drawn
     );
     assert!(
-        drawn.contains(&format!("{} keep", CANCEL_KEY)),
-        "the cancel key was not drawn: {:?}",
+        drawn.contains(&format!("{} keep", ESCAPE_KEY)),
+        "the Escape key was not drawn: {:?}",
         drawn
     );
     // The caller's label is kept verbatim, so only the prefix is the kit's.
@@ -1118,53 +1531,41 @@ fn the_kit_draws_each_key_and_the_caller_never_types_one() {
 }
 
 #[test]
-fn a_click_on_a_button_is_that_button_and_a_click_anywhere_else_is_neither() {
+fn a_click_on_a_button_is_that_button_and_a_click_anywhere_else_is_none() {
     // ⚠️ Clicking the body must resolve nothing. A misclick that fired a
-    // primary button whose action is destructive is the failure this prevents.
-    let frame = layout(&dialog(), Some(&buttons()), 60, Hot::None);
-    let primary = frame.primary.unwrap();
-    let cancel = frame.cancel.unwrap();
-
-    assert_eq!(frame.hit(primary.column, primary.row), Hot::Primary);
-    assert_eq!(
-        frame.hit(primary.column + primary.width - 1, primary.row),
-        Hot::Primary
-    );
-    assert_eq!(frame.hit(cancel.column, cancel.row), Hot::Cancel);
-    assert_eq!(
-        frame.hit(cancel.column + cancel.width - 1, cancel.row),
-        Hot::Cancel
-    );
-
-    // One cell outside each edge, and the gap between the two.
-    assert_eq!(frame.hit(primary.column - 1, primary.row), Hot::None);
-    assert_eq!(
-        frame.hit(primary.column + primary.width, primary.row),
-        Hot::None
-    );
-    assert_eq!(
-        frame.hit(cancel.column + cancel.width, cancel.row),
-        Hot::None
-    );
+    // leading button whose action is destructive is the failure this prevents.
+    let frame = layout(&dialog(), &three(), 60, None);
+    for (index, rect) in frame.buttons.iter().enumerate() {
+        assert_eq!(frame.hit(rect.column, rect.row), Some(index));
+        assert_eq!(
+            frame.hit(rect.column + rect.width - 1, rect.row),
+            Some(index),
+            "the last cell of button {} missed it",
+            index
+        );
+        // One cell outside each edge, which is the gap between two buttons.
+        assert_eq!(frame.hit(rect.column - 1, rect.row), None);
+        assert_eq!(frame.hit(rect.column + rect.width, rect.row), None);
+    }
+    let first = frame.buttons[0];
     // The row above and the row below hold no buttons at all.
-    assert_eq!(frame.hit(primary.column, primary.row - 1), Hot::None);
-    assert_eq!(frame.hit(primary.column, primary.row + 1), Hot::None);
+    assert_eq!(frame.hit(first.column, first.row - 1), None);
+    assert_eq!(frame.hit(first.column, first.row + 1), None);
     // The title, the body, and the far corner.
-    assert_eq!(frame.hit(0, 0), Hot::None);
-    assert_eq!(frame.hit(5, 3), Hot::None);
-    assert_eq!(frame.hit(59, 0), Hot::None);
+    assert_eq!(frame.hit(0, 0), None);
+    assert_eq!(frame.hit(5, 3), None);
+    assert_eq!(frame.hit(59, 0), None);
 }
 
 #[test]
 fn a_bare_dialog_offers_nothing_to_click() {
-    let frame = layout(&dialog(), None, 40, Hot::None);
-    assert_eq!(frame.primary, None);
-    assert_eq!(frame.cancel, None);
-    // Every position on a bare dialog is neither button, so the caller's
-    // "any click dismisses" rule can never be overridden by a hit.
+    let frame = layout(&dialog(), &[], 40, None);
+    assert!(frame.buttons.is_empty());
+    // Every position on a bare dialog is no button, so the caller's "any click
+    // dismisses" rule can never be overridden by a hit.
     for row in 0..frame.text.lines().count() as u16 {
         for column in [0, 5, 20, 39] {
-            assert_eq!(frame.hit(column, row), Hot::None);
+            assert_eq!(frame.hit(column, row), None);
         }
     }
 }
@@ -1174,21 +1575,16 @@ fn hover_changes_attributes_and_never_geometry() {
     // 🔑 The invariant that makes a hover repaint safe. Every redraw paints from
     // the pane's origin over the previous frame, so if the pointer could move a
     // cell the frame would accumulate rather than replace.
-    let reference = layout(&dialog(), Some(&buttons()), 60, Hot::None);
-    for hot in [Hot::None, Hot::Primary, Hot::Cancel] {
-        let frame = layout(&dialog(), Some(&buttons()), 60, hot);
+    let reference = layout(&dialog(), &three(), 60, None);
+    for hot in [None, Some(0), Some(1), Some(2), Some(3)] {
+        let frame = layout(&dialog(), &three(), 60, hot);
         assert_eq!(
             plain(&frame.text),
             plain(&reference.text),
             "{:?} moved a character",
             hot
         );
-        assert_eq!(
-            frame.primary, reference.primary,
-            "{:?} moved the primary",
-            hot
-        );
-        assert_eq!(frame.cancel, reference.cancel, "{:?} moved the cancel", hot);
+        assert_eq!(frame.buttons, reference.buttons, "{:?} moved a button", hot);
     }
 }
 
@@ -1196,55 +1592,61 @@ fn hover_changes_attributes_and_never_geometry() {
 fn only_the_hovered_button_is_underlined() {
     let underline = "\u{1b}[4m";
 
-    let none = layout(&dialog(), Some(&buttons()), 60, Hot::None);
+    let none = layout(&dialog(), &three(), 60, None);
     assert!(
         !none.text.contains(underline),
         "nothing hovered, yet underlined"
     );
 
-    let primary = layout(&dialog(), Some(&buttons()), 60, Hot::Primary);
-    let row = primary
-        .text
-        .lines()
-        .find(|line| line.contains("Rebuild"))
-        .unwrap();
-    assert_eq!(
-        row.matches(underline).count(),
-        1,
-        "not exactly one underline"
-    );
-    assert!(
-        row.split("Rebuild").next().unwrap().contains(underline),
-        "the underline is not on the primary button"
-    );
+    for (hot, label) in [(0, "Delete"), (1, "Keep"), (2, "Archive")] {
+        let frame = layout(&dialog(), &three(), 60, Some(hot));
+        let row = frame
+            .text
+            .lines()
+            .find(|line| line.contains(label))
+            .unwrap();
+        assert_eq!(
+            row.matches(underline).count(),
+            1,
+            "not exactly one underline hovering {}",
+            hot
+        );
+        // The underline opens after every earlier label and before this one.
+        let before = row.split(label).next().unwrap();
+        let after_underline = before.rsplit(underline).next().unwrap();
+        assert!(
+            before.contains(underline),
+            "the underline is not before button {}: {:?}",
+            hot,
+            row
+        );
+        assert!(
+            !["Delete", "Keep", "Archive"]
+                .iter()
+                .any(|other| after_underline.contains(other)),
+            "the underline is on another button than {}: {:?}",
+            hot,
+            row
+        );
+    }
 
-    let cancel = layout(&dialog(), Some(&buttons()), 60, Hot::Cancel);
-    let row = cancel
-        .text
-        .lines()
-        .find(|line| line.contains("Leave it"))
-        .unwrap();
-    assert_eq!(
-        row.matches(underline).count(),
-        1,
-        "not exactly one underline"
-    );
+    // An index no button has marks nothing.
+    let past = layout(&dialog(), &three(), 60, Some(3));
     assert!(
-        row.split(CANCEL_KEY).next().unwrap().ends_with(underline),
-        "the underline is not on the cancel affordance: {:?}",
-        row
+        !past.text.contains(underline),
+        "a missing button was hovered"
     );
 }
 
 #[test]
-fn an_empty_primary_label_draws_its_key_alone_and_keeps_the_frame_square() {
-    // Reachable from the caller rather than from truncation: `Buttons::new`
-    // defaults an empty cancel label but not an empty primary one, so a caller
-    // can hand one in. The key must then stand alone, because a separator with
-    // nothing after it pads the inversion with a cell of nothing.
-    let buttons = Buttons::new("", "keep");
+fn an_empty_first_label_draws_its_key_alone_and_keeps_the_frame_square() {
+    // Reachable from the caller rather than from truncation: `Button::new("")`
+    // is a button a caller can hand in. The key must then stand alone, because
+    // a separator with nothing after it pads the inversion with a cell of
+    // nothing.
+    let buttons = vec![Button::new(""), Button::new("keep")];
     for width in [24, 40, 60] {
-        let drawn = plain(&render(&dialog(), Some(&buttons), width));
+        let drawn = plain(&render(&dialog(), &buttons, width));
         for line in drawn.lines() {
             assert_eq!(width_of(line), width, "at {}: {:?}", width, line);
         }
@@ -1252,27 +1654,16 @@ fn an_empty_primary_label_draws_its_key_alone_and_keeps_the_frame_square() {
     // The reported width is what discriminates. A separator that survived an
     // empty label would make the button one cell wider, and the surrounding
     // gap makes that invisible to any search of the drawn text.
-    let frame = layout(&dialog(), Some(&buttons), 60, Hot::None);
-    let primary = frame.primary.expect("no primary rectangle");
+    let frame = layout(&dialog(), &buttons, 60, None);
+    let first = frame.buttons[0];
     assert_eq!(
-        primary.width,
-        (cells_of(PRIMARY_KEY) + 2) as u16,
+        first.width,
+        (cells_of(ENTER_KEY) + 2) as u16,
         "a separator survived an empty label"
     );
-
-    let drawn = plain(&frame.text);
-    let row: Vec<char> = drawn
-        .lines()
-        .nth(primary.row as usize)
-        .unwrap()
-        .chars()
-        .collect();
-    let span: String = row[primary.column as usize..(primary.column + primary.width) as usize]
-        .iter()
-        .collect();
     assert_eq!(
-        span,
-        format!(" {} ", PRIMARY_KEY),
+        span(&frame.text, first),
+        format!(" {} ", ENTER_KEY),
         "the key did not stand alone"
     );
 }
@@ -1284,7 +1675,7 @@ fn cells_of(text: &str) -> usize {
 
 #[test]
 fn an_empty_body_still_draws_a_complete_frame() {
-    let drawn = plain(&render(&Dialog::new(State::Info, "", ""), None, 24));
+    let drawn = plain(&render(&Dialog::new(State::Info, "", ""), &[], 24));
     let lines: Vec<&str> = drawn.lines().collect();
     assert_eq!(
         lines.len(),
@@ -1297,40 +1688,44 @@ fn an_empty_body_still_draws_a_complete_frame() {
 }
 
 #[test]
-fn a_click_lands_on_the_right_button_when_the_two_are_stacked() {
+fn a_click_lands_on_the_right_button_when_they_are_stacked() {
     // 🚨 The rectangles move to different rows when a frame is too narrow for
     // one, and `Frame::hit` is what the mouse path asks. A hit test written
-    // against a single shared row answers `Hot::None` for one of the two and
-    // loses every click on it, in silence.
-    let buttons = Buttons::new("rebuild anyway", "keep them");
-    let frame = layout(&dialog(), Some(&buttons), 30, Hot::None);
-    let primary = frame.primary.expect("no primary rectangle");
-    let cancel = frame.cancel.expect("no cancel rectangle");
-    assert_ne!(primary.row, cancel.row, "the buttons did not stack");
+    // against a single shared row answers `None` for all but one of them and
+    // loses every click on the rest, in silence.
+    let buttons = vec![
+        Button::new("rebuild anyway"),
+        Button::new("keep them"),
+        Button::new("archive"),
+    ];
+    let frame = layout(&dialog(), &buttons, 30, None);
+    assert_eq!(frame.buttons.len(), 3);
+    assert_ne!(
+        frame.buttons[0].row, frame.buttons[1].row,
+        "the buttons did not stack"
+    );
 
     // Both edges of each, because a rectangle that is off by one at either end
     // still answers correctly in the middle.
-    assert_eq!(Hot::Primary, frame.hit(primary.column, primary.row));
+    for (index, rect) in frame.buttons.iter().enumerate() {
+        assert_eq!(Some(index), frame.hit(rect.column, rect.row));
+        assert_eq!(
+            Some(index),
+            frame.hit(rect.column + rect.width - 1, rect.row)
+        );
+        // 🚨 A position on no button answers none. An actioned dialog treats
+        // that as no answer, and its leading button may be destructive.
+        assert_eq!(
+            None,
+            frame.hit(rect.column + rect.width, rect.row),
+            "a cell past button {}'s right edge answered it",
+            index
+        );
+    }
+    let first = frame.buttons[0];
     assert_eq!(
-        Hot::Primary,
-        frame.hit(primary.column + primary.width - 1, primary.row)
-    );
-    assert_eq!(Hot::Cancel, frame.hit(cancel.column, cancel.row));
-    assert_eq!(
-        Hot::Cancel,
-        frame.hit(cancel.column + cancel.width - 1, cancel.row)
-    );
-
-    // 🚨 A position on neither button answers neither. An actioned dialog
-    // treats that as no answer, and its primary may be destructive.
-    assert_eq!(
-        Hot::None,
-        frame.hit(primary.column + primary.width, primary.row),
-        "a cell past the primary's right edge answered it"
-    );
-    assert_eq!(
-        Hot::None,
-        frame.hit(primary.column, primary.row - 1),
+        None,
+        frame.hit(first.column, first.row - 1),
         "the blank row above the buttons answered one"
     );
 }

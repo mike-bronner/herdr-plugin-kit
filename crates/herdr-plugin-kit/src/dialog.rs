@@ -1,8 +1,8 @@
 //! Styled dialogs in four states, drawn in a Herdr popup.
 //!
 //! Two variants. [`notify`] informs and returns at once. [`ask`] puts a
-//! question with two buttons and waits for which one the user chose. See
-//! SCOPE.md §7.5.
+//! question with any number of buttons and waits for which one the user chose.
+//! See SCOPE.md §7.5.
 //!
 //! # Why a popup, and what that costs
 //!
@@ -84,6 +84,19 @@
 //! text, so treat click forwarding into a popup as **very likely rather than
 //! settled**. Every answer is therefore reachable from the keyboard alone, and
 //! a dialog whose clicks never arrive is fully usable rather than unusable.
+//!
+//! 🔑 **That sentence survives any number of buttons, and holding it is why
+//! [`Button::keys`] is shaped the way it is.** A caller names the key on each
+//! button, and every button still answers **exactly one** key, so no answer can
+//! end up reachable by click alone. A dialog that needed a click was rejected by
+//! Mike on 2026-09-14, on exactly this measurement: it would rest an answer on
+//! click forwarding nobody has confirmed. SCOPE.md §7.5.8 records it.
+//!
+//! ⚠️ **Ctrl-C is the exception, and it is the last way out**: it always ends the
+//! dialog, no naming can take it away, and it is the only key that answers
+//! without being drawn. 🚨 **It chooses no button.** With several buttons every
+//! candidate target is a real action the user did not pick, so it resolves the
+//! dialog **unanswered** rather than inventing a choice on their behalf.
 //!
 //! # Which workspace a dialog appears in
 //!
@@ -185,11 +198,8 @@ pub const TITLE_VAR: &str = "HERDR_PLUGIN_DIALOG_TITLE";
 /// The dialog's body. Newlines separate paragraphs, and each is wrapped.
 pub const BODY_VAR: &str = "HERDR_PLUGIN_DIALOG_BODY";
 
-/// The primary button's label. **Its absence is what makes a dialog bare.**
-pub const PRIMARY_VAR: &str = "HERDR_PLUGIN_DIALOG_PRIMARY";
-
-/// The cancel affordance's label.
-pub const CANCEL_VAR: &str = "HERDR_PLUGIN_DIALOG_CANCEL";
+/// The prefix of the variable carrying one button. See [`button_var`].
+pub const BUTTON_VAR: &str = "HERDR_PLUGIN_DIALOG_BUTTON_";
 
 /// Where the popup writes which button the user chose.
 pub const ANSWER_FILE_VAR: &str = "HERDR_PLUGIN_DIALOG_ANSWER_FILE";
@@ -197,34 +207,67 @@ pub const ANSWER_FILE_VAR: &str = "HERDR_PLUGIN_DIALOG_ANSWER_FILE";
 /// Where the popup writes its own process id, before drawing anything.
 pub const STARTED_FILE_VAR: &str = "HERDR_PLUGIN_DIALOG_STARTED_FILE";
 
-/// The word the popup writes when the user chose the primary button.
-pub const PRIMARY_WORD: &str = "primary";
+/// The variable carrying the button at `index`, counting from zero.
+///
+/// 🔑 **One variable per button, and the list ends at the first absent one.**
+/// A single variable holding every button would need a separator, and a label is
+/// the caller's string: any separator a label can contain turns one button into
+/// two, which changes the set of answers rather than merely the drawing.
+///
+/// 🔑 **Each one carries exactly what its button draws**: the resolved key, a
+/// space, then the label. The key vocabulary is [`Key::drawn`]'s
+/// — the Enter glyph, the Escape word, or one ASCII graphic character — and none
+/// of those contains a space, so the first space is an unambiguous split and
+/// every label survives verbatim, spaces and all.
+///
+/// ⚠️ **`BUTTON_0`'s absence is what makes a dialog bare**, which is the rule the
+/// primary label's absence used to carry.
+pub fn button_var(index: usize) -> String {
+    format!("{}{}", BUTTON_VAR, index)
+}
 
-/// The word the popup writes when the user cancelled.
-pub const CANCEL_WORD: &str = "cancel";
+/// The word the popup writes when nobody chose a button.
+///
+/// 🚨 **Ctrl-C writes this, and so does every other way of ending without a
+/// choice.** It is not a button and it can never become one: the waiting half
+/// reads it as [`Unanswered::Dismissed`], which is what the popup dying without
+/// answering already meant. Writing it rather than exiting silently is what
+/// makes the outcome immediate on every platform, including Windows, where the
+/// liveness check cannot prove a death.
+///
+/// It is not a number, so no button index can collide with it.
+pub const DISMISSED_WORD: &str = "dismissed";
 
-/// The label a dialog uses when the caller names no cancel affordance.
-pub const DEFAULT_CANCEL: &str = "Cancel";
-
-/// The key affordance drawn on the primary button, by the kit and not the caller.
+/// The glyph for Enter, drawn by the kit and never by the caller.
 ///
 /// 🔑 **The kit draws this, so three plugins cannot disagree about it.** A
 /// caller writing its own `↵` into a label is how the symbol, the spacing, or
 /// whether to bother at all drift apart across repositories, which is the exact
-/// class of divergence this crate exists to end.
+/// class of divergence this crate exists to end. ➕ **That is why a caller *names*
+/// the key on each button and never draws one** ([`Key`]): the choice is the
+/// consumer's, and the character on the frame stays the kit's.
 ///
 /// It matters more now the dialogs are mouse first: a button somebody clicks
 /// still has to advertise the key for somebody who will not.
 ///
+/// 🚨 **It is drawn on whichever button Enter answers, and nowhere else.** The
+/// frame never draws a key that answers nothing, which is [`Button::keys`]'s rule
+/// and SCOPE.md §7.5.8's record.
+///
 /// U+21B5 rather than U+23CE, and neither has an emoji presentation, so no
 /// text-presentation selector is needed on either.
-pub const PRIMARY_KEY: &str = "\u{21b5}";
+pub const ENTER_KEY: &str = "\u{21b5}";
 
-/// The key affordance drawn on the cancel affordance. See [`PRIMARY_KEY`].
+/// The key affordance for Escape. See [`ENTER_KEY`].
 ///
 /// A word rather than a glyph, because no single character means Escape and an
 /// invented one would have to be learned.
-pub const CANCEL_KEY: &str = "esc";
+///
+/// 🔑 **Drawn on whichever button Escape answers.** ⚠️ **Never the first**, which
+/// is [`Button::keys`]'s one safety rule: the way out must not fire the action
+/// the dialog leads with. A list where no button answers Escape leaves it undrawn
+/// and answering nothing, and **Ctrl-C is then the only undrawn way out**.
+pub const ESCAPE_KEY: &str = "esc";
 
 /// The popup's requested width, as a percentage of the tab.
 ///
@@ -251,7 +294,7 @@ const VERTICAL_PADDING: usize = 2;
 /// Blank columns inside the border, on each side.
 const SIDE_PADDING: usize = 3;
 
-/// Blank columns between the primary button and the cancel affordance.
+/// Blank columns between two buttons sharing a row.
 const BUTTON_GAP: usize = 2;
 
 /// The narrowest frame that still has a column of text inside it.
@@ -460,34 +503,313 @@ impl Dialog {
     }
 }
 
-/// The two affordances an actioned dialog offers.
+/// A key a caller can put on a button, and the kit draws.
 ///
-/// **The labels are the caller's. The keys are the kit's.** A button is drawn
-/// as its key affordance, a space, then the label, so `Buttons::new("close
-/// anyway", "keep")` draws `↵ close anyway` and `esc keep` without the caller
-/// typing either. See [`PRIMARY_KEY`] for why that boundary sits there.
+/// 🔑 **The caller chooses which key, and the kit still draws it.** Only the
+/// caller knows what its buttons do; only the kit can keep three plugins drawing
+/// one symbol at one spacing ([`ENTER_KEY`]). So a caller **names** a key and
+/// never types a glyph into a label, which is the boundary this type exists to
+/// keep.
 ///
-/// The kit also fixes how they are drawn: the primary inverted in the state's
-/// colour, and the cancel as plain text.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Buttons {
-    /// The action the dialog is asking about. **Enter chooses this one.**
-    pub primary: String,
-    /// The way out. Escape and Ctrl-C both choose this one.
-    pub cancel: String,
+/// 🔑 **Keys do not move, and that is the whole rule.** A key answers the button
+/// it is named on, and nothing else. There is no displacement to reason about:
+/// [`Key::Enter`] answers whichever button names it, and answers nothing at all
+/// where no button does.
+///
+/// | Button 0 | Button 1 | 0 draws | 1 draws | Enter | Escape |
+/// |---|---|---|---|---|---|
+/// | unnamed | unnamed | `↵` | `esc` | button 0 | button 1 |
+/// | `Char('y')` | unnamed | `y` | `esc` | nothing | button 1 |
+/// | unnamed | `Char('n')` | `↵` | `n` | button 0 | nothing |
+/// | `Char('y')` | `Char('n')` | `y` | `n` | nothing | nothing |
+/// | `Char('y')` | `Enter` | `y` | `↵` | button 1 | nothing |
+///
+/// 🔑 **Every key the frame draws answers the button it is drawn on, and every
+/// key that answers is drawn.** Ctrl-C is the single exception and is never
+/// configurable: it is the last way out of a raw-mode dialog, a popup carries no
+/// pane id to close, and a caller must not be able to take the exit away. It
+/// **understates** the frame rather than contradicting it, and it is what makes
+/// naming a key over Escape safe. See [`Button::keys`], which is where a naming
+/// that cannot be honoured is resolved.
+///
+/// ⚠️ **Naming replaces rather than adds.** A button that names a character is a
+/// button Enter no longer reaches. That is Mike's instruction of 2026-09-14, and
+/// SCOPE.md §7.5.8 records the cost beside it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Key {
+    /// The Enter key, drawn as [`ENTER_KEY`].
+    ///
+    /// ⚠️ **It answers whatever the state is**, [`State::Danger`] included.
+    /// Confirmed by Mike, and it matches Herdr's own delete-worktree dialog. So a
+    /// caller putting a destructive action on the button Enter answers is putting
+    /// it one Enter away, and either orders the list with that in mind or names
+    /// another key.
+    ///
+    /// 🔑 **Naming it on a later button is how the safe answer goes under the key
+    /// people press to dismiss what they have not read.** [`Button::keys`] then
+    /// gives the first button something else, because one key cannot answer two
+    /// buttons.
+    Enter,
+    /// The Escape key, drawn as [`ESCAPE_KEY`].
+    ///
+    /// ⚠️ **Never answers the first button.** A dialog whose way out fires the
+    /// action it leads with is not a dialog, so naming it there is resolved to
+    /// another key. It is the same reasoning that keeps Ctrl-C unconfigurable.
+    Escape,
+    /// This character, drawn as itself, matched case-insensitively so `'y'`
+    /// accepts `Y`.
+    ///
+    /// 🚨 **It must be an ASCII graphic character, and one predicate carries
+    /// three rules.** Such a character is **exactly one cell wide**, which is
+    /// what `cells` assumes when it counts characters rather than measuring
+    /// width; none of them is East Asian Width `Ambiguous`, so no terminal
+    /// *setting* can decide the width and break the frame, which is §7.5.4's
+    /// worst trap; and none of them is whitespace, so an affordance cannot
+    /// advertise an invisible key. Measuring real width instead would cost a
+    /// runtime dependency §7.5.7 argues against.
+    ///
+    /// ⚠️ **Anything else takes the first free key instead** rather than leaving
+    /// a button no key answers. It is a caller's mistake, it is visible the first
+    /// time the frame is drawn, and [`Button::keys`] reports what it became.
+    Char(char),
 }
 
-impl Buttons {
-    /// Builds a button pair, defaulting the cancel label when it is empty.
-    pub fn new(primary: &str, cancel: &str) -> Buttons {
-        Buttons {
-            primary: primary.to_string(),
-            cancel: match cancel.trim().is_empty() {
-                true => DEFAULT_CANCEL.to_string(),
-                false => cancel.to_string(),
-            },
+impl Key {
+    /// What the frame draws for this key, and what the wire carries.
+    ///
+    /// 🔑 **One string doing both jobs, so the two cannot drift.**
+    /// [`button_var`] carries exactly this, and [`Key::from_wire`] reads it back,
+    /// so a key the popup half draws is a key the asking half chose.
+    pub fn drawn(self) -> String {
+        match self {
+            Key::Enter => ENTER_KEY.to_string(),
+            Key::Escape => ESCAPE_KEY.to_string(),
+            Key::Char(key) => key.to_string(),
         }
     }
+
+    /// Reads a key back, or `None` for a value that names no key at all.
+    ///
+    /// Absent, empty, and anything outside the vocabulary all answer `None`,
+    /// which is exactly what a button naming no key at all says, so an unreadable
+    /// value takes the first free key like any other unnamed button. ⚠️ **One rule
+    /// for every unusable value, pointing the same way at every button** — a rule
+    /// that read one garbled key differently from another would be two rules
+    /// wearing one name.
+    ///
+    /// 🔑 The vocabulary is [`Key::drawn`]'s, so every value this crate writes
+    /// round-trips: the Enter glyph, the Escape word, or one character.
+    pub fn from_wire(word: Option<&str>) -> Option<Key> {
+        let word = word.map(str::trim).filter(|word| !word.is_empty())?;
+        match word {
+            ENTER_KEY => Some(Key::Enter),
+            ESCAPE_KEY => Some(Key::Escape),
+            _ => {
+                let mut characters = word.chars();
+                match (characters.next(), characters.next()) {
+                    (Some(key), None) => Key::named(key),
+                    _ => None,
+                }
+            }
+        }
+    }
+
+    /// The key a character makes, or `None` when a character cannot be one.
+    ///
+    /// 🔑 **The single place the character rule lives**, so a codepoint that
+    /// cannot be drawn as one cell cannot be a key on one path and a fallback on
+    /// another. [`Key::Char`] carries the three rules this predicate holds.
+    fn named(key: char) -> Option<Key> {
+        match key.is_ascii_graphic() {
+            true => Some(Key::Char(key)),
+            false => None,
+        }
+    }
+
+    /// Whether this keypress is this key.
+    ///
+    /// ⚠️ **Shift is the only modifier a character tolerates**, because it is how
+    /// an uppercase character arrives at all. `Alt-y` is a different chord. Enter
+    /// and Escape are matched whatever the modifiers, which is what they did
+    /// before any of this was configurable.
+    fn answers(
+        self,
+        code: crossterm::event::KeyCode,
+        modifiers: crossterm::event::KeyModifiers,
+    ) -> bool {
+        use crossterm::event::{KeyCode, KeyModifiers};
+        match (self, code) {
+            (Key::Enter, KeyCode::Enter) => true,
+            (Key::Escape, KeyCode::Esc) => true,
+            (Key::Char(key), KeyCode::Char(typed)) => {
+                modifiers.difference(KeyModifiers::SHIFT).is_empty()
+                    && typed.eq_ignore_ascii_case(&key)
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether these two settings are the same keypress.
+    ///
+    /// Case-insensitive for characters, for the reason [`Key::answers`] is: `'y'`
+    /// and `'Y'` are one key, so naming one on each of two buttons is a collision
+    /// rather than two keys.
+    fn same_as(self, other: Key) -> bool {
+        match (self, other) {
+            (Key::Enter, Key::Enter) | (Key::Escape, Key::Escape) => true,
+            (Key::Char(one), Key::Char(other)) => one.eq_ignore_ascii_case(&other),
+            _ => false,
+        }
+    }
+}
+
+/// One button an actioned dialog offers.
+///
+/// **The label is the caller's. The key is the caller's. Drawing both is the
+/// kit's.** A button is drawn as its key, a space, then the label, so
+/// `Button::new("close anyway")` draws `↵ close anyway` without the caller typing
+/// the glyph. See [`ENTER_KEY`] for why that boundary sits there, and [`Key`] for
+/// what a caller may put on a button.
+///
+/// The kit also fixes how a list is drawn: **the first button is inverted in the
+/// state's colour and every other one is plain text.** Emphasis is positional, so
+/// a caller chooses it by choosing the order — the same lever it already uses for
+/// reading order.
+///
+/// ➕ **The keys ride on the buttons rather than on [`ask`]**, because they are a
+/// property of the answers, and because the list is the one value that already
+/// crosses to the popup half — [`ask`] sends it and [`Popup::from_env`] reads it
+/// back, so both halves cannot disagree about which key answers what.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Button {
+    /// What the button says. Drawn after its key, and never truncated while the
+    /// row can hold it whole.
+    pub label: String,
+    /// The key this button asks for, or `None` to take whatever is free.
+    ///
+    /// ⚠️ Read through [`Button::keys`] rather than directly, which is where a
+    /// naming that cannot be honoured is resolved.
+    pub key: Option<Key>,
+}
+
+impl Button {
+    /// Builds a button that takes whatever key is free. See [`Button::keys`].
+    pub fn new(label: &str) -> Button {
+        Button {
+            label: label.to_string(),
+            key: None,
+        }
+    }
+
+    /// Names the key that answers this button, **and leaves that key answering
+    /// nothing anywhere else**.
+    ///
+    /// `Button::new("close anyway").on_key(Key::Char('y'))` draws
+    /// `y close anyway`. Naming [`Key::Enter`] on a later button is how the safe
+    /// answer goes under the key people press to dismiss what they have not read.
+    ///
+    /// ⚠️ **Ctrl-C still ends the dialog**, and it is the only way out that
+    /// survives every naming. That is deliberate rather than an oversight, and it
+    /// chooses no button: see [`Key`].
+    pub fn on_key(self, key: Key) -> Button {
+        Button {
+            key: Some(key),
+            ..self
+        }
+    }
+
+    /// The key each button actually answers, in the buttons' own order.
+    ///
+    /// 🔑 **The single place a naming is interpreted.** Every reader — both input
+    /// paths, the drawing, and the wire — asks this one question, so a naming that
+    /// cannot be honoured cannot be honoured on one path and dropped on another.
+    /// It is idempotent, and both halves of the binary run it.
+    ///
+    /// 🔑 **One rule, walked in order, with no special case per button.** Each
+    /// button takes the key it named, or **the first key still free** when it
+    /// cannot — and free runs [`Key::Escape`], then [`Key::Enter`], then the ASCII
+    /// graphic characters in codepoint order, skipping every key an earlier button
+    /// took and skipping Escape on the first button.
+    ///
+    /// A naming cannot be honoured in three cases, and all three simply fall
+    /// through to that ladder rather than leaving a button no key answers:
+    ///
+    /// - [`Key::Escape`] on the **first** button, because the way out must not
+    ///   fire the action the dialog leads with.
+    /// - A [`Key::Char`] outside the character rule, because the frame could not
+    ///   draw it at a width it can measure.
+    /// - A key an **earlier** button already took, case included, because one
+    ///   keypress cannot answer two buttons and the frame would have to lie about
+    ///   one of them.
+    ///
+    /// ✅ **Escape first in the ladder is what reproduces the pair this module
+    /// shipped with.** Two buttons naming nothing resolve to Enter then Escape,
+    /// and a first button naming a character leaves Escape on the second, which is
+    /// what a caller that names nothing has always drawn and answered.
+    ///
+    /// 🚨 **A button no key answers is the one thing that stays unrepresentable.**
+    /// The mouse-only dialog Mike rejected on 2026-09-14 cannot be built, and the
+    /// ladder can never produce one while the list is no longer than the keys the
+    /// ladder can tell apart.
+    ///
+    /// ⚠️ **A list longer than that loses its tail, and the limit is 70, not
+    /// 96.** The ladder yields 96 keys, but a letter and its capital are one
+    /// keypress, so 26 of them collide with a key already held and at most 70
+    /// buttons are keyed. Buttons past the 70th get none — this answers shorter
+    /// than the list it was given, and everything that draws, sends or hit-tests
+    /// a button walks *this* answer. A button with no key is drawn nowhere and
+    /// answers nothing rather than existing unreachably.
+    ///
+    /// ⚠️ **Resolved rather than refused**, and that is a judgement recorded in
+    /// SCOPE.md §7.5.8: each case is a cross-field or value-level condition, and
+    /// refusing them would need fallible builders or private fields, neither of
+    /// which this module uses. This is how a caller checks what its naming became.
+    pub fn keys(buttons: &[Button]) -> Vec<Key> {
+        let mut taken: Vec<Key> = Vec::with_capacity(buttons.len());
+        for (index, button) in buttons.iter().enumerate() {
+            // One predicate for a naming and for the ladder, so a key a naming
+            // may not have is a key the ladder may not hand out either.
+            let allowed = |key: Key| {
+                let usable = match key {
+                    Key::Char(character) => Key::named(character).is_some(),
+                    _ => true,
+                };
+                // Escape is the way out, so the first button never answers it —
+                // whether it asked for it or merely reached it down the ladder.
+                usable
+                    && !(index == 0 && key == Key::Escape)
+                    && !taken.iter().any(|held| held.same_as(key))
+            };
+            let resolved = button
+                .key
+                .filter(|key| allowed(*key))
+                .or_else(|| ladder().find(|key| allowed(*key)));
+            match resolved {
+                Some(key) => taken.push(key),
+                // The ladder is exhausted, so no later button can be keyed
+                // either: stopping here is what keeps the answer a prefix of the
+                // list rather than a list with holes in it.
+                None => break,
+            }
+        }
+        taken
+    }
+}
+
+/// Every key a button can fall back to, in the order they are offered.
+///
+/// 🔑 **Escape before Enter, which is not arbitrary.** It is what makes a list of
+/// two unnamed buttons resolve to Enter then Escape: the first button skips
+/// Escape and takes Enter, and the second finds Escape free. Enter first would
+/// hand Enter to the second button of any list whose first names a character,
+/// which is not what this module has ever drawn.
+///
+/// The ASCII graphic characters are exactly what [`Key::named`] admits, so every
+/// key this yields can be drawn at a width [`cells`] can count.
+fn ladder() -> impl Iterator<Item = Key> {
+    [Key::Escape, Key::Enter]
+        .into_iter()
+        .chain((b'!'..=b'~').map(|point| Key::Char(point as char)))
 }
 
 /// What became of a notification sent because a popup was unavailable.
@@ -542,7 +864,14 @@ pub enum Unanswered {
     Busy(Explained),
     /// The popup could not be opened, or its channel could not be made.
     Failed(String),
-    /// The popup process died without answering, which is what closing it does.
+    /// **Nobody chose.** The popup was closed, Ctrl-C ended it, or there was no
+    /// way to read a choice at all.
+    ///
+    /// 🚨 **Ctrl-C answers no button, and that is a decision rather than an
+    /// omission.** With several buttons every candidate target is a real action
+    /// the user did not pick, and the kit never invents a choice on their behalf —
+    /// the same rule it already applies to a click on the body and to an unbound
+    /// key. SCOPE.md §7.5.8 records it.
     Dismissed,
     /// The popup never reported that it started, so it never drew.
     ///
@@ -551,34 +880,37 @@ pub enum Unanswered {
     NeverShown,
     /// Nobody answered inside `WAIT`.
     TimedOut,
-    /// The channel carried a word that is neither choice.
+    /// The channel carried a word that names no button of this dialog.
     ///
     /// Kept apart from [`Unanswered::Dismissed`] because it means something
     /// different: a popup left over from an older build, or a channel somebody
-    /// else wrote into.
+    /// else wrote into. ⚠️ An index past the last button lands here too, rather
+    /// than becoming a choice.
     Unrecognised(String),
 }
 
-/// What the user chose, or why nobody did.
+/// Which button the user chose, or why nobody did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Answer {
-    /// The user chose the primary button.
-    Primary,
-    /// The user chose the cancel affordance.
-    Cancel,
+    /// The user chose the button at this index, counting from zero.
+    Chose(usize),
     /// Nobody chose, and this is why.
     Unanswered(Unanswered),
 }
 
 impl Answer {
-    /// Whether the user explicitly chose the primary button.
+    /// Whether the user explicitly chose the button at `index`.
     ///
-    /// 🔑 **The safety property, as one call.** Every other outcome, including
-    /// every failure to open, to start, or to be answered, answers `false`. A
-    /// caller acting on an actioned dialog asks this rather than matching,
-    /// because a match written the other way round acts on silence.
-    pub fn chose_primary(&self) -> bool {
-        matches!(self, Answer::Primary)
+    /// 🔑 **The safety property, as one call.** Every other outcome answers
+    /// `false`: another button, every failure to open, to start, or to be
+    /// answered, and **an index this dialog has no button for**. A caller acting
+    /// on an actioned dialog asks this rather than matching, because a match
+    /// written the other way round acts on silence.
+    ///
+    /// Buttons are identified by index rather than by label, because labels are
+    /// the caller's: they can repeat, and they can be empty.
+    pub fn chose(&self, index: usize) -> bool {
+        *self == Answer::Chose(index)
     }
 }
 
@@ -600,7 +932,7 @@ impl Answer {
 /// with, and a [`Shown::Notified`] carries a reason that may well mean the
 /// notification was dropped too.
 pub fn notify(transport: &mut impl Transport, plugin_id: &str, dialog: &Dialog) -> Shown {
-    match transport.open_pane(open_params(plugin_id, dialog, None, None)) {
+    match transport.open_pane(open_params(plugin_id, dialog, &[], None)) {
         Ok(()) => Shown::Opened,
         Err(OpenError::Failed(why)) => Shown::Failed(why),
         // A dialog that only informs can say the same thing through a
@@ -625,13 +957,29 @@ pub fn notify(transport: &mut impl Transport, plugin_id: &str, dialog: &Dialog) 
 /// caller learns it has no answer, and it learns whether the explanation landed.
 ///
 /// Every way of not being answered is reported rather than swallowed, and none
-/// of them answers [`Answer::Primary`]. Use [`Answer::chose_primary`].
+/// of them answers [`Answer::Chose`]. Use [`Answer::chose`].
+///
+/// ➕ **Which key answers each button rides on the buttons.** A caller that names
+/// nothing gets Enter on the first and Escape on the second, which is what this
+/// module has always drawn. A caller whose leading action destroys something
+/// unrecoverable names a key with [`Button::on_key`], and can put the safe answer
+/// under Enter by naming it on a later button.
+///
+/// 🚨 **A list with no buttons is refused rather than opened.** Nobody could
+/// answer it, and the single-popup limit is global (§7.5.3), so an unanswerable
+/// question would block every dialog in every workspace until it timed out.
 pub fn ask(
     transport: &mut impl Transport,
     plugin_id: &str,
     dialog: &Dialog,
-    buttons: &Buttons,
+    buttons: &[Button],
 ) -> Answer {
+    if buttons.is_empty() {
+        return Answer::Unanswered(Unanswered::Failed(
+            "a question with no buttons cannot be answered".to_string(),
+        ));
+    }
+
     let channel = match Channel::new() {
         Ok(channel) => channel,
         Err(e) => {
@@ -642,13 +990,8 @@ pub fn ask(
         }
     };
 
-    match transport.open_pane(open_params(
-        plugin_id,
-        dialog,
-        Some(buttons),
-        Some(&channel),
-    )) {
-        Ok(()) => decide(channel.watch()),
+    match transport.open_pane(open_params(plugin_id, dialog, buttons, Some(&channel))) {
+        Ok(()) => decide(channel.watch(), Button::keys(buttons).len()),
         Err(OpenError::Failed(why)) => Answer::Unanswered(Unanswered::Failed(why)),
         Err(OpenError::Busy) => {
             let body = format!(
@@ -705,16 +1048,20 @@ fn explain(transport: &mut impl Transport, title: &str, body: &str) -> Explained
 fn open_params(
     plugin_id: &str,
     dialog: &Dialog,
-    buttons: Option<&Buttons>,
+    buttons: &[Button],
     channel: Option<&Channel>,
 ) -> PluginPaneOpenParams {
     let mut env: HashMap<String, String> = HashMap::new();
     env.insert(STATE_VAR.to_string(), dialog.state.as_wire().to_string());
     env.insert(TITLE_VAR.to_string(), dialog.title.clone());
     env.insert(BODY_VAR.to_string(), dialog.body.clone());
-    if let Some(buttons) = buttons {
-        env.insert(PRIMARY_VAR.to_string(), buttons.primary.clone());
-        env.insert(CANCEL_VAR.to_string(), buttons.cancel.clone());
+    // 🔑 Each button travels as exactly what it draws, carrying the **resolved**
+    // key rather than the named one, so the popup half is told what a caller's
+    // naming actually became. Walking the resolved keys rather than the buttons is
+    // also what drops a tail the ladder could not key: a button the frame would
+    // never draw is a button the popup is never told about.
+    for (index, (key, button)) in Button::keys(buttons).iter().zip(buttons).enumerate() {
+        env.insert(button_var(index), keyed(&key.drawn(), &button.label));
     }
     if let Some(channel) = channel {
         env.insert(
@@ -768,16 +1115,27 @@ enum Ended {
     TimedOut,
 }
 
-/// What an ending means.
+/// What an ending means, given how many buttons the dialog actually had.
 ///
-/// **Only an exact word is acted on.** Everything else is reported as
-/// unanswered, and none of it can ever answer [`Answer::Primary`].
-fn decide(ended: Ended) -> Answer {
+/// **Only an exact index is acted on.** Everything else is reported as
+/// unanswered, and none of it can ever answer [`Answer::Chose`].
+///
+/// 🔑 **The index is matched by rebuilding what the popup writes**, rather than by
+/// parsing. The two halves share one vocabulary that way, and `00`, `+0` and any
+/// other spelling a parser would accept stays unrecognised — which is the same
+/// discipline [`Key::drawn`] and [`Key::from_wire`] already keep.
+///
+/// ⚠️ **`keys` is the count, never the caller's list.** A button the ladder could
+/// not key is drawn nowhere and sent nowhere, so an index reaching it names no
+/// button of this dialog.
+fn decide(ended: Ended, keys: usize) -> Answer {
     match ended {
-        Ended::Answered(word) => match word.as_str() {
-            PRIMARY_WORD => Answer::Primary,
-            CANCEL_WORD => Answer::Cancel,
-            other => Answer::Unanswered(Unanswered::Unrecognised(other.to_string())),
+        Ended::Answered(word) => match (0..keys).find(|index| index.to_string() == word) {
+            Some(index) => Answer::Chose(index),
+            // Includes DISMISSED_WORD, which is how Ctrl-C and every other
+            // choiceless ending arrive immediately rather than being waited out.
+            None if word == DISMISSED_WORD => Answer::Unanswered(Unanswered::Dismissed),
+            None => Answer::Unanswered(Unanswered::Unrecognised(word)),
         },
         Ended::Dismissed => Answer::Unanswered(Unanswered::Dismissed),
         Ended::NeverShown => Answer::Unanswered(Unanswered::NeverShown),
@@ -916,7 +1274,7 @@ fn process_is_alive(pid: &str) -> bool {
 /// The consequence is precise and it is safe: a popup the user closes is not
 /// noticed at once, and the question runs out [`WAIT`] and answers
 /// [`Unanswered::TimedOut`] rather than [`Unanswered::Dismissed`]. Slow rather
-/// than wrong, and no outcome becomes [`Answer::Primary`].
+/// than wrong, and no outcome becomes [`Answer::Chose`].
 ///
 /// Compile-verified only, like everything else Windows in this kit. Nobody on
 /// this project has Windows hardware. See the README.
@@ -936,8 +1294,9 @@ fn process_is_alive(_pid: &str) -> bool {
 pub struct Popup {
     /// What to draw.
     pub dialog: Dialog,
-    /// The buttons, or `None` for a bare dialog that dismisses on any key.
-    pub buttons: Option<Buttons>,
+    /// The buttons, in order. **Empty is a bare dialog** that dismisses on any
+    /// key, because a dialog with nothing to choose is exactly that.
+    pub buttons: Vec<Button>,
     /// Where to write the chosen word.
     pub answer_file: Option<PathBuf>,
     /// Where to write this process's id, before drawing anything.
@@ -947,40 +1306,41 @@ pub struct Popup {
 impl Popup {
     /// Reads what to draw out of the environment Herdr launched this pane with.
     ///
-    /// 🔑 **The primary label's absence is what makes a dialog bare.** There is
-    /// no separate flag, because a bare dialog is exactly one with no button to
-    /// label, and two ways of saying so could disagree.
+    /// 🔑 **`BUTTON_0`'s absence is what makes a dialog bare**, and the list ends
+    /// at the first index that is not there. There is no separate count and no
+    /// separate flag, because two ways of saying how many buttons there are could
+    /// disagree.
     ///
     /// Every variable that is set but empty counts as absent, which is the
     /// idiom [`crate::env`] documents at nearly every call site.
+    ///
+    /// 🔑 **Each value is split at its first space**, which is [`button_var`]'s
+    /// encoding read back: no key is ever drawn with a space in it, so the label
+    /// on the right survives verbatim and may itself hold spaces or be empty.
+    ///
+    /// A value naming no key leaves that button unnamed, which is
+    /// [`Key::from_wire`]'s rule and the same one the asking half applied.
     pub fn from_env(env: &Environment) -> Popup {
         let value = |key: &str| env.get(key).filter(|text| !text.is_empty());
+        let mut buttons = Vec::new();
+        while let Some(drawn) = value(&button_var(buttons.len())) {
+            let (key, label) = drawn.split_once(' ').unwrap_or((drawn, ""));
+            buttons.push(Button {
+                label: label.to_string(),
+                key: Key::from_wire(Some(key)),
+            });
+        }
         Popup {
             dialog: Dialog {
                 state: State::from_wire(env.get(STATE_VAR)),
                 title: value(TITLE_VAR).unwrap_or_default().to_string(),
                 body: value(BODY_VAR).unwrap_or_default().to_string(),
             },
-            buttons: value(PRIMARY_VAR)
-                .map(|primary| Buttons::new(primary, value(CANCEL_VAR).unwrap_or_default())),
+            buttons,
             answer_file: value(ANSWER_FILE_VAR).map(PathBuf::from),
             started_file: value(STARTED_FILE_VAR).map(PathBuf::from),
         }
     }
-}
-
-/// Which button the pointer is over, or which one a click landed on.
-///
-/// One type for hover and for hit-testing, because they ask the same question.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Hot {
-    /// Neither button. A click here resolves nothing.
-    #[default]
-    None,
-    /// The primary button.
-    Primary,
-    /// The cancel affordance.
-    Cancel,
 }
 
 /// Where a button was drawn, in the pane's own coordinates.
@@ -1016,26 +1376,21 @@ impl Rect {
 pub struct Frame {
     /// The whole dialog, newline-separated, with its escape sequences.
     pub text: String,
-    /// Where the primary button was drawn, or `None` on a bare dialog.
-    pub primary: Option<Rect>,
-    /// Where the cancel affordance was drawn, or `None` on a bare dialog.
-    pub cancel: Option<Rect>,
+    /// Where each button was drawn, in the buttons' own order. **Empty on a bare
+    /// dialog**, and shorter than the caller's list where the key ladder ran out.
+    pub buttons: Vec<Rect>,
 }
 
 impl Frame {
-    /// Which button is at this pane-local position.
+    /// Which button is at this pane-local position, or `None` for no button.
     ///
-    /// ⚠️ **A position on neither button answers [`Hot::None`]**, and an
-    /// actioned dialog treats that as no answer at all. Clicking the body text
-    /// must not resolve a question whose primary button may be destructive.
-    pub fn hit(&self, column: u16, row: u16) -> Hot {
-        if self.primary.is_some_and(|r| r.contains(column, row)) {
-            return Hot::Primary;
-        }
-        if self.cancel.is_some_and(|r| r.contains(column, row)) {
-            return Hot::Cancel;
-        }
-        Hot::None
+    /// ⚠️ **A position on no button answers `None`**, and an actioned dialog
+    /// treats that as no answer at all. Clicking the body text must not resolve a
+    /// question whose leading button may be destructive.
+    pub fn hit(&self, column: u16, row: u16) -> Option<usize> {
+        self.buttons
+            .iter()
+            .position(|button| button.contains(column, row))
     }
 }
 
@@ -1049,7 +1404,7 @@ impl Frame {
 /// │                                    │
 /// │   The body, wrapped to the width.  │
 /// │                                    │
-/// │           [ Primary ]  Cancel      │
+/// │           [ ↵ First ]  esc Next    │
 /// │                                    │
 /// ╰────────────────────────────────────╯
 /// ```
@@ -1065,8 +1420,8 @@ impl Frame {
 ///
 /// A bare dialog has neither the button row nor its separator.
 ///
-/// 🔑 **The buttons stack when a single row cannot hold both labels whole**,
-/// one per row, each centred on its own:
+/// 🔑 **The buttons share one row while they all fit it whole, and otherwise take
+/// one row each**, each centred on its own:
 ///
 /// ```text
 /// ╭─ ⚠ Title ──────────╮
@@ -1089,12 +1444,13 @@ impl Frame {
 ///
 /// ⚠️ **The height is not bounded here.** A body longer than the popup scrolls
 /// in the pane, which can carry the bottom border off the top. The frame is
-/// width-driven only, and the caller sizes the popup with [`HEIGHT`].
+/// width-driven only, and the caller sizes the popup with [`HEIGHT`]. A long list
+/// of stacked buttons costs height the same way.
 ///
 /// 🔑 **`hot` changes attributes and never geometry.** Every value produces the
 /// same characters in the same cells, which is what lets a hover redraw
-/// overwrite the previous frame exactly.
-pub fn layout(dialog: &Dialog, buttons: Option<&Buttons>, width: usize, hot: Hot) -> Frame {
+/// overwrite the previous frame exactly. `None` is nothing hovered.
+pub fn layout(dialog: &Dialog, buttons: &[Button], width: usize, hot: Option<usize>) -> Frame {
     let width = width.max(MIN_WIDTH);
     let inner = width - 2;
     let text_width = inner - 2 * SIDE_PADDING;
@@ -1108,24 +1464,22 @@ pub fn layout(dialog: &Dialog, buttons: Option<&Buttons>, width: usize, hot: Hot
         lines.push(body_line(&line, text_width, &colour));
     }
 
-    let mut primary = None;
-    let mut cancel = None;
-    if let Some(buttons) = buttons {
+    let mut rects = Vec::new();
+    if !buttons.is_empty() {
         lines.push(blank_line(inner, &colour));
         let (drawn, spans) = button_rows(buttons, text_width, &colour, hot);
         // The row the buttons start on is simply the row the first is pushed
         // to. Each span carries its own offset from there, which is zero for
-        // both when they share a row and zero and one when they are stacked.
+        // every button when they share a row and its own index when they stack.
         let first = lines.len() as u16;
-        primary = Some(spans.0.at(first));
-        cancel = Some(spans.1.at(first));
+        rects = spans.into_iter().map(|span| span.at(first)).collect();
         lines.extend(drawn);
     }
 
     // Two rows below, except under a button row, where one is enough.
-    let bottom = match buttons.is_some() {
-        true => 1,
-        false => VERTICAL_PADDING,
+    let bottom = match buttons.is_empty() {
+        false => 1,
+        true => VERTICAL_PADDING,
     };
     for _ in 0..bottom {
         lines.push(blank_line(inner, &colour));
@@ -1134,8 +1488,7 @@ pub fn layout(dialog: &Dialog, buttons: Option<&Buttons>, width: usize, hot: Hot
 
     Frame {
         text: lines.join("\n"),
-        primary,
-        cancel,
+        buttons: rects,
     }
 }
 
@@ -1143,15 +1496,15 @@ pub fn layout(dialog: &Dialog, buttons: Option<&Buttons>, width: usize, hot: Hot
 ///
 /// The convenience [`layout`] exists behind. A caller that only displays a
 /// dialog wants the characters and nothing else.
-pub fn render(dialog: &Dialog, buttons: Option<&Buttons>, width: usize) -> String {
-    layout(dialog, buttons, width, Hot::None).text
+pub fn render(dialog: &Dialog, buttons: &[Button], width: usize) -> String {
+    layout(dialog, buttons, width, None).text
 }
 
 /// A button's extent, before the frame knows which row the buttons start on.
 ///
 /// `row` counts from the first button row rather than from the top of the
-/// dialog, because a stacked layout puts the two buttons on different rows and
-/// the frame is the only thing that knows where those rows begin.
+/// dialog, because a stacked layout puts each button on its own row and the
+/// frame is the only thing that knows where those rows begin.
 #[derive(Debug, Clone, Copy)]
 struct Span {
     column: u16,
@@ -1211,51 +1564,79 @@ fn body_line(text: &str, text_width: usize, colour: &str) -> String {
     format!("{colour}│{RESET}{pad}{text}{fill}{pad}{colour}│{RESET}")
 }
 
-/// The button rows, and where the two buttons landed across them.
+/// The button rows, and where each button landed across them.
 ///
-/// 🔑 **Both buttons share a row only while both fit it whole. Otherwise they
-/// stack, one per row.** Decided by Mike on 2026-09-11, after the preview
-/// showed what the alternative actually rendered: at the 24-cell floor the
-/// labels were being cut to `↵ reb` and `esc kee`, so "rebuild anyway" and
+/// 🔑 **They share one row only while they all fit it whole. Otherwise they
+/// stack, one per row.** Decided by Mike on 2026-09-11 for a pair, after the
+/// preview showed what the alternative actually rendered: at the 24-cell floor
+/// the labels were being cut to `↵ reb` and `esc kee`, so "rebuild anyway" and
 /// "keep them" both became fragments. Truncating rather than pushing the row
 /// through the right border was the right instinct, but three characters of a
 /// label is not a label.
 ///
+/// ➕ **A sum in place of a pair generalises it rather than replacing it**, and
+/// the `n = 2` answer is unchanged. Greedy packing that fills each row was
+/// rejected: it makes the emphasised button's position depend on label lengths,
+/// and it produces ragged rows the approved design never showed.
+///
 /// Two alternatives were considered and rejected: drawing the keys alone loses
 /// the words entirely, and raising [`MIN_WIDTH`] means a narrow pane gets no
-/// dialog at all rather than a usable one. Stacking costs one row of height,
-/// which is the cheapest thing here to spend.
+/// dialog at all rather than a usable one. Stacking costs one row of height per
+/// button, which is the cheapest thing here to spend.
 ///
 /// ⚠️ **The threshold is measured, not a number.** The kit draws the key
 /// affordances itself and the labels are the caller's, so the question is
-/// whether these two drawn buttons and the gap between them fit *this* frame —
+/// whether these drawn buttons and the gaps between them fit *this* frame —
 /// never whether the frame is narrower than some constant.
+///
+/// 🔑 **Only the first button is emphasised**, inverted and padded; every other
+/// one is plain text. Emphasis is positional, so the caller chooses it by
+/// ordering the list. SCOPE.md §7.5.4 records why a button carries no emphasis
+/// field.
 fn button_rows(
-    buttons: &Buttons,
+    buttons: &[Button],
     text_width: usize,
     colour: &str,
-    hot: Hot,
-) -> (Vec<String>, (Span, Span)) {
-    let primary = drawn_button(PRIMARY_KEY, &buttons.primary, true, text_width);
-    let cancel = drawn_button(CANCEL_KEY, &buttons.cancel, false, text_width);
+    hot: Option<usize>,
+) -> (Vec<String>, Vec<Span>) {
+    // 🔑 Each button draws the key that answers it, read through the one resolver
+    // both input paths read. So the frame cannot advertise a key that answers
+    // nothing, whatever a caller named — and a button the ladder could not key
+    // falls off this walk, so it is never drawn at all. See [`Button::keys`].
+    let drawn: Vec<(String, bool, bool)> = Button::keys(buttons)
+        .iter()
+        .zip(buttons)
+        .enumerate()
+        .map(|(index, (key, button))| {
+            let first = index == 0;
+            (
+                drawn_button(&key.drawn(), &button.label, first, text_width),
+                first,
+                hot == Some(index),
+            )
+        })
+        .collect();
 
-    if cells(&primary) + BUTTON_GAP + cells(&cancel) <= text_width {
-        let (line, spans) = buttons_row(
-            &[
-                (primary, true, hot == Hot::Primary),
-                (cancel, false, hot == Hot::Cancel),
-            ],
-            text_width,
-            colour,
-        );
-        return (vec![line], (spans[0], spans[1]));
+    let together = drawn.iter().map(|(text, ..)| cells(text)).sum::<usize>()
+        + BUTTON_GAP * drawn.len().saturating_sub(1);
+    if together <= text_width {
+        let (line, spans) = buttons_row(&drawn, text_width, colour);
+        return (vec![line], spans);
     }
 
-    // Stacked. The primary goes first, because it names the action the dialog
-    // is asking about and reading order should reach it first.
-    let (top, above) = buttons_row(&[(primary, true, hot == Hot::Primary)], text_width, colour);
-    let (below, under) = buttons_row(&[(cancel, false, hot == Hot::Cancel)], text_width, colour);
-    (vec![top, below], (above[0], Span { row: 1, ..under[0] }))
+    // Stacked, in the caller's order, so reading order reaches the emphasised
+    // button first.
+    let mut lines = Vec::with_capacity(drawn.len());
+    let mut spans = Vec::with_capacity(drawn.len());
+    for (row, item) in drawn.into_iter().enumerate() {
+        let (line, alone) = buttons_row(&[item], text_width, colour);
+        lines.push(line);
+        spans.push(Span {
+            row: row as u16,
+            ..alone[0]
+        });
+    }
+    (lines, spans)
 }
 
 /// One row of buttons, centred as a group, and where each one landed on it.
@@ -1268,13 +1649,13 @@ fn button_rows(
 /// swaps foreground and background, so setting the foreground to the state's
 /// colour and inverting gives that colour as the background with the text
 /// inverted against it, which is what Mike asked for. It also keeps the text in
-/// the terminal's own background colour, so the pair stays legible in a light
+/// the terminal's own background colour, so the row stays legible in a light
 /// theme and a dark one without this module knowing which is in force.
 ///
 /// 🔑 **Hover adds an underline, and nothing else.** A stronger treatment was
-/// considered and rejected: inversion already means "this is the default
-/// button", so giving a hovered cancel the same treatment would make the two
-/// buttons look alike exactly when the user is about to click one. An underline
+/// considered and rejected: inversion already means "this is the button the
+/// dialog leads with", so giving a hovered sibling the same treatment would make
+/// the buttons look alike exactly when the user is about to click one. An underline
 /// is unambiguous, universally supported, and occupies no cells, so the frame's
 /// geometry cannot move when the pointer does.
 fn buttons_row(
@@ -1326,11 +1707,11 @@ fn buttons_row(
 /// One button, drawn, with its label shortened only if it alone overflows.
 ///
 /// ⚠️ **Truncation is the last resort rather than the first.** Stacking handles
-/// two labels that will not share a row; this handles one label that will not
-/// fit a row by itself, which no layout can rescue. Pushing it through the
-/// right border instead would break every row's alignment at once.
+/// labels that will not share a row; this handles one label that will not fit a
+/// row by itself, which no layout can rescue. Pushing it through the right
+/// border instead would break every row's alignment at once.
 ///
-/// The key affordance and the primary's own padding are never shortened,
+/// The key affordance and the first button's own padding are never shortened,
 /// because a button cut to nothing still has to be clickable and still has to
 /// say which key answers it.
 fn drawn_button(key: &str, label: &str, padded: bool, text_width: usize) -> String {
@@ -1506,8 +1887,8 @@ pub fn run(env: &Environment) -> Result<(), String> {
 
     // A dialog with no buttons is bare, and a dialog with no answer file has
     // nowhere to answer. Either one means nobody is waiting on a choice.
-    let actioned = popup.buttons.is_some();
-    let answer = interact(&popup.dialog, popup.buttons.as_ref());
+    let actioned = !popup.buttons.is_empty();
+    let answer = interact(&popup.dialog, &popup.buttons);
 
     let Some(answer_file) = popup.answer_file.filter(|_| actioned) else {
         return Ok(());
@@ -1539,22 +1920,38 @@ fn pane_width() -> usize {
 /// ⚠️ **That measurement was taken on a plugin pane, and this module draws in a
 /// popup specifically.** Nobody has confirmed the placement from the source
 /// text, so treat click forwarding into a popup as very likely rather than
-/// settled. Every answer is therefore reachable from the keyboard alone, and a
-/// dialog whose clicks never arrive is fully usable rather than stuck.
-fn interact(dialog: &Dialog, buttons: Option<&Buttons>) -> &'static str {
+/// settled. Every answer is therefore reachable from the keyboard alone, in every
+/// configuration, and a dialog whose clicks never arrive is fully usable rather
+/// than stuck. 🔑 **[`Button::keys`] holds that property rather than spending
+/// it**: every button always answers exactly one key, and the frame draws it.
+///
+/// 🔑 **A click on a button means that button's answer, whatever key is named.**
+/// The mouse aims at a labelled button, so what it resolves is never in question.
+///
+/// 🚨 **Every ending that is not a choice writes [`DISMISSED_WORD`]**, which
+/// includes Ctrl-C, a terminal that stopped answering, and a line naming nothing.
+/// "Fail closed to the cancel button" has no meaning once there is no cancel
+/// button, and choosing the last button instead would only be safe if every
+/// caller put its safe answer last — which the kit can neither enforce nor check.
+fn interact(dialog: &Dialog, buttons: &[Button]) -> String {
     use crossterm::event::{read, Event, KeyEventKind, MouseButton, MouseEventKind};
 
+    let keys = Button::keys(buttons);
     let Some(_terminal) = TerminalState::enter() else {
         // No tty, so no raw mode and no mouse. Draw once and read a line.
         println!("{}", render(dialog, buttons, FALLBACK_WIDTH));
-        return match buttons {
-            Some(_) => read_line(),
-            None => dismiss_on_a_line(),
+        return match buttons.is_empty() {
+            // 🔑 The same keys as the raw-mode path, from the same resolver. A
+            // dialog that answered differently depending on which input path the
+            // terminal took would be harder to diagnose than one simply bound
+            // the wrong way.
+            false => read_line(&keys),
+            true => dismiss_on_a_line(),
         };
     };
 
     let mut width = pane_width();
-    let mut hot = Hot::None;
+    let mut hot = None;
     let mut frame = draw(dialog, buttons, width, hot);
 
     loop {
@@ -1565,11 +1962,11 @@ fn interact(dialog: &Dialog, buttons: Option<&Buttons>) -> &'static str {
                 if key.kind != KeyEventKind::Press {
                     continue;
                 }
-                match buttons {
+                match buttons.is_empty() {
                     // A bare dialog dismisses on any key.
-                    None => return CANCEL_WORD,
-                    Some(_) => {
-                        if let Some(answer) = key_answer(key.code, key.modifiers) {
+                    true => return DISMISSED_WORD.to_string(),
+                    false => {
+                        if let Some(answer) = key_answer(key.code, key.modifiers, &keys) {
                             return answer;
                         }
                     }
@@ -1579,19 +1976,18 @@ fn interact(dialog: &Dialog, buttons: Option<&Buttons>) -> &'static str {
                 MouseEventKind::Down(button) => {
                     // ⚠️ Only the left button activates. A right-click is
                     // forwarded identically, as `<2;`, and treating it as an
-                    // activation would put a destructive primary button behind
-                    // a menu gesture that means nothing in a dialog.
-                    match buttons {
+                    // activation would put a destructive first button behind a
+                    // menu gesture that means nothing in a dialog.
+                    match buttons.is_empty() {
                         // Nothing to aim at, so any button dismisses.
-                        None => return CANCEL_WORD,
-                        Some(_) if button != MouseButton::Left => continue,
-                        Some(_) => match frame.hit(mouse.column, mouse.row) {
-                            Hot::Primary => return PRIMARY_WORD,
-                            Hot::Cancel => return CANCEL_WORD,
+                        true => return DISMISSED_WORD.to_string(),
+                        false if button != MouseButton::Left => continue,
+                        false => match frame.hit(mouse.column, mouse.row) {
+                            Some(index) => return index.to_string(),
                             // A click on the body is not an answer. Resolving
-                            // it would let a misclick fire a primary button
+                            // it would let a misclick fire a leading button
                             // whose action may be destructive.
-                            Hot::None => continue,
+                            None => continue,
                         },
                     }
                 }
@@ -1610,13 +2006,13 @@ fn interact(dialog: &Dialog, buttons: Option<&Buttons>) -> &'static str {
             Ok(Event::Resize(columns, _)) => {
                 width = columns as usize;
                 // The pointer's old row may not hold a button any more.
-                hot = Hot::None;
+                hot = None;
                 frame = draw(dialog, buttons, width, hot);
             }
             Ok(_) => continue,
             // ⚠️ Fails closed. A terminal that stopped answering cannot be read
-            // as the user choosing the primary button.
-            Err(_) => return CANCEL_WORD,
+            // as the user choosing anything at all.
+            Err(_) => return DISMISSED_WORD.to_string(),
         }
     }
 }
@@ -1629,7 +2025,7 @@ fn interact(dialog: &Dialog, buttons: Option<&Buttons>) -> &'static str {
 ///
 /// `\r\n` rather than `\n`: raw mode does no carriage return of its own, so a
 /// bare newline would staircase the frame across the pane.
-fn draw(dialog: &Dialog, buttons: Option<&Buttons>, width: usize, hot: Hot) -> Frame {
+fn draw(dialog: &Dialog, buttons: &[Button], width: usize, hot: Option<usize>) -> Frame {
     use std::io::Write;
     let frame = layout(dialog, buttons, width, hot);
     print!("{}{}", HOME, frame.text.replace('\n', "\r\n"));
@@ -1637,36 +2033,43 @@ fn draw(dialog: &Dialog, buttons: Option<&Buttons>, width: usize, hot: Hot) -> F
     frame
 }
 
-/// What one key means in an actioned dialog, or `None` for "keep waiting".
+/// The word one keypress writes, or `None` for "keep waiting".
 ///
-/// 🔑 **Enter chooses the primary button**, which is what makes the inverted
-/// button a default rather than decoration. ✅ That was the open question
-/// blocking this design, and it is settled: measured 2026-09-11 by logging raw
-/// stdin bytes in every pane process and injecting keystrokes, a popup takes
-/// keyboard input **exclusively** and the base pane received nothing.
+/// 🔑 **Every key here answers the button the frame drew it on**, which is the
+/// property [`Button::keys`] exists to hold. ✅ The measurement that settled the
+/// design holds for all of them: taken 2026-09-11 by logging raw stdin bytes in
+/// every pane process and injecting keystrokes, a popup takes keyboard input
+/// **exclusively** and the base pane received nothing.
 ///
-/// ⚠️ **The default is the primary button whatever the state**, including
-/// [`State::Danger`]. Confirmed by Mike, and it matches Herdr's own
-/// delete-worktree dialog. So a caller putting a destructive action on the
-/// primary button is putting it one Enter away, and should choose which action
-/// is primary with that in mind.
+/// 🚨 **Ctrl-C always ends the dialog, is never configurable, and is decided
+/// first.** It is the last way out of a raw-mode dialog: a popup carries no pane
+/// id to close, clicks into one are unproven, and a caller must not be able to
+/// take the exit away. Deciding it before anything else is what stops a named
+/// `'c'` from shadowing it, and it is what makes naming a key over Escape safe.
+/// 🚨 **It chooses no button**, because with several buttons every candidate is a
+/// real action the user did not pick.
 ///
-/// **An unlisted key is ignored and the dialog stays open.** That is not the
-/// same as cancelling, and the difference matters: an unbound key must not
-/// resolve the question in either direction.
+/// ⚠️ **The buttons are asked in reverse order.** With collisions already
+/// resolved, no keypress can answer two, so the order changes no answer. It is
+/// this way round so that a collision which somehow survived resolution would
+/// answer **away from** the emphasised button rather than towards it.
+///
+/// **An unlisted key is ignored and the dialog stays open.** That is not the same
+/// as ending it, and the difference matters: an unbound key must not resolve the
+/// question in any direction. ⚠️ Enter and Escape are unbound like any other key
+/// where no button names them.
 fn key_answer(
     code: crossterm::event::KeyCode,
     modifiers: crossterm::event::KeyModifiers,
-) -> Option<&'static str> {
+    keys: &[Key],
+) -> Option<String> {
     use crossterm::event::{KeyCode, KeyModifiers};
-    match code {
-        KeyCode::Enter => Some(PRIMARY_WORD),
-        KeyCode::Esc => Some(CANCEL_WORD),
-        // Ctrl-C in raw mode is a key event rather than a signal, and somebody
-        // pressing it means to get out.
-        KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => Some(CANCEL_WORD),
-        _ => None,
+    if matches!(code, KeyCode::Char('c')) && modifiers.contains(KeyModifiers::CONTROL) {
+        return Some(DISMISSED_WORD.to_string());
     }
+    keys.iter()
+        .rposition(|key| key.answers(code, modifiers))
+        .map(|index| index.to_string())
 }
 
 /// One line, where there is no terminal to read a keypress or a click from.
@@ -1676,26 +2079,62 @@ fn key_answer(
 /// script. Falling back to a line keeps both choices answerable either way, and
 /// means the fallback is exercised rather than being untested code that only
 /// runs once something has already gone wrong.
-fn read_line() -> &'static str {
+fn read_line(keys: &[Key]) -> String {
     let mut typed = String::new();
-    match std::io::stdin().read_line(&mut typed) {
-        // End of input is not an answer.
-        Ok(0) | Err(_) => CANCEL_WORD,
-        // ⚠️ Only an empty line means Enter, matching the raw-mode binding. Any
-        // typed word is not one of the two choices and must not resolve the
-        // question toward the primary button.
-        Ok(_) => match typed.trim().is_empty() {
-            true => PRIMARY_WORD,
-            false => CANCEL_WORD,
+    let read = std::io::stdin().read_line(&mut typed);
+    line_answer(
+        match read {
+            Ok(0) | Err(_) => None,
+            Ok(_) => Some(typed.as_str()),
         },
-    }
+        keys,
+    )
+}
+
+/// What a typed line means, with the reading of stdin taken out.
+///
+/// The split is [`Ended`]'s, for [`Ended`]'s reason: a decision nobody can reach
+/// without a pty is a decision that rots. `None` is end of input or a stdin that
+/// could not be read at all.
+///
+/// 🔑 **It turns the line into a keypress and asks [`key_answer`], rather than
+/// deciding anything itself.** An empty line is Enter and a single character is
+/// that character, so the two input paths cannot disagree **by construction**
+/// rather than by two implementations being kept in step. A test asserts the
+/// agreement as well, because construction is only an argument until it is
+/// measured.
+///
+/// ⚠️ **Escape cannot be typed as a line**, so a dialog with a button on Escape
+/// has no line that reaches it. That is what the choiceless default below is for.
+///
+/// ⚠️ Chooses nothing everywhere else, and has to: this path gets one line rather
+/// than a loop, so "keep waiting" is not available to it. No input at all,
+/// several characters, and a keypress that answers nothing all end the dialog
+/// unanswered — including a word that merely *starts* with a named key, which is
+/// not that keypress.
+fn line_answer(typed: Option<&str>, keys: &[Key]) -> String {
+    use crossterm::event::{KeyCode, KeyModifiers};
+    let Some(text) = typed.map(str::trim) else {
+        // End of input is not an answer.
+        return DISMISSED_WORD.to_string();
+    };
+    let mut characters = text.chars();
+    let pressed = match (characters.next(), characters.next()) {
+        (None, _) => Some(KeyCode::Enter),
+        (Some(typed), None) => Some(KeyCode::Char(typed)),
+        // Several characters are no keypress at all.
+        _ => None,
+    };
+    pressed
+        .and_then(|code| key_answer(code, KeyModifiers::NONE, keys))
+        .unwrap_or_else(|| DISMISSED_WORD.to_string())
 }
 
 /// A bare dialog with no tty. Anything at all dismisses it, including nothing.
-fn dismiss_on_a_line() -> &'static str {
+fn dismiss_on_a_line() -> String {
     let mut typed = String::new();
     let _ = std::io::stdin().read_line(&mut typed);
-    CANCEL_WORD
+    DISMISSED_WORD.to_string()
 }
 
 #[cfg(test)]
@@ -1706,60 +2145,134 @@ mod tests {
     const QUICK: Duration = Duration::from_millis(250);
 
     #[test]
-    fn the_two_words_are_distinct() {
-        // They travel through a file between two processes, so a collision
-        // would make one choice unreachable.
-        assert_ne!(PRIMARY_WORD, CANCEL_WORD);
+    fn the_dismissal_word_can_never_be_a_button() {
+        // It travels through the same file as the indices, so a word a button
+        // could also write would make one outcome unreachable.
+        assert!(
+            DISMISSED_WORD.parse::<usize>().is_err(),
+            "{} reads as an index",
+            DISMISSED_WORD
+        );
+        assert_eq!(
+            decide(Ended::Answered(DISMISSED_WORD.to_string()), KEYABLE),
+            Answer::Unanswered(Unanswered::Dismissed),
+            "the widest dialog there can be still read it as a dismissal"
+        );
     }
 
     #[test]
-    fn only_the_exact_word_chooses_the_primary_button() {
+    fn only_an_exact_index_chooses_a_button() {
+        // 🔑 The safety property, swept over every ending and every spelling a
+        // parser would have accepted.
         for ended in [
-            Ended::Answered(CANCEL_WORD.to_string()),
             Ended::Answered(String::new()),
-            Ended::Answered("PRIMARY".to_string()),
-            Ended::Answered("prim".to_string()),
-            Ended::Answered("primary ok".to_string()),
-            Ended::Answered("yes".to_string()),
-            Ended::Answered("close".to_string()),
+            Ended::Answered("00".to_string()),
+            Ended::Answered("+0".to_string()),
+            Ended::Answered("0.0".to_string()),
+            Ended::Answered("-1".to_string()),
+            // Past the last button, which is a word naming no button here.
+            Ended::Answered("2".to_string()),
+            Ended::Answered("primary".to_string()),
+            Ended::Answered("0 ok".to_string()),
+            Ended::Answered(DISMISSED_WORD.to_string()),
             Ended::Dismissed,
             Ended::NeverShown,
             Ended::TimedOut,
         ] {
-            assert!(
-                !decide(ended.clone()).chose_primary(),
-                "{:?} chose the primary button",
-                ended
+            for index in 0..2 {
+                assert!(
+                    !decide(ended.clone(), 2).chose(index),
+                    "{:?} chose button {}",
+                    ended,
+                    index
+                );
+            }
+        }
+        assert!(decide(Ended::Answered("0".to_string()), 2).chose(0));
+        assert!(decide(Ended::Answered("1".to_string()), 2).chose(1));
+        // And a choice of one button is never a choice of another.
+        assert!(!decide(Ended::Answered("1".to_string()), 2).chose(0));
+        // An index no button has answers false rather than panicking.
+        assert!(!decide(Ended::Answered("1".to_string()), 2).chose(99));
+    }
+
+    #[test]
+    fn every_index_the_popup_writes_reads_back_as_that_button() {
+        // 🔑 The two halves share one vocabulary: `key_answer` writes the index
+        // and `decide` reads it. This measures the round trip rather than
+        // trusting two calls to `to_string` to stay in step.
+        use crossterm::event::{KeyCode, KeyModifiers};
+        let buttons: Vec<Button> = (0..12).map(|n| Button::new(&format!("b{}", n))).collect();
+        let keys = Button::keys(&buttons);
+        assert_eq!(keys.len(), buttons.len());
+
+        for (index, key) in keys.iter().enumerate() {
+            let code = match key {
+                Key::Enter => KeyCode::Enter,
+                Key::Escape => KeyCode::Esc,
+                Key::Char(character) => KeyCode::Char(*character),
+            };
+            let word = key_answer(code, KeyModifiers::NONE, &keys)
+                .unwrap_or_else(|| panic!("{:?} answered nothing", key));
+            assert_eq!(
+                decide(Ended::Answered(word.clone()), keys.len()),
+                Answer::Chose(index),
+                "{:?} wrote {:?}, which did not read back as button {}",
+                key,
+                word,
+                index
             );
         }
-        assert!(decide(Ended::Answered(PRIMARY_WORD.to_string())).chose_primary());
     }
 
     #[test]
     fn every_ending_maps_to_its_own_outcome() {
         assert_eq!(
-            decide(Ended::Answered(PRIMARY_WORD.to_string())),
-            Answer::Primary
+            decide(Ended::Answered("0".to_string()), 2),
+            Answer::Chose(0)
         );
         assert_eq!(
-            decide(Ended::Answered(CANCEL_WORD.to_string())),
-            Answer::Cancel
+            decide(Ended::Answered("1".to_string()), 2),
+            Answer::Chose(1)
         );
         assert_eq!(
-            decide(Ended::Answered("keep".to_string())),
+            decide(Ended::Answered("keep".to_string()), 2),
             Answer::Unanswered(Unanswered::Unrecognised("keep".to_string()))
         );
         assert_eq!(
-            decide(Ended::Dismissed),
+            decide(Ended::Answered(DISMISSED_WORD.to_string()), 2),
             Answer::Unanswered(Unanswered::Dismissed)
         );
         assert_eq!(
-            decide(Ended::NeverShown),
+            decide(Ended::Dismissed, 2),
+            Answer::Unanswered(Unanswered::Dismissed)
+        );
+        assert_eq!(
+            decide(Ended::NeverShown, 2),
             Answer::Unanswered(Unanswered::NeverShown)
         );
         assert_eq!(
-            decide(Ended::TimedOut),
+            decide(Ended::TimedOut, 2),
             Answer::Unanswered(Unanswered::TimedOut)
+        );
+    }
+
+    #[test]
+    fn an_index_past_the_last_button_is_unrecognised_rather_than_a_choice() {
+        // 🚨 The count is the dialog's own. A popup left over from a build with
+        // more buttons must not reach one this dialog does not have.
+        assert_eq!(
+            decide(Ended::Answered("2".to_string()), 2),
+            Answer::Unanswered(Unanswered::Unrecognised("2".to_string()))
+        );
+        assert_eq!(
+            decide(Ended::Answered("2".to_string()), 3),
+            Answer::Chose(2)
+        );
+        // A dialog with no buttons at all recognises no index.
+        assert_eq!(
+            decide(Ended::Answered("0".to_string()), 0),
+            Answer::Unanswered(Unanswered::Unrecognised("0".to_string()))
         );
     }
 
@@ -1768,8 +2281,8 @@ mod tests {
         // A popup left over from an older build and a popup the user closed are
         // different problems, and the caller reports them differently.
         assert_ne!(
-            decide(Ended::Answered("keep".to_string())),
-            decide(Ended::Dismissed)
+            decide(Ended::Answered("keep".to_string()), 2),
+            decide(Ended::Dismissed, 2)
         );
     }
 
@@ -1784,10 +2297,10 @@ mod tests {
         // The ordinary case for a fast answer: the popup ran and finished
         // before it was ever looked for.
         let channel = Channel::new().unwrap();
-        std::fs::write(&channel.answer, PRIMARY_WORD).unwrap();
+        std::fs::write(&channel.answer, "0").unwrap();
         assert_eq!(
             channel.watch_within(QUICK, QUICK),
-            Ended::Answered(PRIMARY_WORD.to_string())
+            Ended::Answered("0".to_string())
         );
     }
 
@@ -1807,11 +2320,11 @@ mod tests {
         let answer = channel.answer.clone();
         let writer = std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(50));
-            std::fs::write(&answer, CANCEL_WORD).unwrap();
+            std::fs::write(&answer, "1").unwrap();
         });
         assert_eq!(
             channel.watch_within(QUICK, Duration::from_secs(5)),
-            Ended::Answered(CANCEL_WORD.to_string())
+            Ended::Answered("1".to_string())
         );
         writer.join().unwrap();
     }
@@ -1904,8 +2417,8 @@ mod tests {
     fn a_cell_is_a_character() {
         assert_eq!(cells("abc"), 3);
         assert_eq!(cells(""), 0);
-        assert_eq!(cells(PRIMARY_KEY), 1);
-        assert_eq!(cells(CANCEL_KEY), 3);
+        assert_eq!(cells(ENTER_KEY), 1);
+        assert_eq!(cells(ESCAPE_KEY), 3);
     }
 
     /// The whole width rule, stated rather than enumerated.
@@ -2009,17 +2522,287 @@ mod tests {
         assert_eq!(wrap("aa bb cc", 8), vec!["aa bb cc"]);
     }
 
+    /// A button named `label` that asks for `key`, or for nothing.
+    fn button(label: &str, key: Option<Key>) -> Button {
+        Button {
+            label: label.to_string(),
+            key,
+        }
+    }
+
+    /// The word a keypress writes, as the owned string `key_answer` hands back.
+    fn word(index: usize) -> Option<String> {
+        Some(index.to_string())
+    }
+
+    /// The configurations every keyboard test sweeps, named once.
+    ///
+    /// 🔑 **A closed set, swept rather than sampled.** Each row is a list a caller
+    /// can actually build: every pair the round-3 design could express, and lists
+    /// of three and four where the ladder reaches past Escape. A button no key
+    /// answers is not in the list because it cannot be built.
+    fn configurations() -> Vec<Vec<Button>> {
+        let y = Some(Key::Char('y'));
+        let n = Some(Key::Char('n'));
+        vec![
+            vec![button("Rebuild", None), button("Leave it", None)],
+            vec![button("Rebuild", y), button("Leave it", None)],
+            vec![button("Rebuild", None), button("Leave it", n)],
+            vec![button("Rebuild", y), button("Leave it", n)],
+            vec![button("Rebuild", y), button("Leave it", Some(Key::Enter))],
+            vec![
+                button("Delete", None),
+                button("Keep", None),
+                button("Archive", None),
+            ],
+            vec![
+                button("Delete", Some(Key::Char('d'))),
+                button("Keep", Some(Key::Enter)),
+                button("Archive", None),
+                button("Later", None),
+            ],
+        ]
+    }
+
     #[test]
-    fn enter_chooses_the_primary_button_and_escape_cancels() {
+    fn a_caller_that_names_nothing_gets_enter_then_escape_then_characters() {
+        use crossterm::event::{KeyCode, KeyModifiers};
+        const NONE: KeyModifiers = KeyModifiers::NONE;
+        let pair = Button::keys(&[button("Rebuild", None), button("Leave it", None)]);
+
+        // 🔑 The pair this module has always drawn, reproduced by the ladder.
+        assert_eq!(pair, vec![Key::Enter, Key::Escape]);
+        assert_eq!(key_answer(KeyCode::Enter, NONE, &pair), word(0));
+        assert_eq!(key_answer(KeyCode::Esc, NONE, &pair), word(1));
+        // Nothing else answers, which is what it did before any key was nameable.
+        assert_eq!(key_answer(KeyCode::Char('y'), NONE, &pair), None);
+
+        // Past the pair, the ladder hands out characters in codepoint order.
+        let four: Vec<Button> = (0..4).map(|_| button("b", None)).collect();
+        assert_eq!(
+            Button::keys(&four),
+            vec![Key::Enter, Key::Escape, Key::Char('!'), Key::Char('"')]
+        );
+    }
+
+    #[test]
+    fn the_ladder_runs_escape_then_enter_then_every_ascii_graphic_character() {
+        // 🔑 Escape first is what gives the second of two unnamed buttons Escape,
+        // and a button after a named first one Escape rather than Enter.
+        let ladder: Vec<Key> = ladder().collect();
+        assert_eq!(ladder.len(), 96, "the ladder is not 96 keys long");
+        assert_eq!(ladder[0], Key::Escape);
+        assert_eq!(ladder[1], Key::Enter);
+        assert_eq!(ladder[2], Key::Char('!'));
+        assert_eq!(ladder[95], Key::Char('~'));
+        assert_eq!(
+            Button::keys(&[
+                button("Rebuild", Some(Key::Char('y'))),
+                button("Leave", None)
+            ]),
+            vec![Key::Char('y'), Key::Escape],
+            "a named first button moved Enter onto the second"
+        );
+    }
+
+    /// How many buttons the ladder can key: 96 keys, less the 26 lowercase
+    /// letters that are the same keypress as a capital already handed out.
+    const KEYABLE: usize = 70;
+
+    #[test]
+    fn a_list_longer_than_the_ladder_can_tell_apart_loses_its_tail() {
+        // ⚠️ 70 buttons keyed, so the 71st gets none. The answer stays a prefix
+        // of the list rather than a list with a hole in it.
+        let exactly: Vec<Button> = (0..KEYABLE).map(|_| button("b", None)).collect();
+        let keys = Button::keys(&exactly);
+        assert_eq!(
+            keys.len(),
+            KEYABLE,
+            "a list the ladder can hold lost a button"
+        );
+        for (index, key) in keys.iter().enumerate() {
+            assert!(
+                !keys[..index].iter().any(|held| held.same_as(*key)),
+                "{:?} answers two buttons",
+                key
+            );
+        }
+
+        // Far past the limit, and still exactly the limit.
+        let over: Vec<Button> = (0..100).map(|_| button("b", None)).collect();
+        assert_eq!(
+            Button::keys(&over).len(),
+            KEYABLE,
+            "the 71st button got a key"
+        );
+
+        // A naming on the tail cannot rescue it: every key is already held.
+        let mut named_tail = over.clone();
+        named_tail[KEYABLE].key = Some(Key::Char('z'));
+        assert_eq!(Button::keys(&named_tail).len(), KEYABLE);
+
+        // And everything that walks the answer walks the prefix: the frame draws
+        // 70 buttons, the popup is told about 70, and an index reaching the 71st
+        // names no button.
+        let dialog = Dialog::new(State::Info, "t", "b");
+        let frame = layout(&dialog, &over, 60, None);
+        assert_eq!(
+            frame.buttons.len(),
+            KEYABLE,
+            "the frame drew an unkeyed button"
+        );
+        let env = open_params("p", &dialog, &over, None).env;
+        assert!(env.contains_key(&button_var(KEYABLE - 1)));
+        assert!(
+            !env.contains_key(&button_var(KEYABLE)),
+            "the popup was told about a button no key answers"
+        );
+        let past = KEYABLE.to_string();
+        assert_eq!(
+            decide(Ended::Answered(past.clone()), Button::keys(&over).len()),
+            Answer::Unanswered(Unanswered::Unrecognised(past))
+        );
+    }
+
+    #[test]
+    fn a_named_key_answers_its_own_button_and_the_default_stops_answering() {
         use crossterm::event::{KeyCode, KeyModifiers};
         const NONE: KeyModifiers = KeyModifiers::NONE;
 
-        assert_eq!(key_answer(KeyCode::Enter, NONE), Some(PRIMARY_WORD));
-        assert_eq!(key_answer(KeyCode::Esc, NONE), Some(CANCEL_WORD));
+        // 🔑 Naming replaces rather than adds, on every button alike.
+        let first_named = Button::keys(&[
+            button("Rebuild", Some(Key::Char('y'))),
+            button("Leave it", None),
+        ]);
+        assert_eq!(key_answer(KeyCode::Char('y'), NONE, &first_named), word(0));
         assert_eq!(
-            key_answer(KeyCode::Char('c'), KeyModifiers::CONTROL),
-            Some(CANCEL_WORD)
+            key_answer(KeyCode::Enter, NONE, &first_named),
+            None,
+            "Enter still answered a button it was named off"
         );
+        assert_eq!(
+            key_answer(KeyCode::Esc, NONE, &first_named),
+            word(1),
+            "the untouched button lost its default"
+        );
+
+        let second_named = Button::keys(&[
+            button("Rebuild", None),
+            button("Leave it", Some(Key::Char('n'))),
+        ]);
+        assert_eq!(key_answer(KeyCode::Char('n'), NONE, &second_named), word(1));
+        assert_eq!(
+            key_answer(KeyCode::Esc, NONE, &second_named),
+            None,
+            "Escape still answered a button it was named off"
+        );
+        assert_eq!(
+            key_answer(KeyCode::Enter, NONE, &second_named),
+            word(0),
+            "the untouched button lost its default"
+        );
+    }
+
+    #[test]
+    fn enter_answers_a_later_button_when_it_is_named_there() {
+        use crossterm::event::{KeyCode, KeyModifiers};
+        const NONE: KeyModifiers = KeyModifiers::NONE;
+
+        // 🔑 The whole point of the first round, expressed with no special case:
+        // the caller names Enter where it wants it.
+        let keys = Button::keys(&[
+            button("Rebuild", Some(Key::Char('y'))),
+            button("Leave it", Some(Key::Enter)),
+        ]);
+        assert_eq!(keys, vec![Key::Char('y'), Key::Enter]);
+        assert_eq!(key_answer(KeyCode::Enter, NONE, &keys), word(1));
+        assert_eq!(key_answer(KeyCode::Char('y'), NONE, &keys), word(0));
+        assert_eq!(key_answer(KeyCode::Esc, NONE, &keys), None);
+
+        // And on the third of three, where Escape lands on the one between.
+        let keys = Button::keys(&[
+            button("Delete", Some(Key::Char('d'))),
+            button("Archive", None),
+            button("Keep", Some(Key::Enter)),
+        ]);
+        assert_eq!(keys, vec![Key::Char('d'), Key::Escape, Key::Enter]);
+        assert_eq!(key_answer(KeyCode::Enter, NONE, &keys), word(2));
+        assert_eq!(key_answer(KeyCode::Esc, NONE, &keys), word(1));
+    }
+
+    #[test]
+    fn ctrl_c_dismisses_whatever_anybody_named() {
+        use crossterm::event::{KeyCode, KeyModifiers};
+        const NONE: KeyModifiers = KeyModifiers::NONE;
+
+        // 🚨 The last way out, in every configuration a caller can build, and it
+        // chooses no button: the word it writes reads back as a dismissal.
+        for buttons in configurations() {
+            let keys = Button::keys(&buttons);
+            let written = key_answer(KeyCode::Char('c'), KeyModifiers::CONTROL, &keys);
+            assert_eq!(
+                written.as_deref(),
+                Some(DISMISSED_WORD),
+                "{:?} took Ctrl-C away",
+                keys
+            );
+            assert_eq!(
+                decide(Ended::Answered(written.unwrap()), keys.len()),
+                Answer::Unanswered(Unanswered::Dismissed),
+                "{:?} read Ctrl-C as a choice",
+                keys
+            );
+        }
+
+        // And naming `c` cannot shadow it, which is why it is decided first.
+        let keys = Button::keys(&[
+            button("Rebuild", Some(Key::Char('c'))),
+            button("Leave it", None),
+        ]);
+        assert_eq!(
+            key_answer(KeyCode::Char('c'), KeyModifiers::CONTROL, &keys).as_deref(),
+            Some(DISMISSED_WORD)
+        );
+        assert_eq!(
+            key_answer(KeyCode::Char('c'), NONE, &keys),
+            word(0),
+            "a bare c stopped being the named key"
+        );
+    }
+
+    #[test]
+    fn a_named_character_needs_its_own_chord_and_not_a_modified_one() {
+        use crossterm::event::{KeyCode, KeyModifiers};
+        let keys = Button::keys(&[
+            button("Rebuild", Some(Key::Char('y'))),
+            button("Leave it", None),
+        ]);
+        let keys = keys.as_slice();
+
+        // Shift is how an uppercase character arrives, so it is the same key.
+        for modifiers in [KeyModifiers::NONE, KeyModifiers::SHIFT] {
+            assert_eq!(
+                key_answer(KeyCode::Char('Y'), modifiers, keys),
+                word(0),
+                "{:?} was not the named key",
+                modifiers
+            );
+        }
+        // Every other chord is a different keypress, and resolving one would let a
+        // stray Alt-y destroy something.
+        for modifiers in [
+            KeyModifiers::ALT,
+            KeyModifiers::CONTROL,
+            KeyModifiers::SUPER,
+            KeyModifiers::ALT | KeyModifiers::SHIFT,
+        ] {
+            assert_eq!(
+                key_answer(KeyCode::Char('y'), modifiers, keys),
+                None,
+                "{:?} answered as the named key",
+                modifiers
+            );
+        }
     }
 
     #[test]
@@ -2027,20 +2810,309 @@ mod tests {
         use crossterm::event::{KeyCode, KeyModifiers};
         const NONE: KeyModifiers = KeyModifiers::NONE;
 
-        for code in [
-            KeyCode::Char(' '),
-            KeyCode::Char('y'),
-            KeyCode::Char('n'),
-            KeyCode::Char('q'),
-            KeyCode::Backspace,
-            KeyCode::Tab,
-            KeyCode::Up,
-            KeyCode::F(1),
-        ] {
-            assert_eq!(key_answer(code, NONE), None, "{:?} answered", code);
+        // Every configuration: naming a key must not turn some other key into an
+        // answer, in either direction.
+        for buttons in configurations() {
+            let keys = Button::keys(&buttons);
+            let keys = keys.as_slice();
+            for code in [
+                KeyCode::Char(' '),
+                KeyCode::Char('q'),
+                KeyCode::Backspace,
+                KeyCode::Tab,
+                KeyCode::Up,
+                KeyCode::F(1),
+            ] {
+                assert_eq!(
+                    key_answer(code, NONE, keys),
+                    None,
+                    "{:?} answered under {:?}",
+                    code,
+                    keys
+                );
+            }
+            // A bare `c` is not Ctrl-C, and reading it as one would put the
+            // modifier check there for nothing.
+            assert_eq!(key_answer(KeyCode::Char('c'), NONE, keys), None);
         }
-        // A bare `c` is not Ctrl-C, and reading it as one would put the
-        // modifier check there for nothing.
-        assert_eq!(key_answer(KeyCode::Char('c'), NONE), None);
+    }
+
+    #[test]
+    fn each_button_draws_exactly_the_key_that_answers_it() {
+        use crossterm::event::{KeyCode, KeyModifiers};
+        const NONE: KeyModifiers = KeyModifiers::NONE;
+
+        // 🔑 The frame's claim, checked rather than restated, in every
+        // configuration. What the frame draws is read back from the drawn text,
+        // fed through the decoder, and has to answer the button it was drawn on.
+        // This is what reddens if a key is ever left drawn on a button it no
+        // longer reaches.
+        let from_drawing = |drawn: &str| match drawn {
+            ENTER_KEY => KeyCode::Enter,
+            ESCAPE_KEY => KeyCode::Esc,
+            other => KeyCode::Char(other.chars().next().expect("a drawn key is never empty")),
+        };
+
+        for buttons in configurations() {
+            let keys = Button::keys(&buttons);
+            assert_eq!(keys.len(), buttons.len(), "{:?} lost a key", keys);
+            for (index, key) in keys.iter().enumerate() {
+                assert_eq!(
+                    key_answer(from_drawing(&key.drawn()), NONE, &keys),
+                    word(index),
+                    "{:?} draws {:?} on button {}, which it does not answer",
+                    keys,
+                    key.drawn(),
+                    index
+                );
+                // And no two are the same keypress, which is what would make one
+                // of the claims a lie whichever way the decoder resolved it.
+                assert!(
+                    !keys[..index].iter().any(|held| held.same_as(*key)),
+                    "{:?} draws one key on two buttons",
+                    keys
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_key_is_drawn_as_itself() {
+        assert_eq!(Key::Enter.drawn(), ENTER_KEY);
+        assert_eq!(Key::Escape.drawn(), ESCAPE_KEY);
+        assert_eq!(Key::Char('y').drawn(), "y");
+    }
+
+    #[test]
+    fn a_line_answers_exactly_as_the_keypress_it_names_does() {
+        use crossterm::event::{KeyCode, KeyModifiers};
+        const NONE: KeyModifiers = KeyModifiers::NONE;
+
+        // 🔑 The two input paths are reached under different terminal conditions.
+        // The line path routes through the same decoder, and this measures that
+        // rather than trusting it.
+        for buttons in configurations() {
+            let keys = Button::keys(&buttons);
+            let keys = keys.as_slice();
+            let expected =
+                |code| key_answer(code, NONE, keys).unwrap_or_else(|| DISMISSED_WORD.to_string());
+            for line in ["", "\n", "   \n"] {
+                assert_eq!(
+                    line_answer(Some(line), keys),
+                    expected(KeyCode::Enter),
+                    "{:?} disagreed with raw mode on an empty line {:?}",
+                    keys,
+                    line
+                );
+            }
+            for (line, typed) in [("y", 'y'), ("Y\n", 'Y'), (" n \n", 'n'), ("q", 'q')] {
+                assert_eq!(
+                    line_answer(Some(line), keys),
+                    expected(KeyCode::Char(typed)),
+                    "{:?} disagreed with raw mode on {:?}",
+                    keys,
+                    line
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_line_naming_no_keypress_fails_closed() {
+        // ⚠️ This path gets one line rather than a loop, so "keep waiting" is not
+        // available to it and anything unrecognised has to end the dialog
+        // unanswered rather than choose any button.
+        for buttons in configurations() {
+            let keys = Button::keys(&buttons);
+            let keys = keys.as_slice();
+            assert_eq!(line_answer(None, keys), DISMISSED_WORD, "{:?}", keys);
+            // A word that merely starts with a named key is not that keypress.
+            for typed in ["yes", "y y", "no", "primary", "  xx  ", "0", "1"] {
+                assert_eq!(
+                    line_answer(Some(typed), keys),
+                    DISMISSED_WORD,
+                    "{:?} resolved {:?}",
+                    keys,
+                    typed
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_key_survives_the_wire_it_is_drawn_on() {
+        // 🔑 One vocabulary: what the frame draws is what the variable carries, so
+        // every value this crate can write reads back as itself.
+        for key in [Key::Enter, Key::Escape, Key::Char('y'), Key::Char('?')] {
+            assert_eq!(
+                Key::from_wire(Some(&key.drawn())),
+                Some(key),
+                "{:?} did not survive its own drawing",
+                key
+            );
+        }
+        assert_eq!(Key::from_wire(Some(" y ")), Some(Key::Char('y')));
+    }
+
+    #[test]
+    fn a_wire_value_naming_no_key_falls_back_to_the_default() {
+        // Absent, empty, several characters, and a character that cannot be drawn
+        // at a measurable width all name no key. ⚠️ One rule pointing one way at
+        // every button: a garbled key leaves its button unnamed, so it takes the
+        // first free key down the ladder like any other.
+        for word in [None, Some(""), Some("   "), Some("yes"), Some("\u{4f60}")] {
+            assert_eq!(Key::from_wire(word), None, "{:?} named a key", word);
+        }
+    }
+
+    #[test]
+    fn a_naming_that_cannot_be_honoured_falls_down_the_ladder() {
+        let pair = |first: Option<Key>, second: Option<Key>| {
+            Button::keys(&[button("Rebuild", first), button("Leave it", second)])
+        };
+        let default = vec![Key::Enter, Key::Escape];
+
+        // Escape never fires the action the dialog leads with.
+        assert_eq!(pair(Some(Key::Escape), None), default);
+        // A character the frame cannot measure names nothing, on any button.
+        assert_eq!(pair(Some(Key::Char('\u{4f60}')), None), default);
+        assert_eq!(pair(None, Some(Key::Char(' '))), default);
+        // One keypress cannot answer two buttons, case included.
+        assert_eq!(
+            pair(Some(Key::Char('y')), Some(Key::Char('Y'))),
+            vec![Key::Char('y'), Key::Escape]
+        );
+        // Enter on the second is that same collision until the first names a key.
+        assert_eq!(pair(None, Some(Key::Enter)), default);
+        assert_eq!(
+            pair(Some(Key::Char('y')), Some(Key::Enter)),
+            vec![Key::Char('y'), Key::Enter]
+        );
+
+        // Past two buttons the same rule holds: a collision on the third falls to
+        // the first key still free, which skips everything already held.
+        assert_eq!(
+            Button::keys(&[
+                button("a", None),
+                button("b", None),
+                button("c", Some(Key::Escape)),
+                button("d", Some(Key::Char('!'))),
+                button("e", Some(Key::Char('!'))),
+            ]),
+            vec![
+                Key::Enter,
+                Key::Escape,
+                Key::Char('!'),
+                Key::Char('"'),
+                Key::Char('#'),
+            ]
+        );
+    }
+
+    #[test]
+    fn resolving_a_resolved_list_changes_nothing() {
+        // 🔑 Both halves run the resolver: the asking half on what the caller
+        // built, and the popup half on what crossed the wire, which is already
+        // resolved. So it has to be idempotent, or the halves would disagree.
+        for buttons in configurations() {
+            let keys = Button::keys(&buttons);
+            let resolved: Vec<Button> = buttons
+                .iter()
+                .zip(&keys)
+                .map(|(button, key)| Button {
+                    key: Some(*key),
+                    ..button.clone()
+                })
+                .collect();
+            assert_eq!(Button::keys(&resolved), keys);
+        }
+    }
+
+    #[test]
+    fn no_naming_can_leave_a_button_without_a_key() {
+        // 🚨 The one thing that stays unrepresentable. Every triple of namings,
+        // wire values and hazards included, resolves to three keys that are not
+        // the same keypress, and the first is never Escape.
+        let namings = [
+            None,
+            Some(Key::Enter),
+            Some(Key::Escape),
+            Some(Key::Char('y')),
+            Some(Key::Char('Y')),
+            Some(Key::Char(' ')),
+            Some(Key::Char('\u{4f60}')),
+            Some(Key::Char('c')),
+        ];
+        for first in namings {
+            for second in namings {
+                for third in namings {
+                    let keys = Button::keys(&[
+                        button("a", first),
+                        button("b", second),
+                        button("c", third),
+                    ]);
+                    assert_eq!(keys.len(), 3, "{:?} stranded a button", keys);
+                    for (index, key) in keys.iter().enumerate() {
+                        assert!(
+                            !keys[..index].iter().any(|held| held.same_as(*key)),
+                            "{:?}, {:?}, {:?} resolved two buttons to one key",
+                            first,
+                            second,
+                            third
+                        );
+                    }
+                    assert_ne!(keys[0], Key::Escape, "Escape answered the first button");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn every_key_a_caller_can_name_costs_exactly_one_cell() {
+        use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+
+        // 🔑 §7.5.4's rule, applied to the caller's keys rather than the kit's
+        // glyphs, and checked against the real Unicode data for the same reason:
+        // `cells` counts characters, so a key wider than one cell would draw a
+        // frame one cell too wide, and an `Ambiguous` one would let a terminal
+        // setting decide the width.
+        for point in 0x21u8..=0x7e {
+            let key = point as char;
+            let drawn = Key::Char(key).drawn();
+            assert_eq!(
+                Key::from_wire(Some(&drawn)),
+                Some(Key::Char(key)),
+                "U+{:04X} cannot be named",
+                point
+            );
+            assert_eq!(
+                UnicodeWidthChar::width(key),
+                Some(1),
+                "{:?} is not one cell",
+                key
+            );
+            assert_eq!(
+                UnicodeWidthStr::width(drawn.as_str()),
+                UnicodeWidthStr::width_cjk(drawn.as_str()),
+                "{:?} is East Asian Width Ambiguous",
+                key
+            );
+            assert_eq!(cells(&drawn), 1, "{:?} is not counted as one cell", key);
+        }
+
+        // And everything else names nothing, so no frame can be drawn wrong: a
+        // wide character, a whitespace one, two Ambiguous ones, and a control.
+        for key in ['\u{4f60}', ' ', '\t', '\u{26a0}', '\u{24d8}', '\u{7f}'] {
+            assert_eq!(
+                Button::keys(&[button("a", Some(Key::Char(key))), button("b", None)]),
+                vec![Key::Enter, Key::Escape],
+                "{:?} was nameable",
+                key
+            );
+        }
+
+        // The kit's own two keys keep the widths every threshold assumes.
+        assert_eq!(cells(&Key::Enter.drawn()), 1);
+        assert_eq!(cells(&Key::Escape.drawn()), 3);
     }
 }

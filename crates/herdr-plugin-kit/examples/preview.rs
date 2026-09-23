@@ -33,7 +33,7 @@
 //! than inline, and hover here is a still rather than something the pointer
 //! drives.
 
-use herdr_plugin_kit::dialog::{layout, Buttons, Dialog, Hot, State};
+use herdr_plugin_kit::dialog::{layout, Button, Dialog, Key, State};
 
 /// The same body for every state, so only the styling varies between frames.
 const BODY: &str = "Rebuilding this tab will close the two panes that are \
@@ -45,7 +45,7 @@ fn main() {
         .and_then(|given| given.parse().ok())
         .unwrap_or(60);
 
-    let buttons = Buttons::new("rebuild anyway", "keep them");
+    let buttons = vec![Button::new("rebuild anyway"), Button::new("keep them")];
     let states = [
         (State::Info, "Nothing to do"),
         (State::Success, "Rebuilt"),
@@ -56,33 +56,76 @@ fn main() {
     // The eight: four states, each bare and actioned.
     for (state, title) in states {
         let dialog = Dialog::new(state, title, BODY);
-        for buttons in [None, Some(&buttons)] {
-            let variant = match buttons {
-                Some(_) => "actioned",
-                None => "bare",
-            };
+        for (variant, buttons) in [("bare", &[][..]), ("actioned", &buttons[..])] {
             println!("── {:?}, {} ──\n", state, variant);
-            println!("{}\n", layout(&dialog, buttons, width, Hot::None).text);
+            println!("{}\n", layout(&dialog, buttons, width, None).text);
         }
     }
 
     // Hover, which only an actioned dialog has.
     let dialog = Dialog::new(State::Warning, "Hover", BODY);
-    for hot in [Hot::Primary, Hot::Cancel] {
-        println!("── hover: {:?} ──\n", hot);
-        println!("{}\n", layout(&dialog, Some(&buttons), width, hot).text);
+    for hot in 0..buttons.len() {
+        println!("── hover: button {} ──\n", hot);
+        println!("{}\n", layout(&dialog, &buttons, width, Some(hot)).text);
     }
+
+    // Named keys, which are the drawing decision of 2026-09-14 (SCOPE.md §7.5.8)
+    // and the part a reviewer has to look at rather than read about. Each
+    // button draws the one key that answers it, so naming a key replaces the
+    // default glyph rather than joining it.
+    let pair = |first: Option<Key>, second: Option<Key>| {
+        let named = |label: &str, key: Option<Key>| match key {
+            Some(key) => Button::new(label).on_key(key),
+            None => Button::new(label),
+        };
+        vec![named("rebuild anyway", first), named("keep them", second)]
+    };
+    let asking = Dialog::new(State::Danger, "Close the pane?", BODY);
+    for (caption, keys) in [
+        ("a named first key", pair(Some(Key::Char('y')), None)),
+        ("a named second key", pair(None, Some(Key::Char('n')))),
+        (
+            "both named",
+            pair(Some(Key::Char('y')), Some(Key::Char('n'))),
+        ),
+        (
+            "the safe answer under Enter",
+            pair(Some(Key::Char('y')), Some(Key::Enter)),
+        ),
+    ] {
+        println!("── {} ──\n", caption);
+        println!("{}\n", layout(&asking, &keys, width, None).text);
+    }
+
+    // More than two, which is what round 4 added. The ladder hands the third
+    // button the first free character, and only the first is emphasised.
+    let three = vec![
+        Button::new("delete").on_key(Key::Char('d')),
+        Button::new("keep them").on_key(Key::Enter),
+        Button::new("archive"),
+    ];
+    println!("── three buttons, the safe answer under Enter ──\n");
+    println!("{}\n", layout(&asking, &three, width, None).text);
 
     // The two narrow shapes, which are the reason this example earns its keep.
     let narrow = Dialog::new(State::Danger, "Narrow", "At the floor.");
 
-    // Stacked: one button per row, both labels whole, one row of height paid
-    // for them. This is what a frame too narrow for a single row now draws.
-    println!("── stacked, 30 cells ──\n");
-    println!("{}\n", layout(&narrow, Some(&buttons), 30, Hot::None).text);
+    // 📏 The same floor with one-cell keys on both buttons, which is the
+    // cheapest a button pair can be drawn and gives the labels the most room the
+    // frame can offer.
+    let named = pair(Some(Key::Char('y')), Some(Key::Char('n')));
+    println!("── named keys at the 24-cell floor ──\n");
+    println!("{}\n", layout(&narrow, &named, 24, None).text);
 
-    // The floor, where stacking is not enough on its own and the primary label
+    // Stacked: one button per row, every label whole, one row of height paid
+    // for each. This is what a frame too narrow for a single row draws.
+    println!("── stacked, 30 cells ──\n");
+    println!("{}\n", layout(&narrow, &buttons, 30, None).text);
+    println!("── three stacked, 30 cells ──\n");
+    println!("{}\n", layout(&narrow, &three, 30, None).text);
+
+    // The floor, where stacking is not enough on its own and the first label
     // is shortened as well. Truncation is the last resort, not the first.
     println!("── the 24-cell floor ──\n");
-    println!("{}\n", layout(&narrow, Some(&buttons), 24, Hot::None).text);
+    println!("{}\n", layout(&narrow, &buttons, 24, None).text);
 }
