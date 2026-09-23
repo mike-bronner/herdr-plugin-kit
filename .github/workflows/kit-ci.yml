@@ -15,10 +15,11 @@ name: CI
 # that has to run these, including the one this file was written on — so these
 # jobs call the same entry points the justfile calls.
 #
-# 🚨 The mutation runs are deliberately not here. They recompile once per
-# mutation, forty-two times, and a gate that makes every pull request wait
-# twenty minutes is a gate people route around. They live in kit-mutation.yml,
-# which runs on main and on demand. That file says why.
+# 🚨 The mutation runs are deliberately not here. They recompile once for
+# every mutation in every spec under tools/mutations, and a gate that makes
+# every pull request wait twenty minutes is a gate people route around. They
+# live in kit-mutation.yml, which runs on main and on demand. That file says
+# why, and how many there are.
 
 on:
   push:

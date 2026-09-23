@@ -1659,7 +1659,8 @@ resolved keys to the two decoders is **not** tested, because reaching `interact`
 
 📏 **The number this asks for: a minor at minimum, because this is source-breaking.** §12.3's
 rule is whether a **correct** upgrade needs work, and every consumer of `ask` needs work:
-the pair type is gone. **No release number is claimed here** — Mike cuts kit releases.
+the pair type is gone. ✅ **It ships as 0.5.0**, decided by Mike 2026-09-23, and pinning
+that tag is where the migration below begins.
 
 🚨 **What 0.4.4 had and this removes**, listed for the consumer planning its migration:
 
@@ -1675,7 +1676,7 @@ the pair type is gone. **No release number is claimed here** — Mike cuts kit r
 | `DEFAULT_CANCEL` | none: an empty label is drawn as the key alone rather than defaulted |
 | `PRIMARY_KEY` and `CANCEL_KEY` | `ENTER_KEY` and `ESCAPE_KEY`, with the same values |
 
-| Changed signature | 0.4.4 | Now |
+| Changed signature | 0.4.4 | 0.5.0 |
 |---|---|---|
 | `ask` | `buttons: &Buttons` | `buttons: &[Button]` |
 | `layout` | `Option<&Buttons>`, `hot: Hot` | `&[Button]`, `hot: Option<usize>` |
@@ -3168,6 +3169,10 @@ tag form when recent-spaces migrates (§13).
   So a consumer who upgrades correctly and turns nothing on gets a tree that is byte for
   byte what they had. **Two new modules can be a patch**, because the number answers what
   the upgrade asks of them and not how much work went in.
+  ✅ **0.5.0 is the case where they agree**, decided by Mike 2026-09-23: a `feat!:` at a
+  minor. The N-button dialog removes the pair type and every name built on it (§7.5.8),
+  so every caller of `ask` has work to do. The same span adds update-result persistence
+  (§8.2), which is additive and rides free on the minor the removal already spends.
 - ➕ **What decides the number is whether a *correct* upgrade needs work**, added
   2026-09-13, and it is the class the three clauses above were reaching for. A change
   that asks something of a consumer who upgrades **correctly** is a minor at minimum:

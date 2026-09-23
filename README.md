@@ -146,8 +146,14 @@ Pin to a tag:
 
 ```toml
 [dependencies]
-herdr-plugin-kit = { git = "https://github.com/mike-bronner/herdr-plugin-kit", tag = "0.4.4" }
+herdr-plugin-kit = { git = "https://github.com/mike-bronner/herdr-plugin-kit", tag = "0.5.0" }
 ```
+
+> 🚨 **0.5.0 breaks the `dialog` API.** The two-button pair is gone: `Buttons`,
+> `Answer::Primary`, `Answer::Cancel`, `chose_primary` and their constants are removed in
+> favour of a list of `Button` values answered by `Answer::Chose(index)`. Four behaviours
+> change where the compiler cannot see them, Ctrl-C among them. `SCOPE.md` §7.5.8 lists
+> every removal and its replacement. A plugin that does not enable `dialog` has no work to do.
 
 Build a request:
 
@@ -583,7 +589,7 @@ permissions:
   contents: write
 jobs:
   release:
-    uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-release.yml@0.4.4
+    uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-release.yml@0.5.0
     permissions:
       contents: write
 ```
