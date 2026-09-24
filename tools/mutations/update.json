@@ -329,6 +329,111 @@
       "name": "the stamp keeps its format",
       "find": "    let _ = fs::write(stamp, format!(\"{}\\n\", elapsed.as_secs()));",
       "replace": "    let _ = fs::write(stamp, format!(\"{}\", elapsed.as_secs()));"
+    },
+    {
+      "name": "a local install is never managed",
+      "find": "    if !is_managed(&plugin) {\n        return None;\n    }\n    let files = Files::under(",
+      "replace": "    let files = Files::under("
+    },
+    {
+      "name": "a relative install root is refused",
+      "find": "        if !plugin_root.is_absolute() || !plain_name(state_dir) {",
+      "replace": "        if !plain_name(state_dir) {"
+    },
+    {
+      "name": "a state directory name is checked at all",
+      "find": "        if !plugin_root.is_absolute() || !plain_name(state_dir) {",
+      "replace": "        if !plugin_root.is_absolute() {"
+    },
+    {
+      "name": "a name with a separator is refused",
+      "find": "        (Some(Component::Normal(part)), None) if part == name",
+      "replace": "        (Some(Component::Normal(part)), _) if part == name.split('/').next().unwrap_or(name)"
+    },
+    {
+      "name": "a name with a trailing separator is refused",
+      "find": "        (Some(Component::Normal(part)), None) if part == name",
+      "replace": "        (Some(Component::Normal(_)), None)"
+    },
+    {
+      "name": "a dot, a double dot or a root is refused as a name",
+      "find": "        (Some(Component::Normal(part)), None) if part == name",
+      "replace": "        (Some(part), None) if part.as_os_str() == name"
+    },
+    {
+      "name": "an offer record name is checked",
+      "find": "        plain_name(name).then(|| self.dir.join(format!(\"offered-{}\", name)))",
+      "replace": "        Some(self.dir.join(format!(\"offered-{}\", name)))"
+    },
+    {
+      "name": "each channel keeps its own offer record",
+      "find": "        plain_name(name).then(|| self.dir.join(format!(\"offered-{}\", name)))",
+      "replace": "        plain_name(name).then(|| self.dir.join(\"offered\"))"
+    },
+    {
+      "name": "the attempt stamp keeps its name on disk",
+      "find": "        self.dir.join(\"checked\")",
+      "replace": "        self.dir.join(\"stamp\")"
+    },
+    {
+      "name": "the saved result keeps its name on disk",
+      "find": "        self.dir.join(\"available.json\")",
+      "replace": "        self.dir.join(\"result.json\")"
+    },
+    {
+      "name": "lookup asks for this plugin by id",
+      "find": "            plugin_id: Some(plugin_id.to_string()),",
+      "replace": "            plugin_id: None,"
+    },
+    {
+      "name": "lookup never takes another plugin's record",
+      "find": "        .find(|plugin| plugin.plugin_id == plugin_id)?;",
+      "replace": "        .next()?;"
+    },
+    {
+      "name": "a detached check waits for the interval",
+      "find": "    if !due(&files.stamp(), now, interval) {\n        return false;\n    }\n",
+      "replace": ""
+    },
+    {
+      "name": "a due check is spawned at all",
+      "find": "        let _ = child.wait();\n    });\n    true\n",
+      "replace": "        let _ = child.wait();\n    });\n    false\n"
+    },
+    {
+      "name": "the detached check is passed the flag",
+      "find": "        .arg(CHECK_FLAG)\n",
+      "replace": ""
+    },
+    {
+      "name": "the detached check runs in its own process group",
+      "find": "        command.process_group(0);",
+      "replace": "        let _ = &command;"
+    },
+    {
+      "name": "the detached side keeps what it found",
+      "find": "    Some(check_and_save(\n        &plugin,\n        &files.stamp(),\n        &files.result(),\n        now,",
+      "replace": "    Some(check(\n        &plugin,\n        &files.stamp(),\n        now,"
+    },
+    {
+      "name": "the detached check's stdin is null",
+      "find": "        .stdin(Stdio::null())\n",
+      "replace": ""
+    },
+    {
+      "name": "the detached check's stdout is null",
+      "find": "        .stdout(Stdio::null())\n        .stderr",
+      "replace": "        .stderr"
+    },
+    {
+      "name": "the detached check's stderr is null",
+      "find": "        .stdout(Stdio::null())\n        .stderr(Stdio::null());",
+      "replace": "        .stdout(Stdio::null());"
+    },
+    {
+      "name": "a detached check is reaped rather than left a zombie",
+      "find": "        let _ = child.wait();\n",
+      "replace": "        drop(child);\n"
     }
   ]
 }

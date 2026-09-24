@@ -14,13 +14,22 @@
 #![cfg(feature = "update")]
 
 use std::cell::RefCell;
-use std::path::PathBuf;
+use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use interprocess::local_socket::traits::Listener as _;
+use interprocess::local_socket::{GenericFilePath, ListenerOptions, ToFsName as _};
+use serde_json::{json, Value};
+
+use herdr_plugin_kit::api::client::{Client, Socket};
 use herdr_plugin_kit::api::generated::{InstalledPluginInfo, PluginSourceInfo, PluginSourceKind};
 use herdr_plugin_kit::update::{
-    apply, check, check_and_save, due, install_arguments, is_managed, offer, record_offer,
-    Available, Decision, Installer, Releases, Skipped, DEFAULT_INTERVAL,
+    apply, check, check_and_save, due, install_arguments, is_managed, lookup, managed, offer,
+    record_offer, run_check, spawn_check_if_due, Available, Decision, Files, Installer, Releases,
+    Skipped, DEFAULT_INTERVAL,
 };
 
 /// A directory that removes itself, so a failing test leaks nothing.
@@ -997,4 +1006,363 @@ fn a_result_that_cannot_be_written_does_not_stop_the_check() {
 
     assert_eq!(decision, Decision::Available(found()));
     assert!(directory.stamp().exists());
+}
+
+// --------------------------------------------- the setup a plugin wires in
+
+/// The state directory every test below names, as a plugin would.
+const STATE_DIR: &str = ".project-finder-update";
+
+/// [`plugin`], installed at `root`.
+fn rooted(kind: PluginSourceKind, root: &Path) -> InstalledPluginInfo {
+    InstalledPluginInfo {
+        plugin_root: root.to_string_lossy().into_owned(),
+        ..plugin(kind, "0.8.1")
+    }
+}
+
+/// Every file under `directory`, so a test can say that nothing was written.
+fn contents(directory: &Path) -> Vec<PathBuf> {
+    std::fs::read_dir(directory)
+        .map(|entries| entries.flatten().map(|entry| entry.path()).collect())
+        .unwrap_or_default()
+}
+
+#[test]
+fn a_github_install_with_an_absolute_root_is_managed() {
+    let (found, files) = managed(plugin(PluginSourceKind::Github, "0.8.1"), STATE_DIR)
+        .expect("a GitHub install with a root is managed");
+
+    assert_eq!(found.plugin_id, "mikebronner.project-finder");
+    assert_eq!(files.dir(), Path::new("/plugins/p/.project-finder-update"));
+}
+
+#[test]
+fn a_local_install_is_never_managed() {
+    // 🚨 SCOPE.md §8.3, and the door every other call here goes through. A
+    // linked working tree must never receive a file.
+    assert!(managed(plugin(PluginSourceKind::Local, "0.8.1"), STATE_DIR).is_none());
+}
+
+#[test]
+fn a_record_with_no_usable_root_is_never_managed() {
+    // A root that is empty or blank, and a relative one, which would resolve
+    // against whatever directory a hook happened to start in.
+    for root in ["", "  ", "plugins/p", "./p"] {
+        let record = InstalledPluginInfo {
+            plugin_root: root.to_string(),
+            ..plugin(PluginSourceKind::Github, "0.8.1")
+        };
+        assert!(managed(record, STATE_DIR).is_none(), "{:?}", root);
+    }
+}
+
+#[test]
+fn a_state_directory_that_could_leave_the_install_is_refused() {
+    // 🚨 Joining an absolute path discards the root, and `..` climbs out of it.
+    // Each of these would write outside the install.
+    for name in ["", ".", "..", "a/b", "/tmp/elsewhere", "a/", "../x"] {
+        assert!(
+            managed(plugin(PluginSourceKind::Github, "0.8.1"), name).is_none(),
+            "{:?}",
+            name
+        );
+        assert_eq!(
+            Files::under(Path::new("/plugins/p"), name),
+            None,
+            "{:?}",
+            name
+        );
+    }
+}
+
+#[test]
+fn the_files_keep_the_names_the_first_consumer_wrote() {
+    // 🔑 agentic-panes-layout 0.5.0 wrote these names from its own copy. Moving
+    // onto the kit must not strand a found update or restart an interval.
+    let files = Files::under(Path::new("/root"), ".agent-layout-update").unwrap();
+    let dir = Path::new("/root/.agent-layout-update");
+
+    assert_eq!(files.stamp(), dir.join("checked"));
+    assert_eq!(files.result(), dir.join("available.json"));
+    assert_eq!(files.offered("dialog"), Some(dir.join("offered-dialog")));
+    assert_eq!(files.offered("toast"), Some(dir.join("offered-toast")));
+}
+
+#[test]
+fn an_offer_record_name_that_could_leave_the_directory_is_refused() {
+    let files = Files::under(Path::new("/root"), STATE_DIR).unwrap();
+    for name in ["", ".", "..", "a/b", "/tmp/x", "../checked"] {
+        assert_eq!(files.offered(name), None, "{:?}", name);
+    }
+}
+
+#[test]
+fn one_channel_recording_an_offer_does_not_silence_another() {
+    // 🔑 A toast pointing the user to a dialog must not start the dialog's
+    // interval. So each channel keeps its own record.
+    let directory = TempDir::new("channels");
+    let files = Files::under(&directory.0, STATE_DIR).unwrap();
+    let subject = rooted(PluginSourceKind::Github, &directory.0);
+    check_and_save(
+        &subject,
+        &files.stamp(),
+        &files.result(),
+        at(1_000_000),
+        DEFAULT_INTERVAL,
+        &Answers::newest("0.9.1"),
+    );
+    let toast = files.offered("toast").unwrap();
+    let dialog = files.offered("dialog").unwrap();
+
+    record_offer(&toast, at(1_000_060));
+
+    let now = at(1_000_120);
+    assert_eq!(
+        offer(&subject, &files.result(), &toast, now, DEFAULT_INTERVAL),
+        None
+    );
+    assert_eq!(
+        offer(&subject, &files.result(), &dialog, now, DEFAULT_INTERVAL),
+        Some(found())
+    );
+}
+
+// ------------------------------------------------- reading the install record
+
+/// Keeps two peers in one test run from colliding on a path.
+static NEXT_SOCKET: AtomicU32 = AtomicU32::new(0);
+
+/// A Herdr that answers one `plugin.list` with `plugins`, over a real socket.
+///
+/// ⚠️ **A second copy of the transport suite's scripted server, cut down to
+/// one answer.** Each integration test is its own crate, so the two cannot
+/// share a helper without a support module neither needs anywhere else.
+struct Herdr {
+    path: PathBuf,
+    worker: Option<JoinHandle<Option<Value>>>,
+}
+
+impl Herdr {
+    fn listing(plugins: Vec<InstalledPluginInfo>) -> Herdr {
+        let ordinal = NEXT_SOCKET.fetch_add(1, Ordering::Relaxed);
+        let leaf = format!("herdr-kit-update-{}-{}", std::process::id(), ordinal);
+        let path = match cfg!(windows) {
+            true => PathBuf::from(format!(r"\\.\pipe\{}", leaf)),
+            false => std::env::temp_dir().join(format!("{}.sock", leaf)),
+        };
+        let listener = ListenerOptions::new()
+            .name(path.clone().to_fs_name::<GenericFilePath>().unwrap())
+            .create_sync()
+            .expect("the scratch socket must be bindable");
+        let plugins = serde_json::to_value(plugins).unwrap();
+
+        let worker = std::thread::spawn(move || {
+            let stream = listener.accept().ok()?;
+            let mut line = String::new();
+            BufReader::new(&stream).read_line(&mut line).ok()?;
+            let request: Value = serde_json::from_str(&line).ok()?;
+            let answer = json!({
+                "id": request["id"],
+                "result": {"type": "plugin_list", "plugins": plugins},
+            });
+            let mut writer = &stream;
+            writer.write_all(format!("{}\n", answer).as_bytes()).ok()?;
+            writer.flush().ok()?;
+            Some(request)
+        });
+        Herdr {
+            path,
+            worker: Some(worker),
+        }
+    }
+
+    fn client(&self) -> Client {
+        Client::new(Socket::at(&self.path), "mikebronner.project-finder")
+            .with_timeout(Duration::from_secs(2))
+    }
+
+    /// The request it was sent.
+    fn request(&mut self) -> Value {
+        self.worker
+            .take()
+            .unwrap()
+            .join()
+            .unwrap()
+            .expect("the peer was asked")
+    }
+}
+
+impl Drop for Herdr {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+/// The record of another installed plugin.
+fn somebody_else() -> InstalledPluginInfo {
+    InstalledPluginInfo {
+        plugin_id: "mikebronner.recent-spaces".to_string(),
+        ..plugin(PluginSourceKind::Github, "1.0.0")
+    }
+}
+
+#[test]
+fn lookup_finds_this_plugin_and_asks_herdr_for_it_by_id() {
+    let mut herdr = Herdr::listing(vec![
+        somebody_else(),
+        plugin(PluginSourceKind::Github, "0.8.1"),
+    ]);
+
+    let (found, files) = lookup(&herdr.client(), "mikebronner.project-finder", STATE_DIR)
+        .expect("this plugin's record is in the list");
+
+    assert_eq!(found.plugin_id, "mikebronner.project-finder");
+    assert_eq!(files.dir(), Path::new("/plugins/p/.project-finder-update"));
+    let request = herdr.request();
+    assert_eq!(request["method"], "plugin.list");
+    assert_eq!(request["params"]["plugin_id"], "mikebronner.project-finder");
+}
+
+#[test]
+fn lookup_never_takes_another_plugins_record() {
+    // ⚠️ A server that ignored the filter still cannot hand back somebody
+    // else's install, which would put this plugin's files in its root.
+    let herdr = Herdr::listing(vec![somebody_else()]);
+
+    assert!(lookup(&herdr.client(), "mikebronner.project-finder", STATE_DIR).is_none());
+}
+
+#[test]
+fn lookup_refuses_a_local_install() {
+    let herdr = Herdr::listing(vec![plugin(PluginSourceKind::Local, "0.8.1")]);
+
+    assert!(lookup(&herdr.client(), "mikebronner.project-finder", STATE_DIR).is_none());
+}
+
+#[test]
+fn lookup_answers_none_when_herdr_does_not_answer() {
+    let client = Client::new(
+        Socket::at(std::env::temp_dir().join("herdr-kit-update-nobody.sock")),
+        "mikebronner.project-finder",
+    );
+
+    assert!(lookup(&client, "mikebronner.project-finder", STATE_DIR).is_none());
+}
+
+// ------------------------------------------------------ the detached side
+
+#[test]
+fn run_check_saves_what_it_found_inside_the_install() {
+    let directory = TempDir::new("run-check");
+    let herdr = Herdr::listing(vec![rooted(PluginSourceKind::Github, &directory.0)]);
+    let releases = Answers::newest("0.9.1");
+
+    let decision = run_check(
+        &herdr.client(),
+        "mikebronner.project-finder",
+        STATE_DIR,
+        at(1_000_000),
+        DEFAULT_INTERVAL,
+        &releases,
+    );
+
+    assert_eq!(decision, Some(Decision::Available(found())));
+    let files = Files::under(&directory.0, STATE_DIR).unwrap();
+    assert_eq!(std::fs::read_to_string(files.stamp()).unwrap(), "1000000\n");
+    assert_eq!(
+        offer(
+            &rooted(PluginSourceKind::Github, &directory.0),
+            &files.result(),
+            &files.offered("dialog").unwrap(),
+            at(1_000_060),
+            DEFAULT_INTERVAL,
+        ),
+        Some(found())
+    );
+}
+
+#[test]
+fn run_check_writes_nothing_into_a_local_install() {
+    // 🚨 The door, end to end. A linked working tree is refused before the
+    // network is asked and before a directory is made.
+    let directory = TempDir::new("run-check-local");
+    let herdr = Herdr::listing(vec![rooted(PluginSourceKind::Local, &directory.0)]);
+    let releases = Answers::newest("9.9.9");
+
+    let decision = run_check(
+        &herdr.client(),
+        "mikebronner.project-finder",
+        STATE_DIR,
+        at(1_000_000),
+        DEFAULT_INTERVAL,
+        &releases,
+    );
+
+    assert_eq!(decision, None);
+    assert!(releases.asked.borrow().is_empty());
+    assert_eq!(contents(&directory.0), Vec::<PathBuf>::new());
+}
+
+#[test]
+fn a_detached_check_is_not_spawned_inside_the_interval() {
+    let directory = TempDir::new("spawn-too-soon");
+    let files = Files::under(&directory.0, STATE_DIR).unwrap();
+    std::fs::create_dir_all(files.dir()).unwrap();
+    std::fs::write(files.stamp(), "1000000\n").unwrap();
+
+    assert!(!spawn_check_if_due(
+        &files,
+        at(1_000_000 + 60),
+        DEFAULT_INTERVAL
+    ));
+}
+
+#[test]
+#[cfg(unix)]
+fn a_detached_check_is_spawned_once_the_interval_has_passed_and_then_reaped() {
+    // ⚠️ This spawns the test binary itself, which answers the flag it does
+    // not know with an error and exits. What the spawn passes is checked in
+    // the module's own tests, against a script that writes it down.
+    //
+    // 🚨 Then it waits for this process to have no children left. A child
+    // nobody waits for stays a zombie, listed under this process until it
+    // exits, so the wait below never ends early for an unreaped one. It is
+    // the only test in this file that starts a process.
+    let directory = TempDir::new("spawn-due");
+    let files = Files::under(&directory.0, STATE_DIR).unwrap();
+
+    assert!(spawn_check_if_due(&files, at(1_000_000), DEFAULT_INTERVAL));
+    // The launch writes nothing. The attempt stamp is the detached check's.
+    assert!(!files.stamp().exists());
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let mut left = children();
+    while !left.is_empty() && std::time::Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(50));
+        left = children();
+    }
+    assert_eq!(left, Vec::<String>::new(), "a child was never reaped");
+}
+
+/// This process's children, as `ps` lists them, zombies included, leaving out
+/// the `ps` that is asking.
+#[cfg(unix)]
+fn children() -> Vec<String> {
+    let me = std::process::id().to_string();
+    let ps = std::process::Command::new("ps")
+        .args(["-A", "-o", "pid=,ppid="])
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .expect("ps runs");
+    let asking = ps.id().to_string();
+    let listed = ps.wait_with_output().expect("ps answers");
+    String::from_utf8_lossy(&listed.stdout)
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let (pid, parent) = (fields.next()?, fields.next()?);
+            (parent == me && pid != asking).then(|| pid.to_string())
+        })
+        .collect()
 }

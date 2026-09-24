@@ -34,8 +34,9 @@
 //! running against a working tree is hostile, because a developer who asked to
 //! compile silently gets a binary somebody else built. Herdr answers the
 //! question authoritatively and `PluginSourceKind` **defaults to `Local`**,
-//! which is the safe direction. The guard is checked three times, in
-//! [`check`], [`offer`] and [`apply`], because each can be called alone.
+//! which is the safe direction. [`managed`] is the door a plugin goes through
+//! first, and the guard is checked again in [`check`], [`offer`] and [`apply`],
+//! because each can be called alone.
 //!
 //! # Carrying a found update to the next launch
 //!
@@ -61,17 +62,45 @@
 //! ⚠️ **The caller passes every path.** Nothing here reads
 //! [`crate::env::PLUGIN_STATE_DIR_VAR`], because a Herdr event hook does not
 //! receive it.
+//!
+//! # Wiring it into a plugin
+//!
+//! Every plugin that offers updates needs the same setup, so the kit carries it
+//! (SCOPE.md §8.2, "Where the kit ends"). A plugin supplies its id, a name for
+//! its state directory, and a name for each offer record it keeps:
+//!
+//! | Call | What it does |
+//! |---|---|
+//! | [`lookup`] | reads this plugin's install record through `plugin.list`, then [`managed`] |
+//! | [`managed`] | 🚨 **the one door**: [`Files`] for a GitHub install, `None` for anything else |
+//! | [`spawn_check_if_due`] | re-runs this binary as [`CHECK_FLAG`], detached and reaped, when a check is due |
+//! | [`run_check`] | the [`CHECK_FLAG`] side: [`lookup`], then [`check_and_save`] |
+//! | [`Files::offered`] | the offer record for one channel, such as a dialog or a toast |
+//!
+//! 🔑 **The wording, the buttons, and the choice of dialog or toast stay in the
+//! plugin.** This module still never prompts and never depends on `dialog`,
+//! so a headless watcher can use all of it.
+//!
+//! 🚨 **The files live inside the install's own `plugin_root`.** An event hook
+//! is handed neither `HERDR_PLUGIN_STATE_DIR` nor `HERDR_BIN_PATH`, but every
+//! run holds the socket, and `plugin.list` names the root. [`managed`] answers
+//! `None` for a `local:` install, so a linked working tree never receives a
+//! file. ✅ A reinstall empties the directory (SCOPE.md §8.2.1), and every
+//! missing file already reads as the safe default.
 
 use std::cmp::Ordering;
 use std::fs;
 use std::io;
-use std::path::Path;
-use std::process::Command;
+use std::path::{Component, Path, PathBuf};
+use std::process::{Child, Command, Stdio};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-use crate::api::generated::{InstalledPluginInfo, PluginSourceKind};
+use crate::api::client::Client;
+use crate::api::generated::{
+    InstalledPluginInfo, PluginListAnswer, PluginListParams, PluginSourceKind, RequestMethod,
+};
 
 /// How long to wait between checks, when a caller expresses no opinion.
 pub const DEFAULT_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
@@ -569,6 +598,208 @@ pub fn due(stamp: &Path, now: SystemTime, interval: Duration) -> bool {
     elapsed.as_secs().saturating_sub(then) >= interval.as_secs()
 }
 
+/// The flag a detached check runs under.
+///
+/// [`spawn_check_if_due`] passes it, and the plugin's `main` answers it by
+/// calling [`run_check`] and exiting.
+pub const CHECK_FLAG: &str = "--check-update";
+
+/// Where one install keeps its update state.
+///
+/// Built only by [`Files::under`], which refuses a path that could land outside
+/// the install. The names on disk are fixed, so a plugin that moves onto this
+/// from its own copy keeps the files it already wrote:
+///
+/// | File | Name | Written by |
+/// |---|---|---|
+/// | [`Files::stamp`] | `checked` | [`check`] |
+/// | [`Files::result`] | `available.json` | [`check_and_save`] |
+/// | [`Files::offered`] | `offered-<name>` | [`record_offer`], one file per channel |
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Files {
+    dir: PathBuf,
+}
+
+impl Files {
+    /// The files in `state_dir`, a directory directly under `plugin_root`.
+    ///
+    /// 🚨 **Fails closed.** `None` when `plugin_root` is not an absolute path,
+    /// or when `state_dir` is not a single plain name. A relative root would
+    /// resolve against whatever directory the hook was started in. A
+    /// `state_dir` of `..`, `a/b` or an absolute path would reach outside the
+    /// install, because joining an absolute path discards the root.
+    pub fn under(plugin_root: &Path, state_dir: &str) -> Option<Files> {
+        if !plugin_root.is_absolute() || !plain_name(state_dir) {
+            return None;
+        }
+        Some(Files {
+            dir: plugin_root.join(state_dir),
+        })
+    }
+
+    /// The directory that holds every file below.
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
+    /// When a check was last attempted. Pass it to [`due`] and [`check`].
+    pub fn stamp(&self) -> PathBuf {
+        self.dir.join("checked")
+    }
+
+    /// The update the last check found. Pass it to [`check_and_save`] and
+    /// [`offer`].
+    pub fn result(&self) -> PathBuf {
+        self.dir.join("available.json")
+    }
+
+    /// The offer record for the channel called `name`.
+    ///
+    /// 🔑 **One record per channel, because one would silence another.** A
+    /// toast that points a user to a dialog must not start the dialog's
+    /// interval. So each channel names its own record, and [`offer`] and
+    /// [`record_offer`] take the one it names.
+    ///
+    /// `None` when `name` is not a single plain name, for the reason
+    /// [`Files::under`] gives.
+    pub fn offered(&self, name: &str) -> Option<PathBuf> {
+        plain_name(name).then(|| self.dir.join(format!("offered-{}", name)))
+    }
+}
+
+/// Whether `name` is exactly one ordinary path component.
+///
+/// Refuses the empty name, `.`, `..`, a root, and anything with a separator,
+/// so a name joined onto a directory stays inside it.
+fn plain_name(name: &str) -> bool {
+    let mut parts = Path::new(name).components();
+    matches!(
+        (parts.next(), parts.next()),
+        (Some(Component::Normal(part)), None) if part == name
+    )
+}
+
+/// The install record and its [`Files`], when this is an install the plugin may
+/// update.
+///
+/// 🚨 **The one door, and it fails closed.** `None` for a `local:` install
+/// (SCOPE.md §8.3), and `None` when [`Files::under`] refuses the record's
+/// `plugin_root` or `state_dir`, which includes a record with no root at all.
+/// A caller asks this first, and on `None` it spawns nothing, reads nothing,
+/// writes nothing and asks nothing.
+pub fn managed(
+    plugin: InstalledPluginInfo,
+    state_dir: &str,
+) -> Option<(InstalledPluginInfo, Files)> {
+    if !is_managed(&plugin) {
+        return None;
+    }
+    let files = Files::under(Path::new(&plugin.plugin_root), state_dir)?;
+    Some((plugin, files))
+}
+
+/// Reads the install record for `plugin_id` through `plugin.list`, then asks
+/// [`managed`].
+///
+/// `None` on any failure: a call Herdr did not answer, and an answer holding no
+/// record for this plugin. ⚠️ **The answer is filtered by `plugin_id` again**,
+/// so a server that ignored the request's filter still cannot hand back
+/// another plugin's record.
+pub fn lookup(
+    client: &Client,
+    plugin_id: &str,
+    state_dir: &str,
+) -> Option<(InstalledPluginInfo, Files)> {
+    let answer = client
+        .call::<PluginListAnswer>(RequestMethod::PluginList(PluginListParams {
+            plugin_id: Some(plugin_id.to_string()),
+        }))
+        .ok()?;
+    let plugin = answer
+        .plugins
+        .into_iter()
+        .find(|plugin| plugin.plugin_id == plugin_id)?;
+    managed(plugin, state_dir)
+}
+
+/// Starts a detached check when one is due, and never waits for it.
+///
+/// Re-runs the current binary with [`CHECK_FLAG`], so a launch never waits on
+/// the network call. Answers whether a check was started.
+///
+/// 🚨 **The child is reaped on a thread of its own.** A dropped child that
+/// nobody waits for stays a zombie until the caller exits, and a long-lived
+/// watcher calling this once per interval would collect one per call. The
+/// thread waits and ends. It does not hold up the caller, and a caller that
+/// exits first loses nothing: the child is in its own process group.
+///
+/// ⚠️ A failure to spawn is ignored rather than reported: the worst case is
+/// that a later launch tries again.
+pub fn spawn_check_if_due(files: &Files, now: SystemTime, interval: Duration) -> bool {
+    if !due(&files.stamp(), now, interval) {
+        return false;
+    }
+    let Ok(me) = std::env::current_exe() else {
+        return false;
+    };
+    let Ok(mut child) = spawn_detached(&me) else {
+        return false;
+    };
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    true
+}
+
+/// Runs `program` with [`CHECK_FLAG`], with no stdio, in its own process group.
+///
+/// 🔑 **Its own process group, so the check outlives a hook** whose group
+/// Herdr ends. ⚠️ Unix only: on Windows the child is spawned in the caller's
+/// group.
+///
+/// 🚨 **No stdio, because an inherited pipe would hold the caller's reader
+/// open.** On the `[[startup]]` path stderr is a pipe (SCOPE.md §10), so a
+/// child that kept it would keep Herdr waiting for the whole network call.
+fn spawn_detached(program: &Path) -> io::Result<Child> {
+    let mut command = Command::new(program);
+    command
+        .arg(CHECK_FLAG)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    command.spawn()
+}
+
+/// The [`CHECK_FLAG`] side: finds the install, then asks `releases` and keeps
+/// the answer for a later launch.
+///
+/// `None` when [`lookup`] refuses, in which case nothing was asked and nothing
+/// was written. Otherwise the [`Decision`] from [`check_and_save`], for the
+/// plugin to log. Pass [`CurlReleases::default`] outside a test.
+pub fn run_check(
+    client: &Client,
+    plugin_id: &str,
+    state_dir: &str,
+    now: SystemTime,
+    interval: Duration,
+    releases: &impl Releases,
+) -> Option<Decision> {
+    let (plugin, files) = lookup(client, plugin_id, state_dir)?;
+    Some(check_and_save(
+        &plugin,
+        &files.stamp(),
+        &files.result(),
+        now,
+        interval,
+        releases,
+    ))
+}
+
 /// The plugin's `owner` and `repo`, when its record names both.
 fn repository_of(plugin: &InstalledPluginInfo) -> Option<(&str, &str)> {
     match (
@@ -801,6 +1032,118 @@ mod tests {
         assert_eq!(newer("0.9.1", "0.9.0"), Ok(true));
         assert_eq!(newer("0.9.1", "0.9.1"), Ok(false));
         assert_eq!(newer("0.9.0", "0.9.1"), Ok(false));
+    }
+
+    /// A script at `<dir>/plugin` that writes to `<dir>/seen` the arguments
+    /// it was given, its process group, and then, for each of its stdin,
+    /// stdout and stderr, `null` when that descriptor is `/dev/null` and
+    /// `other` when it is not.
+    ///
+    /// `[ A -ef B ]` compares device and inode, so the script tells a null
+    /// descriptor from an inherited one without reading from it.
+    #[cfg(unix)]
+    fn probe_script(tag: &str) -> (PathBuf, PathBuf, PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!(
+            "herdr-plugin-kit-spawn-{}-{}",
+            tag,
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let script = dir.join("plugin");
+        let seen = dir.join("seen");
+        fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\n\
+                 printf '%s\\n' \"$*\" > {0:?}\n\
+                 ps -o pgid= -p $$ >> {0:?}\n\
+                 for fd in 0 1 2; do\n\
+                 if [ /dev/fd/$fd -ef /dev/null ]; then n=\"$n null\"; else n=\"$n other\"; fi\n\
+                 done\n\
+                 echo $n >> {0:?}\n",
+                seen
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+        (dir, script, seen)
+    }
+
+    /// 🔑 **`spawn_detached` is private, and the integration suite can only
+    /// reach it by re-running its own test binary**, which answers the flag
+    /// with an error and reports nothing back. So the spawn is driven here
+    /// against a script that writes down what it was given.
+    ///
+    /// stdin is checked by the next test, because this one cannot tell a null
+    /// stdin from an inherited one when its own stdin is already null.
+    #[test]
+    #[cfg(unix)]
+    fn a_detached_check_gets_the_flag_its_own_process_group_and_no_output() {
+        let (dir, script, seen) = probe_script("group");
+
+        let mut child = spawn_detached(&script).unwrap();
+        let pid = child.id();
+        assert!(child.wait().unwrap().success());
+
+        let text = fs::read_to_string(&seen).unwrap();
+        let _ = fs::remove_dir_all(&dir);
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.first(), Some(&CHECK_FLAG), "{}", text);
+        // A group leader's group id is its own pid, which is what
+        // `process_group(0)` makes it. Inherited, it would be this test's.
+        assert_eq!(
+            lines.get(1).map(|line| line.trim()),
+            Some(pid.to_string().as_str()),
+            "{}",
+            text
+        );
+        // 🚨 Inherited, stdout and stderr would be whatever this test has,
+        // and under `cargo test` driven by `tools/mutate.py` both are pipes.
+        let fds: Vec<&str> = lines.get(2).unwrap_or(&"").split(' ').collect();
+        assert_eq!(fds.get(1..), Some(&["null", "null"][..]), "{}", text);
+    }
+
+    /// Set only in the copy of the test binary the next test starts.
+    #[cfg(unix)]
+    const PROBE: &str = "HERDR_PLUGIN_KIT_SPAWN_PROBE";
+
+    /// 🔑 **Whatever stdin this test was started with, the spawn is driven
+    /// from a process whose stdin is a pipe.** If this test's own stdin were
+    /// `/dev/null`, as a CI runner's may be, an inherited stdin would read as
+    /// null as well, and the mutation dropping `Stdio::null()` would survive
+    /// or not depending on who ran the suite. So the test re-runs its own
+    /// binary with a piped stdin, and that copy does the spawn.
+    #[test]
+    #[cfg(unix)]
+    fn a_detached_check_gets_a_null_stdin_even_from_a_parent_that_has_one() {
+        if let Some(script) = std::env::var_os(PROBE) {
+            let mut child = spawn_detached(Path::new(&script)).unwrap();
+            assert!(child.wait().unwrap().success());
+            return;
+        }
+        let (dir, script, seen) = probe_script("stdin");
+
+        let status = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "update::tests::a_detached_check_gets_a_null_stdin_even_from_a_parent_that_has_one",
+                "--test-threads=1",
+            ])
+            .env(PROBE, &script)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .unwrap();
+
+        let text = fs::read_to_string(&seen).unwrap_or_default();
+        let _ = fs::remove_dir_all(&dir);
+        assert!(status.success(), "the probe copy failed: {}", text);
+        let fds: Vec<&str> = text.lines().nth(2).unwrap_or("").split(' ').collect();
+        assert_eq!(fds.first(), Some(&"null"), "{}", text);
     }
 
     #[test]

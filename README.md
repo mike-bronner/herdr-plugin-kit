@@ -32,7 +32,7 @@ and no further. See below.
 | Shell templates — `bin/build`, the launcher, and their sync task | ✅ |
 | PowerShell templates | ⚠️ shipped **unrun**, see below |
 | `report` — the delivery reason, and a pane when nothing was delivered | ✅ feature-gated, off by default. Needs a `[[panes]]` entry in the plugin, which a crate cannot supply |
-| `update` — the release check, its saved result, and the refresh | ✅ feature-gated, off by default. Answers a decision and acts only when told to. A detached check saves what it found, and a later launch reads it back with no network call (SCOPE.md §8.2) |
+| `update` — the release check, its saved result, the refresh, and the setup to wire them | ✅ feature-gated, off by default. Answers a decision and acts only when told to. A detached check saves what it found, and a later launch reads it back with no network call. The kit finds the install, lays out the files and spawns the check; the plugin writes only its wording (SCOPE.md §8.2) |
 | CI workflows | ✅ the kit's own, and `plugin-release.yml` for a plugin. 🔻 No plugin test workflow, see below |
 
 Generated against **Herdr `v0.9.0`**, protocol 22, schema version 1.
@@ -673,7 +673,7 @@ just mutate tools/mutations/client.json    # the transport's 20 guards
 just mutate tools/mutations/dialog.json    # the dialogs' 59
 just mutate tools/mutations/report.json    # the issue reports' 19
 just mutate tools/mutations/surface.json   # the shared seam's 2
-just mutate tools/mutations/update.json    # the update check's 64
+just mutate tools/mutations/update.json    # the update check's 85
 ```
 
 CI reads that directory rather than a list of those five paths. A spec added

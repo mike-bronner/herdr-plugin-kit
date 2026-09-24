@@ -128,7 +128,7 @@ herdr-plugin-kit/
 │       ├── dialog.json               # the dialogs' 59 mutations
 │       ├── report.json               # the issue reports' 19 mutations
 │       ├── surface.json              # the shared seam's 2 mutations
-│       └── update.json               # the update check's 64 mutations
+│       └── update.json               # the update check's 85 mutations
 ├── .github/workflows/
 │   ├── kit-ci.yml                    # the kit's own, fast
 │   └── kit-mutation.yml              # the kit's own, slow — §11.8
@@ -1865,6 +1865,34 @@ with them. Its migration is `src/confirm.rs`, planned against the table above.
   ✅ **A declined offer is asked again after the interval**, decided by Mike 2026-09-23 for
   agentic-panes-layout, over "skip that version until a newer release". The offer record
   carries a time and no tag, so a newer find does not reset it.
+- **Where the kit ends and the plugin begins.** 🔑 **Decided by Mike 2026-09-24: the
+  setup every plugin needs moves into the kit, and the wording stays out.**
+  agentic-panes-layout wired the calls above and found that about half of its file was
+  setup with nothing plugin-specific in it. project-finder needs the same setup and has
+  no update check at all, so a second copy was the alternative.
+
+  | In the kit | In the plugin |
+  |---|---|
+  | `lookup(client, plugin_id, state_dir)`: the install record through `plugin.list`, filtered by id again | its plugin id and its state-directory name |
+  | `managed(plugin, state_dir)`: 🚨 **the one door**. `None` for a `local:` install, a root that is not absolute, or a name that could leave the install | what to do on `None`, which is nothing |
+  | `Files`: `checked`, `available.json` and `offered-<name>` inside `plugin_root/state_dir` | a name for each offer channel |
+  | `spawn_check_if_due(files, now, interval)`: re-runs the binary as `CHECK_FLAG`, detached, in its own process group with no stdio, and reaps it on a thread so a long-lived caller collects no zombies | answering `CHECK_FLAG` in `main` |
+  | `run_check(client, plugin_id, state_dir, now, interval, releases)`: `lookup`, then `check_and_save` | logging the `Decision` it answers |
+  | | 🔑 the wording, the buttons, the dialog-or-toast choice, and acting on the answer |
+
+  - 🚨 **The files live inside the install's own `plugin_root`.** An event hook is handed
+    neither `HERDR_PLUGIN_STATE_DIR` nor `HERDR_BIN_PATH`, but every run holds the
+    socket, and `plugin.list` names the root. That was Mike's call. §8.2.1 measured that
+    a reinstall empties the directory, and every missing file already reads as the safe
+    default: nothing to offer, a check that is due, an offer never shown.
+  - **Any number of named offer records.** agentic-panes-layout keeps one for its dialog
+    and one for its toast, so a toast does not silence the dialog it points to. A name,
+    like the state directory, must be one plain path component, or `Files` refuses it.
+  - **The file names are the ones agentic-panes-layout already wrote**, so moving onto
+    the kit strands no saved result and restarts no interval.
+  - ⚠️ **Still no prompt, and still no `dialog`.** Mike's 2026-09-13 decision holds, so
+    nothing in this table pulls `dialog` in, and the headless recent-spaces watcher can
+    still build the module.
 - **Prompt:** ✅ **`dialog::ask`, which already exists.** `crates/herdr-plugin-kit/src/dialog.rs`
   ships `ask` taking a list of `Button`s and answering `Answer`, beside `notify`. ➕ The
   line numbers this cited went stale when the pair became a list (§7.5.8). ⚠️ This said "a popup through `report`, never a toast", which was
