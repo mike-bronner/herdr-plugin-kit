@@ -31,9 +31,179 @@
       "replace": "        Ok(None) => Decision::NoAnswer(\"no releases\".to_string()),"
     },
     {
-      "name": "the installed tag is recognised as current",
-      "find": "        Ok(Some(tag)) if tag == plugin.version => Decision::UpToDate,",
-      "replace": "        Ok(Some(tag)) if tag != plugin.version => Decision::UpToDate,"
+      "name": "an older or equal release is never offered",
+      "find": ".is_gt())\n}",
+      "replace": ".is_ne())\n}"
+    },
+    {
+      "name": "the installed version itself is not newer",
+      "find": ".is_gt())\n}",
+      "replace": ".is_ge())\n}"
+    },
+    {
+      "name": "a newer release is offered",
+      "find": "        Ok(Some(tag)) => match newer(&tag, &plugin.version) {",
+      "replace": "        Ok(Some(tag)) => match newer(&tag, &plugin.version).map(|_| false) {"
+    },
+    {
+      "name": "an unparsable version is never up to date",
+      "find": "            Err(unparsable) => Decision::NoAnswer(unparsable),",
+      "replace": "            Err(_) => Decision::UpToDate,"
+    },
+    {
+      "name": "an unparsable version is never an update either",
+      "find": "            Err(unparsable) => Decision::NoAnswer(unparsable),",
+      "replace": "            Err(_) => Decision::Available(Available {\n                installed: plugin.version.clone(),\n                tag,\n                repository: format!(\"{}/{}\", owner, repo),\n            }),"
+    },
+    {
+      "name": "the non-answer names the side that is not a version",
+      "find": "unparsable(\"release tag\", tag)",
+      "replace": "unparsable(\"installed version\", tag)"
+    },
+    {
+      "name": "a leading v is ignored",
+      "find": "    let text = text.strip_prefix('v').unwrap_or(text);",
+      "replace": "    let text = text;"
+    },
+    {
+      "name": "only one leading v is ignored",
+      "find": "    let text = text.strip_prefix('v').unwrap_or(text);",
+      "replace": "    let text = text.trim_start_matches('v');"
+    },
+    {
+      "name": "build metadata is split off before the core is read",
+      "find": "    let (text, build) = match text.split_once('+') {",
+      "replace": "    let (text, build) = match None::<(&str, &str)> {"
+    },
+    {
+      "name": "build identifiers are validated",
+      "find": "    if !build.iter().all(|id| identifier(id)) {",
+      "replace": "    if false {"
+    },
+    {
+      "name": "prerelease identifiers are validated",
+      "find": "        .all(|id| identifier(id) && (!numeric(id) || canonical(id)))",
+      "replace": "        .all(|id| !numeric(id) || canonical(id))"
+    },
+    {
+      "name": "a numeric prerelease identifier has no leading zero",
+      "find": "        .all(|id| identifier(id) && (!numeric(id) || canonical(id)))",
+      "replace": "        .all(|id| identifier(id))"
+    },
+    {
+      "name": "the core has exactly three parts",
+      "find": "    let [major, minor, patch] = core.split('.')",
+      "replace": "    let [major, minor, patch, ..] = core.split('.')"
+    },
+    {
+      "name": "core numbers are digits",
+      "find": "        .all(|n| numeric(n) && canonical(n))",
+      "replace": "        .all(|n| canonical(n))"
+    },
+    {
+      "name": "core numbers have no leading zero",
+      "find": "        .all(|n| numeric(n) && canonical(n))",
+      "replace": "        .all(|n| numeric(n))"
+    },
+    {
+      "name": "an identifier is never empty",
+      "find": "    !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')",
+      "replace": "    id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')"
+    },
+    {
+      "name": "an identifier admits only alphanumerics and hyphens",
+      "find": "    !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')",
+      "replace": "    !id.is_empty() && id.bytes().all(|b| b != b'.')"
+    },
+    {
+      "name": "a number is never empty",
+      "find": "    !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit())",
+      "replace": "    id.bytes().all(|b| b.is_ascii_digit())"
+    },
+    {
+      "name": "zero itself is a canonical number",
+      "find": "    number == \"0\" || !number.starts_with('0')",
+      "replace": "    !number.starts_with('0')"
+    },
+    {
+      "name": "two releases of one core are equal",
+      "find": "        (true, true) => Equal,",
+      "replace": "        (true, true) => Less,"
+    },
+    {
+      "name": "a release is above its prereleases",
+      "find": "        (true, false) => Greater,",
+      "replace": "        (true, false) => Less,"
+    },
+    {
+      "name": "a prerelease is below its release",
+      "find": "        (false, true) => Less,",
+      "replace": "        (false, true) => Greater,"
+    },
+    {
+      "name": "prerelease identifiers compare left to right",
+      "find": "            .fold(Equal, Ordering::then)\n            .then(",
+      "replace": "            .fold(Equal, |first, next| next.then(first))\n            .then("
+    },
+    {
+      "name": "more prerelease identifiers rank higher",
+      "find": "            .then(a.pre.len().cmp(&b.pre.len())),",
+      "replace": "            .then(b.pre.len().cmp(&a.pre.len())),"
+    },
+    {
+      "name": "the core compares major first, and the prerelease last",
+      "find": "        .chain([pre])\n        .fold(Equal, Ordering::then)",
+      "replace": "        .chain([pre])\n        .fold(Equal, |first, next| next.then(first))"
+    },
+    {
+      "name": "the core compares its fields as numbers",
+      "find": "        .map(|(x, y)| numeric_order(x, y))\n        .chain([pre])",
+      "replace": "        .map(|(x, y)| x.cmp(y))\n        .chain([pre])"
+    },
+    {
+      "name": "numeric prerelease identifiers compare as numbers",
+      "find": "        (true, true) => numeric_order(x, y),",
+      "replace": "        (true, true) => x.cmp(y),"
+    },
+    {
+      "name": "a numeric identifier is below a text one",
+      "find": "        (true, false) => Ordering::Less,",
+      "replace": "        (true, false) => Ordering::Greater,"
+    },
+    {
+      "name": "a text identifier is above a numeric one",
+      "find": "        (false, true) => Ordering::Greater,",
+      "replace": "        (false, true) => Ordering::Less,"
+    },
+    {
+      "name": "text identifiers compare in ASCII order",
+      "find": "        (false, false) => x.cmp(y),",
+      "replace": "        (false, false) => y.cmp(x),"
+    },
+    {
+      "name": "a longer number is the larger one",
+      "find": "    x.len().cmp(&y.len()).then_with(|| x.cmp(y))",
+      "replace": "    x.cmp(y)"
+    },
+    {
+      "name": "numbers of one length compare digit by digit",
+      "find": "    x.len().cmp(&y.len()).then_with(|| x.cmp(y))",
+      "replace": "    x.len().cmp(&y.len())"
+    },
+    {
+      "name": "a saved result that is not newer is refused",
+      "find": "    if newer(&update.tag, &plugin.version) != Ok(true) {",
+      "replace": "    if false {"
+    },
+    {
+      "name": "a saved reinstall or downgrade is refused, not only an unparsable one",
+      "find": "    if newer(&update.tag, &plugin.version) != Ok(true) {",
+      "replace": "    if newer(&update.tag, &plugin.version).is_err() {"
+    },
+    {
+      "name": "a saved result with an unparsable tag is refused",
+      "find": "    if newer(&update.tag, &plugin.version) != Ok(true) {",
+      "replace": "    if newer(&update.tag, &plugin.version) == Ok(false) {"
     },
     {
       "name": "a local install is never checked",

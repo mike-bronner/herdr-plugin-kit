@@ -4,7 +4,7 @@ name: Mutation
 #
 # 🚨 Separate from kit-ci.yml on purpose, and this is the decision rather than
 # a filing convenience. The harness recompiles the crate once per mutation and
-# there are a hundred and thirty of them, so a run costs minutes rather than
+# there are a hundred and sixty-four of them, so a run costs minutes rather than
 # seconds.
 # Two failures were weighed against each other:
 #
@@ -87,7 +87,7 @@ jobs:
       - uses: actions/checkout@v7
 
       # Warm the build once, so the per-mutation cost is an incremental
-      # rebuild rather than a cold one a hundred and thirty times over.
+      # rebuild rather than a cold one a hundred and sixty-four times over.
       #
       # `--all-features` rather than each spec's own set: it warms every
       # dependency for every job, and a named list goes stale the day a feature

@@ -62,6 +62,7 @@
 //! [`crate::env::PLUGIN_STATE_DIR_VAR`], because a Herdr event hook does not
 //! receive it.
 
+use std::cmp::Ordering;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -90,9 +91,12 @@ pub const CHECK_TIMEOUT: Duration = Duration::from_secs(10);
 pub enum Decision {
     /// Nothing was asked, and this is why.
     Skipped(Skipped),
-    /// The newest release is the one already installed.
+    /// No release is newer than the one installed, under SemVer precedence.
+    ///
+    /// That includes an install newer than the newest release, such as a
+    /// prerelease `releases/latest` does not list.
     UpToDate,
-    /// A newer release exists.
+    /// A release strictly newer than the installed version exists.
     Available(Available),
     /// The question could not be answered. **Not** an answer of "no update".
     NoAnswer(String),
@@ -310,13 +314,141 @@ pub fn check(
     match releases.latest(owner, repo) {
         Err(reason) => Decision::NoAnswer(reason),
         Ok(None) => Decision::UpToDate,
-        Ok(Some(tag)) if tag == plugin.version => Decision::UpToDate,
-        Ok(Some(tag)) => Decision::Available(Available {
-            installed: plugin.version.clone(),
-            tag,
-            repository: format!("{}/{}", owner, repo),
-        }),
+        Ok(Some(tag)) => match newer(&tag, &plugin.version) {
+            Err(unparsable) => Decision::NoAnswer(unparsable),
+            Ok(false) => Decision::UpToDate,
+            Ok(true) => Decision::Available(Available {
+                installed: plugin.version.clone(),
+                tag,
+                repository: format!("{}/{}", owner, repo),
+            }),
+        },
     }
+}
+
+/// Whether the release `tag` is strictly newer than `installed`, under
+/// SemVer 2.0.0 precedence.
+///
+/// 🚨 **Strictly newer, never merely different.** A string comparison offered
+/// `v0.4.0` to an install of `0.4.0`, and offered an *older* release as an
+/// update. [`apply`] passes the tag as `--ref`, so accepting that offer
+/// installs the downgrade. The likely route is an installed prerelease,
+/// because GitHub's `releases/latest` skips prereleases.
+///
+/// One leading `v` is ignored on either side (SCOPE.md §12.1: older tags
+/// carry one). Build metadata is validated and then ignored, as SemVer §10
+/// requires. An installed version newer than the release is not an update.
+///
+/// ⚠️ **A side that is not a semantic version is an error, never `false`.**
+/// `false` becomes [`Decision::UpToDate`], and an unanswerable question read as
+/// "up to date" is the conflation [`Decision::NoAnswer`] exists to prevent.
+fn newer(tag: &str, installed: &str) -> Result<bool, String> {
+    let unparsable =
+        |side: &str, text: &str| format!("the {} {:?} is not a semantic version", side, text);
+    let release = parse(tag).ok_or_else(|| unparsable("release tag", tag))?;
+    let current = parse(installed).ok_or_else(|| unparsable("installed version", installed))?;
+    Ok(precedence(&release, &current).is_gt())
+}
+
+/// A semantic version, holding only the parts precedence reads.
+struct Version<'a> {
+    /// Major, minor and patch, each digits with no leading zero.
+    core: [&'a str; 3],
+    /// The prerelease identifiers, empty for a release.
+    pre: Vec<&'a str>,
+}
+
+/// Parses SemVer 2.0.0's grammar strictly, after one optional leading `v`.
+///
+/// Numbers stay text: canonical digits order by length and then by digit, so
+/// no version is too large to compare.
+fn parse(text: &str) -> Option<Version<'_>> {
+    let text = text.strip_prefix('v').unwrap_or(text);
+    let (text, build) = match text.split_once('+') {
+        Some((text, build)) => (text, build.split('.').collect()),
+        None => (text, Vec::new()),
+    };
+    if !build.iter().all(|id| identifier(id)) {
+        return None;
+    }
+    let (core, pre) = match text.split_once('-') {
+        Some((core, pre)) => (core, pre.split('.').collect()),
+        None => (text, Vec::new()),
+    };
+    if !pre
+        .iter()
+        .all(|id| identifier(id) && (!numeric(id) || canonical(id)))
+    {
+        return None;
+    }
+    let [major, minor, patch] = core.split('.').collect::<Vec<_>>()[..] else {
+        return None;
+    };
+    if ![major, minor, patch]
+        .iter()
+        .all(|n| numeric(n) && canonical(n))
+    {
+        return None;
+    }
+    Some(Version {
+        core: [major, minor, patch],
+        pre,
+    })
+}
+
+/// A prerelease or build identifier: one or more of `[0-9A-Za-z-]`.
+fn identifier(id: &str) -> bool {
+    !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+}
+
+/// Digits only.
+fn numeric(id: &str) -> bool {
+    !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// A number written without a leading zero, which SemVer requires.
+fn canonical(number: &str) -> bool {
+    number == "0" || !number.starts_with('0')
+}
+
+/// SemVer §11: core numerically field by field, then a release above any of
+/// its prereleases, then prerelease identifiers left to right.
+fn precedence(a: &Version, b: &Version) -> Ordering {
+    use Ordering::{Equal, Greater, Less};
+    let pre = match (a.pre.is_empty(), b.pre.is_empty()) {
+        (true, true) => Equal,
+        (true, false) => Greater,
+        (false, true) => Less,
+        (false, false) => a
+            .pre
+            .iter()
+            .zip(&b.pre)
+            .map(|(x, y)| identifier_order(x, y))
+            .fold(Equal, Ordering::then)
+            .then(a.pre.len().cmp(&b.pre.len())),
+    };
+    a.core
+        .iter()
+        .zip(&b.core)
+        .map(|(x, y)| numeric_order(x, y))
+        .chain([pre])
+        .fold(Equal, Ordering::then)
+}
+
+/// Two prerelease identifiers: numbers numerically and below any text, text
+/// in ASCII order.
+fn identifier_order(x: &str, y: &str) -> Ordering {
+    match (numeric(x), numeric(y)) {
+        (true, true) => numeric_order(x, y),
+        (true, false) => Ordering::Less,
+        (false, true) => Ordering::Greater,
+        (false, false) => x.cmp(y),
+    }
+}
+
+/// Two canonical numbers, compared as numbers: `10` is above `9`.
+fn numeric_order(x: &str, y: &str) -> Ordering {
+    x.len().cmp(&y.len()).then_with(|| x.cmp(y))
 }
 
 /// Runs [`check`], then keeps what it learned in `result` for a later launch.
@@ -358,7 +490,8 @@ pub fn check_and_save(
 ///
 /// - `plugin` is a managed install (SCOPE.md §8.3),
 /// - `result` holds a readable [`Available`] for this plugin's repository,
-/// - that `Available` was found against the version installed now, and
+/// - that `Available` was found against the version installed now,
+/// - its tag is strictly newer than that version, as [`check`] requires, and
 /// - `interval` has elapsed since [`record_offer`] last wrote `offered`.
 ///
 /// 🚨 **A result found against another version is stale, and is refused.** The
@@ -475,6 +608,11 @@ fn saved(plugin: &InstalledPluginInfo, result: &Path) -> Option<Available> {
     if update.installed != plugin.version {
         return None;
     }
+    // 🚨 A result 0.5.0 saved may offer a reinstall or a downgrade, because its
+    // check compared strings. Offer only what `check` would offer now.
+    if newer(&update.tag, &plugin.version) != Ok(true) {
+        return None;
+    }
     Some(update)
 }
 
@@ -543,5 +681,141 @@ mod tests {
     #[test]
     fn a_body_that_is_not_json_is_a_non_answer() {
         assert!(tag_of("rate limit exceeded").is_err());
+    }
+
+    // 🔑 **`precedence` and `parse` are private, and the integration suite
+    // reaches them only one pair at a time through `check`.** The grammar and
+    // the ordering are checked here, whole, against SemVer 2.0.0's own text.
+
+    fn order(a: &str, b: &str) -> Ordering {
+        let parsed = |text| parse(text).unwrap_or_else(|| panic!("{:?} should parse", text));
+        precedence(&parsed(a), &parsed(b))
+    }
+
+    /// Asserts every version in `ascending` is strictly below the next, and
+    /// that each pair reads the same way round in both directions.
+    fn assert_ascending(ascending: &[&str]) {
+        for pair in ascending.windows(2) {
+            assert_eq!(order(pair[0], pair[1]), Ordering::Less, "{:?}", pair);
+            assert_eq!(order(pair[1], pair[0]), Ordering::Greater, "{:?}", pair);
+        }
+    }
+
+    #[test]
+    fn the_core_compares_major_then_minor_then_patch_as_numbers() {
+        // SemVer §11.2's example, plus the two a string comparison gets wrong:
+        // `1.10.0` is above `1.9.0`, and a major outranks a larger patch.
+        assert_ascending(&[
+            "1.0.0", "1.9.9", "1.10.0", "2.0.0", "2.1.0", "2.1.1", "10.0.0",
+        ]);
+    }
+
+    #[test]
+    fn a_release_is_above_its_prereleases_in_semvers_own_order() {
+        // SemVer §11.4's example, verbatim, with the one-digit against
+        // two-digit pair (`beta.2`, `beta.11`) that string order reverses.
+        assert_ascending(&[
+            "1.0.0-alpha",
+            "1.0.0-alpha.1",
+            "1.0.0-alpha.beta",
+            "1.0.0-beta",
+            "1.0.0-beta.2",
+            "1.0.0-beta.11",
+            "1.0.0-rc.1",
+            "1.0.0",
+        ]);
+    }
+
+    #[test]
+    fn a_prerelease_of_a_later_version_is_above_an_earlier_release() {
+        assert_ascending(&["0.9.1", "0.9.2-rc.1", "0.9.2"]);
+    }
+
+    #[test]
+    fn text_identifiers_compare_in_ascii_order() {
+        // Uppercase sorts before lowercase in ASCII, and a hyphen before both.
+        assert_ascending(&["1.0.0-A-1", "1.0.0-Alpha", "1.0.0-alpha"]);
+    }
+
+    #[test]
+    fn build_metadata_and_a_leading_v_do_not_change_precedence() {
+        for (a, b) in [
+            ("1.0.0", "1.0.0+20260923"),
+            ("1.0.0+exp.sha.5114f85", "1.0.0+21AF26D3-117B344092BD"),
+            ("1.0.0-rc.1+001", "1.0.0-rc.1"),
+            ("v0.4.0", "0.4.0"),
+            ("v1.0.0-beta+b", "1.0.0-beta"),
+        ] {
+            assert_eq!(order(a, b), Ordering::Equal, "{} {}", a, b);
+        }
+    }
+
+    #[test]
+    fn versions_semver_allows_are_parsed() {
+        for text in [
+            "0.0.0",
+            "1.2.3-0",
+            "1.2.3-0a",
+            "1.2.3-x-y-z.--",
+            "1.2.3+007",
+            "1.2.3-alpha.10.beta+build.1",
+            "99999999999999999999999.0.0",
+        ] {
+            assert!(parse(text).is_some(), "{}", text);
+        }
+    }
+
+    #[test]
+    fn versions_semver_forbids_are_refused() {
+        for text in [
+            "",
+            "v",
+            "latest",
+            "1",
+            "1.0",
+            "1.0.0.0",
+            "1..0",
+            "1.x.0",
+            "01.0.0",
+            "1.00.0",
+            "1.0.00",
+            "-1.0.0",
+            "1.0.0-",
+            "1.0.0-alpha..1",
+            "1.0.0-01",
+            "1.0.0-alpha_1",
+            "1.0.0+",
+            "1.0.0+build..1",
+            "1.0.0+build_1",
+            "1.0.0+a+b",
+            "V1.0.0",
+            "vv1.0.0",
+            " 1.0.0",
+        ] {
+            assert!(parse(text).is_none(), "{:?}", text);
+        }
+    }
+
+    #[test]
+    fn newer_is_strict() {
+        assert_eq!(newer("0.9.1", "0.9.0"), Ok(true));
+        assert_eq!(newer("0.9.1", "0.9.1"), Ok(false));
+        assert_eq!(newer("0.9.0", "0.9.1"), Ok(false));
+    }
+
+    #[test]
+    fn newer_names_the_side_that_is_not_a_version() {
+        let tag = newer("nightly", "0.9.1").unwrap_err();
+        assert!(
+            tag.contains("release tag") && tag.contains("nightly"),
+            "{}",
+            tag
+        );
+        let installed = newer("0.9.1", "dev").unwrap_err();
+        assert!(
+            installed.contains("installed version") && installed.contains("dev"),
+            "{}",
+            installed
+        );
     }
 }

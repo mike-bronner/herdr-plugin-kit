@@ -672,7 +672,7 @@ just mutate tools/mutations/client.json    # the transport's 20 guards
 just mutate tools/mutations/dialog.json    # the dialogs' 59
 just mutate tools/mutations/report.json    # the issue reports' 19
 just mutate tools/mutations/surface.json   # the shared seam's 2
-just mutate tools/mutations/update.json    # the update check's 30
+just mutate tools/mutations/update.json    # the update check's 64
 ```
 
 CI reads that directory rather than a list of those five paths. A spec added

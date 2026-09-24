@@ -128,7 +128,7 @@ herdr-plugin-kit/
 │       ├── dialog.json               # the dialogs' 59 mutations
 │       ├── report.json               # the issue reports' 19 mutations
 │       ├── surface.json              # the shared seam's 2 mutations
-│       └── update.json               # the update check's 30 mutations
+│       └── update.json               # the update check's 64 mutations
 ├── .github/workflows/
 │   ├── kit-ci.yml                    # the kit's own, fast
 │   └── kit-mutation.yml              # the kit's own, slow — §11.8
@@ -1772,6 +1772,49 @@ with them. Its migration is `src/confirm.rs`, planned against the table above.
   release is either upstream's or nothing, and neither describes the code the user is
   running. ✅ Asking for releases rather than tags shrinks that case without closing it.
 
+- **Compare:** 🔑 **an update is a release strictly newer than the installed version
+  under SemVer 2.0.0 precedence. Decided by Mike 2026-09-23, shipped in 0.5.1.** Up to
+  0.5.0 the check compared the tag with the installed version as strings, and any
+  mismatch read as `Available`. agentic-panes-layout, the first consumer, found both
+  failures that follow from that while wiring 0.5.0:
+
+  | Installed | Newest release | 0.5.0 answered | Now |
+  |---|---|---|---|
+  | `0.4.0` | `v0.4.0` | `Available`, a pointless reinstall | `UpToDate` |
+  | `0.9.1` | `0.9.0` | 🚨 `Available`, and `apply` passes the tag as `--ref`, so accepting it **installs the downgrade** | `UpToDate` |
+  | `1.0.0-rc.1` | `0.9.1` | 🚨 the same downgrade. ⚠️ The likely route: `releases/latest` skips prereleases | `UpToDate` |
+  | `0.8.1` | `nightly` | `Available` | `NoAnswer`, naming the side that is not a version |
+
+  The rule, in full:
+
+  - **One leading `v` is ignored on either side**, for the comparison only. §12.1 left
+    older prefixed tags unrewritten, so a check meets both forms. `Available.tag` keeps
+    the tag as published, because `apply` has to name a ref that exists.
+  - **Precedence is SemVer §11's**: the core as numbers (`0.10.0` is above `0.9.0`), a
+    release above its own prereleases, prerelease identifiers left to right with numbers
+    below text, and more identifiers above fewer. **Build metadata is validated and then
+    ignored** (§10), so `0.9.1+build.8` is not newer than `0.9.1+build.7`.
+  - **An older or equal release is `UpToDate`.** `Decision` has no variant for "installed
+    is ahead", and adding one would break every exhaustive `match` in a patch (§12.3).
+    "No release is newer" is what `UpToDate` now documents.
+  - 🚨 **A version that does not parse is `NoAnswer`, never `UpToDate` and never
+    `Available`.** The rule `Decision` exists for applies unchanged: a question that
+    cannot be answered is not good news, and it is not an offer either. The grammar is
+    parsed strictly, so a leading zero, a missing patch or an empty identifier all refuse.
+  - **`offer` re-checks the saved pair.** Its existing test of the installed version stays
+    an exact string match, because it asks "is this the same install", not "which is
+    newer", and both sides come from the same field. ⚠️ What it lacked was the precedence
+    test itself: a result saved by 0.5.0 can hold a reinstall or a downgrade, and `offer`
+    makes no network call that would correct it. It now offers only a tag `check` would
+    offer.
+
+  **Two alternatives were rejected.** The `semver` crate, because the 0.4.4 release notes
+  published a measured promise that `update = []` costs no dependency. `semver` reaches
+  the lock file today only as a build dependency of `crossterm`, under `dialog`. And
+  stripping the `v` alone, because it leaves the downgrade offer in place. The comparison
+  is 85 lines of code in `update.rs`, doc comments and blank lines aside, and it keeps
+  numbers as text so that no version is too large to compare.
+
 - **Never block a launch.** Spawn detached, write the result, prompt on the *next*
   launch. 🔑 **Decided by Mike 2026-09-23: three files, one writer each.** This said
   "write the result to the stamp file", and the kit up to 0.4.4 could not: `check` wrote
@@ -2979,7 +3022,8 @@ which is the defect that prompted the job. This kit documents its private functi
 carefully as its public ones, so those links earn the same check.
 
 🚨 **The mutation runs are a separate workflow, and that placement is the decision.** The
-harness recompiles once per mutation and there are 84 of them. Two failures were weighed:
+harness recompiles once per mutation, and `kit-mutation.yml` states how many there are.
+Two failures were weighed:
 
 - Folding it into the fast gate makes every pull request wait twenty minutes, and **a
   check people wait twenty minutes for is a check people learn to route around.**

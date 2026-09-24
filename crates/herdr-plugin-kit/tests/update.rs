@@ -445,6 +445,121 @@ fn a_refusal_is_never_up_to_date() {
     }
 }
 
+/// What `check` decides for an install of `installed` against a newest
+/// release tagged `tag`.
+fn decided(installed: &str, tag: &str) -> Decision {
+    let directory = TempDir::new("precedence");
+    check(
+        &plugin(PluginSourceKind::Github, installed),
+        &directory.stamp(),
+        at(1_000_000),
+        DEFAULT_INTERVAL,
+        &Answers::newest(tag),
+    )
+}
+
+#[test]
+fn a_v_prefixed_tag_of_the_installed_version_is_up_to_date() {
+    // 🚨 Reported by agentic-panes-layout against 0.5.0: `v0.4.0` against an
+    // installed 0.4.0 offered a pointless reinstall. Tags cut before
+    // 2026-09-10 carry the `v` and were never rewritten (SCOPE.md §12.1).
+    assert_eq!(decided("0.4.0", "v0.4.0"), Decision::UpToDate);
+    assert_eq!(decided("v0.4.0", "0.4.0"), Decision::UpToDate);
+}
+
+#[test]
+fn an_older_release_is_never_offered() {
+    // 🚨 Reported by agentic-panes-layout against 0.5.0. `apply` passes the tag
+    // as `--ref`, so offering this installs a downgrade.
+    for (installed, tag) in [
+        ("0.9.1", "0.9.0"),
+        ("0.10.0", "0.9.0"),
+        ("1.0.0", "v0.9.9"),
+        ("0.9.1", "0.9.1-rc.1"),
+    ] {
+        assert_eq!(
+            decided(installed, tag),
+            Decision::UpToDate,
+            "{} {}",
+            installed,
+            tag
+        );
+    }
+}
+
+#[test]
+fn an_installed_prerelease_newer_than_the_latest_release_is_up_to_date() {
+    // The likely way to meet a downgrade: `releases/latest` skips prereleases,
+    // so an install of one sees an older release as the newest.
+    assert_eq!(decided("1.0.0-rc.1", "0.9.1"), Decision::UpToDate);
+}
+
+#[test]
+fn the_release_of_an_installed_prerelease_is_available() {
+    assert_eq!(
+        decided("0.9.1-rc.2", "0.9.1"),
+        Decision::Available(Available {
+            installed: "0.9.1-rc.2".to_string(),
+            tag: "0.9.1".to_string(),
+            repository: "mike-bronner/herdr-plugin-project-finder".to_string(),
+        })
+    );
+}
+
+#[test]
+fn versions_are_compared_as_numbers_rather_than_text() {
+    // As text, "0.10.0" sorts below "0.9.0" and "0.9.11" below "0.9.2".
+    for (installed, tag) in [("0.9.0", "0.10.0"), ("0.9.2", "0.9.11")] {
+        assert!(
+            matches!(decided(installed, tag), Decision::Available(_)),
+            "{} {}",
+            installed,
+            tag
+        );
+    }
+}
+
+#[test]
+fn a_newer_v_prefixed_tag_is_available_and_keeps_its_v() {
+    // 🔑 The `v` is ignored for the comparison only. `apply` passes the tag as
+    // `--ref`, and the tag that exists in the repository is `v0.9.1`.
+    match decided("0.8.1", "v0.9.1") {
+        Decision::Available(update) => assert_eq!(update.tag, "v0.9.1"),
+        other => panic!("expected an update, got {:?}", other),
+    }
+}
+
+#[test]
+fn build_metadata_does_not_make_a_release_newer() {
+    // SemVer §10: build metadata is ignored when determining precedence.
+    assert_eq!(decided("0.9.1", "0.9.1+build.7"), Decision::UpToDate);
+    assert_eq!(
+        decided("0.9.1+build.7", "0.9.1+build.8"),
+        Decision::UpToDate
+    );
+}
+
+#[test]
+fn a_version_that_cannot_be_parsed_is_a_non_answer_never_up_to_date() {
+    // 🚨 The rule `Decision` exists for, applied to a version: a question that
+    // cannot be answered is not "no update", and it is not an update either.
+    for (installed, tag, side) in [
+        ("0.8.1", "nightly", "release tag"),
+        ("0.8.1", "0.9", "release tag"),
+        ("0.8.1", "v0.09.1", "release tag"),
+        ("dev", "0.9.1", "installed version"),
+        ("0.8.1.2", "0.9.1", "installed version"),
+    ] {
+        match decided(installed, tag) {
+            Decision::NoAnswer(reason) => assert!(reason.contains(side), "{}", reason),
+            other => panic!(
+                "{} {}: expected a non-answer, got {:?}",
+                installed, tag, other
+            ),
+        }
+    }
+}
+
 // ------------------------------------------------------------- the apply
 
 #[test]
@@ -640,11 +755,33 @@ fn a_refused_call_still_records_the_attempt_when_the_result_is_saved() {
 fn an_update_found_before_the_plugin_was_upgraded_is_not_offered() {
     // 🚨 The saved answer describes an install that no longer exists. Upgraded
     // to exactly the offered tag, and upgraded past it, are both stale.
-    for version in ["0.9.1", "0.9.5"] {
+    //
+    // ⚠️ Those two are refused by precedence as well, since 0.5.1, so they no
+    // longer reach the installed-version test on their own. An install moved
+    // to a version the tag is still newer than does, and it is stale too: the
+    // saved `installed` would name a version that is no longer there.
+    for version in ["0.9.1", "0.9.5", "0.8.2", "0.8.0"] {
         let directory = TempDir::new("stale");
         saved_by_a_detached_check(&directory);
 
         assert_eq!(offered_now(&directory, version), None, "{}", version);
+    }
+}
+
+#[test]
+fn a_saved_result_that_is_not_newer_is_not_offered() {
+    // 🚨 0.5.0 compared strings, so a result it saved can hold a reinstall or
+    // a downgrade. `offer` makes no network call, and re-checking the saved
+    // pair is the only way it can refuse one.
+    for tag in ["v0.8.1", "0.8.1", "0.8.0", "0.8.1-rc.1", "nightly"] {
+        let directory = TempDir::new("not-newer");
+        let saved = Available {
+            tag: tag.to_string(),
+            ..found()
+        };
+        std::fs::write(directory.result(), serde_json::to_string(&saved).unwrap()).unwrap();
+
+        assert_eq!(offered_now(&directory, "0.8.1"), None, "{}", tag);
     }
 }
 
@@ -706,6 +843,9 @@ fn a_later_up_to_date_or_non_answer_clears_the_older_result() {
     // if it were still true.
     for (name, releases) in [
         ("up to date", Answers::newest("0.8.1")),
+        ("the same version under a v", Answers::newest("v0.8.1")),
+        ("an older release", Answers::newest("0.8.0")),
+        ("a tag that is not a version", Answers::newest("nightly")),
         ("no releases", Answers::none()),
         ("no answer", Answers::refused("403 rate limit exceeded")),
     ] {
