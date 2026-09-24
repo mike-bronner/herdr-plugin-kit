@@ -123,9 +123,12 @@ herdr-plugin-kit/
 │   ├── test_mutate.py                # its own tests, including two regressions
 │   ├── plugin_gate.py                # the target table and the version rules
 │   ├── test_plugin_gate.py           # both sides of every agreement, run
+│   ├── test_kit_pin.py               # the pin block, run, and a plugin's copy held
+│   ├── fixtures/kit_pin/             # two real plugin copies, and kit 0.5.1's text
 │   └── mutations/
 │       ├── client.json               # the transport's 20 mutations
 │       ├── dialog.json               # the dialogs' 59 mutations
+│       ├── pin_block.json            # the plugin pin-block check's 15, in Python
 │       ├── report.json               # the issue reports' 19 mutations
 │       ├── surface.json              # the shared seam's 2 mutations
 │       └── update.json               # the update check's 85 mutations
@@ -2383,7 +2386,7 @@ drift becomes a discovery rather than a failing build.
 
 ➕ **Unchanged by §11's removal of the reusable workflows, and worth saying because the
 opposite was assumed for a day.** The mechanism was never the kit running this; it was
-this running. §11.3 has the two-command recipe a plugin copies, against a kit the plugin
+this running. §11.3 has the three-command recipe a plugin copies, against a kit the plugin
 checks out at its own pin. Only the invoker changed.
 
 ⚠️ **The sync verifies by running the synced `bin/common`, not by parsing the TOML
@@ -2708,9 +2711,11 @@ jobs:
 
       - id: kit
         run: |
-          # ---8<--- kit pin resolution. This exact text sits in SCOPE.md §11.3's recipe
-          # and in .github/workflows/plugin-release.yml, and tools/test_kit_pin.py runs
-          # it and fails if the two copies differ.
+          # ---8<--- kit pin resolution. Copy it whole from the kit at the tag you pin,
+          # and edit no line of it, comments included. `plugin_gate.py pin-block`
+          # fails a plugin's CI when its copy differs from that kit's, so re-copy it
+          # at every pin bump. In the kit, tools/test_kit_pin.py runs it and holds
+          # SCOPE.md §11.3, the README and plugin-release.yml to one text.
           #
           # 🔑 It reads the pin out of the repository rather than asking the Actions
           # context. ✅ Measured 2026-09-12 (§11.2.1): a called workflow is told nothing
@@ -2749,6 +2754,7 @@ jobs:
 
       - run: python3 kit/templates/sync_bin.py . --check
       - run: python3 kit/tools/plugin_gate.py versions .
+      - run: python3 kit/tools/plugin_gate.py pin-block .
 ```
 
 Three things in it are load-bearing and none is obvious:
@@ -2792,6 +2798,48 @@ with each other.
 was read as consumer drift without asking what the check compares against, and the answer
 was thirty lines away in the recipe itself. **Ask what a check reads before predicting
 what it will say.**
+
+#### 🚨 The pin block is checked byte for byte, and a pin bump re-copies it
+
+➕ **Added 2026-09-24, in 0.5.2.** The pin resolution is the one piece of the recipe a
+plugin carries as text rather than runs from the kit, and **nothing held a plugin's copy**.
+`tools/test_kit_pin.py` holds the kit's three copies together, and a plugin's copy named
+that test in its own comment, so a plugin reader believed the copy was policed.
+
+✅ **Found by hand, 2026-09-24.** recent-spaces' copy drifted between kit 0.4.2 and 0.5.1:
+its comment lines became a paraphrase, and its markers went with them, while every
+executable line stayed intact. A Holmes review found it. Nothing else could have.
+
+🔑 **So `plugin_gate.py pin-block` compares every copy in a plugin's
+`.github/workflows/` with the kit's, whole.** Decided by Mike on 2026-09-24:
+
+- **Byte for byte, comments included.** The drift that was found was in comment lines, so
+  a check of the executable lines alone would have passed it. Only the indentation the
+  whole block shares is removed, because the plugin's `run: |` step decides that.
+- **No copy at all fails.** The drifted copy had lost its markers, so a check that skipped
+  a workflow with no block would have passed it too.
+- **The kit's copy is the kit checked out at the plugin's pin**, the same tree
+  `sync_bin.py --check` reads. A change here reaches a plugin at its pin bump and never
+  before, exactly as a template change does.
+
+⚠️ **The comment in the block changed in 0.5.2 to name this check.** Every plugin's copy is
+therefore stale against 0.5.2 and fails the check once, at the bump. **That failure is the
+re-copy step, and it is the same for every plugin:**
+
+1. Bump the kit pin to the new tag, in `Cargo.toml` and in the `uses:` naming
+   `plugin-release.yml` (§11.4.1 holds them together).
+2. Replace the plugin's block, from its opening scissors line to its closing one, with
+   the block from this section **at that tag**, both scissors lines included, at the
+   indentation the step already uses. Edit no line of it.
+3. Add `- run: python3 kit/tools/plugin_gate.py pin-block .` beside the other two gates,
+   the first time only.
+4. Run the check before pushing: check the kit out at the new tag beside the plugin and
+   run `python3 <kit>/tools/plugin_gate.py pin-block <plugin>`. It prints a diff against
+   the kit's text for any copy that differs.
+
+🪤 **Explanation that has to live beside the block goes above the step, never inside it.**
+A plugin that wants to say why the step exists writes a YAML comment over `- id: kit`. The
+block itself belongs to the kit.
 
 ### 11.4 The version-agreement gate is load-bearing
 
@@ -3050,7 +3098,10 @@ which is the defect that prompted the job. This kit documents its private functi
 carefully as its public ones, so those links earn the same check.
 
 🚨 **The mutation runs are a separate workflow, and that placement is the decision.** The
-harness recompiles once per mutation, and `kit-mutation.yml` states how many there are.
+harness recompiles once per Rust mutation, and `kit-mutation.yml` states how many there
+are. ➕ One spec, `pin_block.json`, mutates Python instead and names its own `build`: a
+compile of the mutated file, because cargo's `--no-run` flags would fail a Python suite
+before it ran, and every mutation would read as a broken build.
 Two failures were weighed:
 
 - Folding it into the fast gate makes every pull request wait twenty minutes, and **a
@@ -3067,7 +3118,7 @@ recompiling. Each spec runs as its own leg, so the wall clock is the slowest spe
 sum.
 
 🚨 **The legs are read from `tools/mutations/`, never listed in the workflow**, and that
-is the same fix `--all-features` was rather than a tidier way to write five paths. ✅ The
+is the same fix `--all-features` was rather than a tidier way to write six paths. ✅ The
 list was hand-maintained until 2026-09-13, and `update` shipped with no spec at all while
 the matrix stayed green across two releases — **a list of the things to check cannot
 itself be the thing that decides what to check.** ⚠️ The glob introduces its own silent

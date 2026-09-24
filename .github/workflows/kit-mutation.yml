@@ -3,9 +3,10 @@ name: Mutation
 # Does the suite actually notice when a guarded behaviour breaks?
 #
 # 🚨 Separate from kit-ci.yml on purpose, and this is the decision rather than
-# a filing convenience. The harness recompiles the crate once per mutation and
-# there are a hundred and eighty-five of them, so a run costs minutes rather than
-# seconds.
+# a filing convenience. There are two hundred mutations, and the harness
+# recompiles the crate once for each of the hundred and eighty-five of them that
+# break Rust, so a run costs minutes rather than seconds. The other fifteen
+# break the plugin pin-block check in tools/plugin_gate.py and run in seconds.
 # Two failures were weighed against each other:
 #
 #   - Folding it into the fast gate makes every pull request wait for it, and a
@@ -33,6 +34,10 @@ on:
       - 'crates/**'
       - 'tools/mutate.py'
       - 'tools/mutations/**'
+      # The one spec over Python, and what its suite reads.
+      - 'tools/plugin_gate.py'
+      - 'tools/test_kit_pin.py'
+      - 'tools/fixtures/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/kit-mutation.yml'

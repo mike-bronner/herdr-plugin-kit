@@ -1,0 +1,183 @@
+name: CI
+
+# This plugin's own gates, and not a caller. Everything herdr-plugin-kit's
+# reusable CI workflow used to run happens here, against a kit this file checks
+# out at the tag Cargo.toml already pins.
+#
+# 🔻 `plugin-ci.yml` was withdrawn in kit 0.4.0 and is not coming back. A called
+# workflow cannot discover which of its own versions a caller pinned:
+# `github.job_workflow_sha` is empty, `github.job_workflow_ref` is not in the
+# context at all, and `github.workflow_ref` names the caller's own entry
+# workflow rather than the called one. Measured twice on 2026-09-12, on a branch
+# and on a tag, across two trigger events, so it is about neither. The kit's
+# conformance job checked this plugin out and then refused, in three seconds, on
+# every legitimate call. herdr-plugin-kit SCOPE.md §11.2.1 carries it.
+#
+# 🔑 The discovery problem runs one way only, and that asymmetry is the whole
+# fix. A callee cannot learn what a caller pinned. A caller always knows,
+# because the pin is sitting in its own Cargo.toml. So the gates move to the
+# side that holds the answer, and nothing about them changed in the move.
+#
+# ✅ The release half went the other way, and stayed a call. `plugin-release.yml`
+# came back in kit 0.4.2 reading the pin from the plugin it has already checked
+# out, which is the same asymmetry used from the other end, so
+# .github/workflows/release.yml declares a five-line job again. The two halves
+# differ because one reusable workflow exists and the other does not — not
+# because the gates and the release disagree about where a pin is read. §11.5.
+#
+# 🪤 Both triggers, and both are needed. When a pull request cannot compute a
+# merge ref against main, Actions skips its pull_request workflows entirely — no
+# run, no error, and the checks simply never appear. The push trigger is what
+# keeps a conflicted branch covered.
+
+on:
+  push:
+  pull_request:
+
+# Nothing here writes. The release workflow is the one that needs more.
+permissions:
+  contents: read
+
+# 🚨 `kit-gates` is herdr-plugin-kit SCOPE.md §11.3, copied rather than
+# restated. The kit publishes it byte-identical in SCOPE.md and in its README so
+# that three plugins cannot end up running three different checks, and a
+# paraphrase is exactly the divergence that copyable text exists to prevent.
+#
+# Two things are added and no published line is edited: an `outputs:` key, and a
+# closing step that reads out the target table. The `build` job needs that table
+# before it starts, and the only other route to it is a second job repeating the
+# pin extraction — a second copy of the one thing in this file that must not
+# have two.
+#
+# ⚠️ Three details in it are load-bearing and every one of them reads as noise:
+#
+#   • `fetch-depth: 0`. The version gate reads tag history, and a shallow clone
+#     lets it pass by seeing no releases at all. A gate that passes because it
+#     saw nothing is worse than a gate that is absent, because it reports green.
+#   • The tag comes from `cargo metadata`, never from a regex over Cargo.toml.
+#     It needs no network and no lockfile, and it answers for a
+#     workspace-inherited dependency, which a regex cannot see at all.
+#   • A pin that is not a tag stops the job. A branch, a commit, a bare git
+#     source and a path pin each have no version to check against, and the
+#     recipe says so loudly rather than checking out nothing.
+jobs:
+  kit-gates:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.table.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # 🚨 Load-bearing. The version gate reads tag history, and a shallow
+          # clone lets it pass by seeing no releases at all.
+          fetch-depth: 0
+
+      - id: kit
+        run: |
+          # ---8<--- kit pin resolution. This exact text sits in SCOPE.md §11.3's recipe
+          # and in .github/workflows/plugin-release.yml, and tools/test_kit_pin.py runs
+          # it and fails if the two copies differ.
+          #
+          # 🔑 It reads the pin out of the repository rather than asking the Actions
+          # context. ✅ Measured 2026-09-12 (§11.2.1): a called workflow is told nothing
+          # about which of its own versions was pinned. It does not need to be told —
+          # `github.repository` is the *caller's*, so the plugin is already checked out,
+          # and the pin is in the plugin's own Cargo.toml.
+          #
+          # `--no-deps` needs no network and no lockfile, and it answers for a
+          # workspace-inherited dependency, which a regex over Cargo.toml cannot see.
+          source=$(cargo metadata --no-deps --format-version 1 | python3 -c '
+          import json, sys
+          for package in json.load(sys.stdin)["packages"]:
+              for dependency in package["dependencies"]:
+                  if dependency["name"] == "herdr-plugin-kit":
+                      print(dependency.get("source") or "")
+          ' | head -1)
+          case "$source" in
+            *\?tag=*) tag="${source##*\?tag=}" ;;
+            *) tag='' ;;
+          esac
+          if [ -z "$tag" ]; then
+            echo "this plugin does not pin herdr-plugin-kit to a tag." >&2
+            echo "cargo reports its source as: ${source:-<none>}" >&2
+            echo "A branch, a commit or a path pin has no version to check" >&2
+            echo "against, so nothing is guessed here. Pin a tag." >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          # --->8--- end kit pin resolution
+
+      - uses: actions/checkout@v7
+        with:
+          repository: mike-bronner/herdr-plugin-kit
+          ref: ${{ steps.kit.outputs.tag }}
+          path: kit
+
+      - run: python3 kit/templates/sync_bin.py . --check
+      - run: python3 kit/tools/plugin_gate.py versions .
+
+      # The six targets the release publishes, read out of the kit rather than
+      # written here. A copy of that table in this file could disagree with the
+      # one the kit's own tests cover, and the two would disagree in silence.
+      - id: table
+        run: echo "matrix=$(python3 kit/tools/plugin_gate.py matrix)" >> "$GITHUB_OUTPUT"
+
+  gates:
+    name: Suite, formatting and lint
+    # macOS is not a preference. The suite writes its temporary directories
+    # under /private/tmp, which exists on macOS and not on Linux, so a Linux
+    # runner cannot run this suite at all.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The runner's own toolchain, and no floor asserted. This plugin installs
+      # as a compiled binary, so a user needs no toolchain at all and a minimum
+      # version would document a requirement for people who never compile.
+      # herdr-plugin-kit SCOPE.md §11.8.1.
+      - name: Take the linters
+        run: rustup component add clippy rustfmt
+
+      - name: Run the suite
+        run: cargo test --locked
+
+      - name: Check the formatting
+        run: cargo fmt --all -- --check
+
+      - name: Lint with warnings denied
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+  build:
+    name: ${{ matrix.platform }}
+    needs: kit-gates
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      # Every platform's answer is wanted. One target failing to compile is a
+      # platform that would fall back to compiling on every install, and hiding
+      # the other five behind it helps nobody.
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.kit-gates.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # musl links its libc statically, so the published binary carries no glibc
+      # floor. A gnu build would carry the floor of the runner that produced it,
+      # and a user on an older distribution would get a download that passes its
+      # checksum and then refuses to start — worse than the 404 this design is
+      # built around, because the fetch succeeded and no fallback fires.
+      - name: Take the musl toolchain
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Take the standard library for this target
+        run: rustup target add ${{ matrix.target }}
+
+      # ⚠️ Not --release, deliberately. This job answers "does it compile and
+      # link here?", which is the entire Windows guarantee and all a pull
+      # request needs. Nobody on this project has Windows hardware, so the
+      # compiler is the only thing that ever checks those paths. The release
+      # workflow builds the release profile, and this crate sets no LTO, so
+      # there is nothing that profile compiles which this does not.
+      - name: Compile for ${{ matrix.target }}
+        run: cargo build --locked --target ${{ matrix.target }}

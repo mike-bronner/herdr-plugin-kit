@@ -475,7 +475,7 @@ reach none, so the drawn path stays for that case permanently.
 
 ## Continuous integration
 
-**The kit runs your release and none of your tests.** It ships two gates you run
+**The kit runs your release and none of your tests.** It ships three gates you run
 yourself, against a kit you check out at your own pin, and it publishes your assets
 through a reusable workflow you call.
 
@@ -487,7 +487,7 @@ through a reusable workflow you call.
 > one checked out in front of it. `SCOPE.md` §11.2.1 has the measurement and the
 > correction.
 
-### The two gates, in the plugin's own CI
+### The three gates, in the plugin's own CI
 
 **Copy this rather than paraphrasing it.** A recipe somebody restates is how three
 plugins end up running three different checks.
@@ -506,9 +506,11 @@ jobs:
 
       - id: kit
         run: |
-          # ---8<--- kit pin resolution. This exact text sits in SCOPE.md §11.3's recipe
-          # and in .github/workflows/plugin-release.yml, and tools/test_kit_pin.py runs
-          # it and fails if the two copies differ.
+          # ---8<--- kit pin resolution. Copy it whole from the kit at the tag you pin,
+          # and edit no line of it, comments included. `plugin_gate.py pin-block`
+          # fails a plugin's CI when its copy differs from that kit's, so re-copy it
+          # at every pin bump. In the kit, tools/test_kit_pin.py runs it and holds
+          # SCOPE.md §11.3, the README and plugin-release.yml to one text.
           #
           # 🔑 It reads the pin out of the repository rather than asking the Actions
           # context. ✅ Measured 2026-09-12 (§11.2.1): a called workflow is told nothing
@@ -547,6 +549,7 @@ jobs:
 
       - run: python3 kit/templates/sync_bin.py . --check
       - run: python3 kit/tools/plugin_gate.py versions .
+      - run: python3 kit/tools/plugin_gate.py pin-block .
 ```
 
 Three things in it are load-bearing:
@@ -559,12 +562,25 @@ Three things in it are load-bearing:
 - **A pin that is not a tag stops the job**, rather than checking out nothing. A branch or
   a commit pin has no version to check against.
 
-What the two commands settle:
+What the three commands settle:
 
 - **`bin/` still matches the kit.** Without it the kit is a suggestion, and drift becomes
   a discovery rather than a failing build.
 - **The versions and the tag form agree.** `herdr-plugin.toml`, `Cargo.toml`, the binary
   cargo builds, and the repository's release tags all have to say the same thing.
+- **Your copy of the pin resolution is the kit's.** `pin-block` compares every copy in
+  your `.github/workflows/` with the kit at your pin, byte for byte once the shared
+  indentation is removed, comments included. A copy whose comments were paraphrased
+  fails, and so does a workflow with no copy at all, because that is what a drifted copy
+  looked like once its markers were gone.
+
+> 🚨 **Re-copy the pin resolution at every pin bump.** Its comment changed in 0.5.2 to
+> name the check that guards it, so every copy made from 0.5.1 or earlier fails
+> `pin-block` once, at the bump. Replace the whole block, both scissors lines included,
+> with the one above at the tag you now pin. Edit no line of it: an explanation of your
+> own goes in a YAML comment above `- id: kit`. `SCOPE.md` §11.3 has the full steps, and
+> `python3 <kit>/tools/plugin_gate.py pin-block <plugin>` runs the check by hand, with a
+> diff of anything that differs.
 
 Your suite, your formatting and your lint are your own business: they need nothing from
 the kit.
@@ -655,7 +671,9 @@ The kit-pin suite is the odd one. Every other piece of CI logic lives in `tools/
 YAML cannot be run, and this one cannot: it decides which kit to check out, so it runs
 before there is a `tools/` to call. So the test goes to it — extracting the block from the
 release workflow and from both copies of the recipe, proving all three are identical, and
-running the real text against what `cargo metadata` actually answers.
+running the real text against what `cargo metadata` actually answers. It also drives
+`pin-block` against two real plugin copies kept as fixtures: one that matches kit 0.5.1's
+text, and one whose comments drifted until only a review noticed.
 
 The conformance gate's suite runs both sides of every agreement it asserts. It extracts
 the release workflow's own asset-naming line and executes it, then asks the real shim
@@ -671,12 +689,13 @@ builds exactly that server and times the call.
 ```sh
 just mutate tools/mutations/client.json    # the transport's 20 guards
 just mutate tools/mutations/dialog.json    # the dialogs' 59
+just mutate tools/mutations/pin_block.json # the plugin pin-block check's 15
 just mutate tools/mutations/report.json    # the issue reports' 19
 just mutate tools/mutations/surface.json   # the shared seam's 2
 just mutate tools/mutations/update.json    # the update check's 85
 ```
 
-CI reads that directory rather than a list of those five paths. A spec added
+CI reads that directory rather than a list of those six paths. A spec added
 without a matrix entry is a module nobody checks, and that already happened
 once: `update` shipped with no spec at all and the matrix stayed green.
 

@@ -4,6 +4,7 @@
     python3 tools/plugin_gate.py matrix
     python3 tools/plugin_gate.py versions ../herdr-plugin-project-finder
     python3 tools/plugin_gate.py versions ../herdr-plugin-project-finder --tag 0.8.0
+    python3 tools/plugin_gate.py pin-block ../herdr-plugin-project-finder
 
 🔑 **This is here rather than inline in the workflows because YAML cannot be
 run.** Two reusable workflows need the same six targets and the same version
@@ -46,10 +47,12 @@ Python 3.9 is the floor, as it is for every other script here.
 """
 
 import argparse
+import difflib
 import json
 import re
 import subprocess
 import sys
+import textwrap
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -155,6 +158,12 @@ KIT_USES = re.compile(
 WORKFLOW_DIRECTORY = "workflows"
 
 
+def workflow_files(target: Path) -> List[Path]:
+    """Every workflow GitHub would run in *target*, under both extensions."""
+    directory = target / ".github" / WORKFLOW_DIRECTORY
+    return sorted(directory.glob("*.yml")) + sorted(directory.glob("*.yaml"))
+
+
 def kit_pins(target: Path) -> List[Tuple[str, str]]:
     """Every pin in *target* naming this kit, as (what named it, its ref).
 
@@ -180,8 +189,7 @@ def kit_pins(target: Path) -> List[Tuple[str, str]]:
                     tag = field[len("tag="):]
             found.append((f"Cargo.toml's {dependency['name']} dependency", tag))
 
-    directory = target / ".github" / WORKFLOW_DIRECTORY
-    for path in sorted(directory.glob("*.yml")) + sorted(directory.glob("*.yaml")):
+    for path in workflow_files(target):
         for line in path.read_text(encoding="utf-8").splitlines():
             matched = KIT_USES.match(line)
             if matched is not None:
@@ -225,6 +233,102 @@ def check_kit_pins(target: Path, tag: Optional[str]) -> List[str]:
                 f"whichever is wrong so that all {len(pins)} agree."
             )
     return problems
+
+
+#: The lines that open and close the kit pin resolution, wherever it is copied.
+PIN_BLOCK_OPEN = "# ---8<--- kit pin resolution"
+PIN_BLOCK_CLOSE = "# --->8--- end kit pin resolution"
+
+#: The kit's own copy, and the one a plugin's copy is held to. It is the copy
+#: that runs, and ``tools/test_kit_pin.py`` holds the two published copies in
+#: SCOPE.md and the README to it.
+KIT_PIN_CARRIER = REPO_ROOT / ".github" / WORKFLOW_DIRECTORY / "plugin-release.yml"
+
+
+def pin_blocks(text: str) -> List[str]:
+    """Every kit pin resolution block in *text*, each dedented to column zero.
+
+    🪤 **The slice starts at the beginning of the marker's line, not at the
+    marker.** Starting at the marker leaves the first line with no indentation,
+    so ``textwrap.dedent`` finds a common prefix of nothing and removes nothing.
+    The block still *runs*, because leading whitespace is harmless in shell. It
+    is not harmless in the Python the block pipes into, which is what surfaced
+    it.
+
+    Fails closed on a block that opens and never closes, because the text
+    after the marker cannot be told apart from the text that belongs to it.
+    """
+    blocks = []
+    position = 0
+    while True:
+        marker = text.find(PIN_BLOCK_OPEN, position)
+        if marker == -1:
+            return blocks
+        start = text.rfind("\n", 0, marker) + 1
+        close = text.find(PIN_BLOCK_CLOSE, marker)
+        if close == -1:
+            raise SyncError(
+                f"a kit pin resolution block opens and never closes: "
+                f"no {PIN_BLOCK_CLOSE!r} follows its first line"
+            )
+        end = close + len(PIN_BLOCK_CLOSE)
+        blocks.append(textwrap.dedent(text[start:end]))
+        position = end
+
+
+def kit_pin_block() -> str:
+    """The kit pin resolution as this checkout of the kit publishes it."""
+    blocks = pin_blocks(KIT_PIN_CARRIER.read_text(encoding="utf-8"))
+    if len(blocks) != 1:
+        raise SyncError(
+            f"{KIT_PIN_CARRIER.name} carries {len(blocks)} kit pin resolution "
+            f"blocks, and exactly one is the kit's own"
+        )
+    return blocks[0]
+
+
+def check_pin_block(target: Path, kit_block: str) -> List[str]:
+    """Every copy of the kit pin resolution in *target* is the kit's, byte for byte.
+
+    🚨 **A plugin copies this block by hand, and nothing held the copy.**
+    recent-spaces' copy drifted between kit 0.4.2 and 0.5.1: its comment lines
+    became a paraphrase and its markers went with them, while every executable
+    line stayed intact. A human reviewer found it. So the comparison is the
+    whole block, comments included, with only the plugin's indentation taken
+    off. A check of the executable lines alone would have passed that copy.
+
+    ⚠️ A workflow with no copy at all fails too, because that is what the
+    drifted copy looked like once its markers were gone. Every plugin running
+    §11.3's recipe carries one.
+    """
+    copies = [
+        (path.name, block)
+        for path in workflow_files(target)
+        for block in pin_blocks(path.read_text(encoding="utf-8"))
+    ]
+    if not copies:
+        return [
+            f"no workflow under {target / '.github' / WORKFLOW_DIRECTORY} carries "
+            f"the kit pin resolution between its markers, so nothing says which "
+            f"kit it resolves or whether it is the kit's text. Copy the block "
+            f"from SCOPE.md §11.3 at the tag this plugin pins, markers included."
+        ]
+    return [
+        f"{name}'s kit pin resolution differs from the kit's. Copy the block "
+        f"whole from SCOPE.md §11.3 at the tag this plugin pins, and edit no "
+        f"line of it, comments included:\n"
+        + "".join(
+            difflib.unified_diff(
+                kit_block.splitlines(keepends=True),
+                block.splitlines(keepends=True),
+                "the kit's",
+                name,
+                n=0,
+            )
+        )
+        for name, block in copies
+        if block != kit_block
+    ]
 
 
 def is_windows(target: str) -> bool:
@@ -487,6 +591,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="the kit version this run checked out, which every pin must match",
     )
 
+    block = subcommands.add_parser(
+        "pin-block",
+        help="check every copy of the kit pin resolution matches this kit's",
+    )
+    block.add_argument("plugin", type=Path, help="a plugin checkout")
+
     asset = subcommands.add_parser("asset-name", help="print the asset a release publishes")
     asset.add_argument("plugin", type=Path, help="a plugin checkout")
     asset.add_argument("--target", required=True, help="one of the six target triples")
@@ -517,6 +627,17 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(
                 f"plugin-gate: {len(found)} pins name {KIT_REPOSITORY}, "
                 f"all at {found[0][1]}"
+            )
+            return 0
+        if arguments.command == "pin-block":
+            problems = check_pin_block(arguments.plugin, kit_pin_block())
+            for problem in problems:
+                print(f"plugin-gate: {problem}", file=sys.stderr)
+            if problems:
+                return 1
+            print(
+                f"plugin-gate: the kit pin resolution in {arguments.plugin} "
+                f"matches this kit's"
             )
             return 0
         if arguments.command == "asset-name":

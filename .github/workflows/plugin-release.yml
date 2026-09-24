@@ -91,9 +91,11 @@ jobs:
         id: kit
         working-directory: plugin
         run: |
-          # ---8<--- kit pin resolution. This exact text sits in SCOPE.md §11.3's recipe
-          # and in .github/workflows/plugin-release.yml, and tools/test_kit_pin.py runs
-          # it and fails if the two copies differ.
+          # ---8<--- kit pin resolution. Copy it whole from the kit at the tag you pin,
+          # and edit no line of it, comments included. `plugin_gate.py pin-block`
+          # fails a plugin's CI when its copy differs from that kit's, so re-copy it
+          # at every pin bump. In the kit, tools/test_kit_pin.py runs it and holds
+          # SCOPE.md §11.3, the README and plugin-release.yml to one text.
           #
           # 🔑 It reads the pin out of the repository rather than asking the Actions
           # context. ✅ Measured 2026-09-12 (§11.2.1): a called workflow is told nothing

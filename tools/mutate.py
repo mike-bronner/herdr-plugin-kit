@@ -96,15 +96,29 @@ def apply_mutation(path, find, replace):
     return original
 
 
-def run_one(path, command, mutation):
-    """Apply one mutation, run the suite, restore the file whatever happens."""
+def build_command(spec):
+    """The command that decides whether a mutated file still builds.
+
+    cargo's by default: the suite's own command with ``--no-run`` and JSON
+    messages, so the compile is judged apart from the tests. A spec over a
+    file cargo does not build names its own ``build`` instead.
+
+    🪤 **A Python spec cannot use the default.** Appending cargo's flags to a
+    Python suite fails it on the flags, before a line of it runs, and every
+    mutation would then read as a broken build. So such a spec compiles the
+    mutated file on its own, and a mutation that breaks the syntax is still a
+    broken build rather than a kill.
+    """
+    if "build" in spec:
+        return spec["build"]
+    return spec["command"] + ["--no-run", "--message-format=json"]
+
+
+def run_one(path, command, mutation, build_with):
+    """Apply one mutation, build it, run the suite, and restore the file."""
     original = apply_mutation(path, mutation["find"], mutation["replace"])
     try:
-        build = subprocess.run(
-            command + ["--no-run", "--message-format=json"],
-            capture_output=True,
-            text=True,
-        )
+        build = subprocess.run(build_with, capture_output=True, text=True)
         if build_broke(build.returncode, build.stdout):
             return BUILD_ERROR
         tests = subprocess.run(command, capture_output=True, text=True)
@@ -127,10 +141,11 @@ def main(argv):
     spec = json.loads(pathlib.Path(argv[1]).read_text())
     path = root / spec["file"]
     command = spec["command"]
+    build_with = build_command(spec)
 
     results = []
     for mutation in spec["mutations"]:
-        outcome = run_one(path, command, mutation)
+        outcome = run_one(path, command, mutation, build_with)
         results.append((outcome, mutation["name"]))
         print(f"{outcome.upper():<12} {mutation['name']}", flush=True)
 

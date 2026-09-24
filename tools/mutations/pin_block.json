@@ -1,0 +1,87 @@
+{
+  "file": "tools/plugin_gate.py",
+  "command": ["python3", "tools/test_kit_pin.py"],
+  "build": [
+    "python3",
+    "-c",
+    "import sys; compile(open(sys.argv[1]).read(), sys.argv[1], 'exec')",
+    "tools/plugin_gate.py"
+  ],
+  "mutations": [
+    {
+      "name": "the plugin's indentation is removed",
+      "find": "        blocks.append(textwrap.dedent(text[start:end]))",
+      "replace": "        blocks.append(text[start:end])"
+    },
+    {
+      "name": "the slice starts at the start of the marker's line",
+      "find": "        start = text.rfind(\"\\n\", 0, marker) + 1",
+      "replace": "        start = marker"
+    },
+    {
+      "name": "every block in a file is read, not only the first",
+      "find": "        position = end\n",
+      "replace": "        return blocks\n"
+    },
+    {
+      "name": "a block that never closes is refused",
+      "find": "        if close == -1:\n            raise SyncError(",
+      "replace": "        if close == -1:\n            return blocks\n            raise SyncError("
+    },
+    {
+      "name": "a workflow with no copy fails",
+      "find": "    if not copies:\n        return [",
+      "replace": "    if not copies:\n        return []\n        return ["
+    },
+    {
+      "name": "a copy that differs fails",
+      "find": "        if block != kit_block\n",
+      "replace": "        if block != kit_block and False\n"
+    },
+    {
+      "name": "every copy has to match, not any one of them",
+      "find": "    if not copies:\n        return [",
+      "replace": "    if any(block == kit_block for _, block in copies):\n        return []\n    if not copies:\n        return ["
+    },
+    {
+      "name": "the comparison is the whole block, comments included",
+      "find": "        if block != kit_block\n",
+      "replace": "        if [l for l in block.splitlines() if not l.lstrip().startswith('#')] != [l for l in kit_block.splitlines() if not l.lstrip().startswith('#')]\n"
+    },
+    {
+      "name": "the refusal carries a diff naming the changed lines",
+      "find": "                block.splitlines(keepends=True),\n                \"the kit's\",",
+      "replace": "                kit_block.splitlines(keepends=True),\n                \"the kit's\","
+    },
+    {
+      "name": "the refusal names the workflow",
+      "find": "        f\"{name}'s kit pin resolution differs from the kit's.",
+      "replace": "        f\"a kit pin resolution differs from the kit's."
+    },
+    {
+      "name": "a .yaml workflow is read too",
+      "find": "    return sorted(directory.glob(\"*.yml\")) + sorted(directory.glob(\"*.yaml\"))",
+      "replace": "    return sorted(directory.glob(\"*.yml\"))"
+    },
+    {
+      "name": "the kit's own copy is plugin-release.yml's",
+      "find": "KIT_PIN_CARRIER = REPO_ROOT / \".github\" / WORKFLOW_DIRECTORY / \"plugin-release.yml\"",
+      "replace": "KIT_PIN_CARRIER = REPO_ROOT / \"tools\" / \"fixtures\" / \"kit_pin\" / \"recent-spaces-899ac27.ci.yml\""
+    },
+    {
+      "name": "the kit carries exactly one block of its own",
+      "find": "    if len(blocks) != 1:\n",
+      "replace": "    if not blocks:\n"
+    },
+    {
+      "name": "the command exits non-zero on a problem",
+      "find": "            problems = check_pin_block(arguments.plugin, kit_pin_block())\n            for problem in problems:\n                print(f\"plugin-gate: {problem}\", file=sys.stderr)\n            if problems:\n                return 1",
+      "replace": "            problems = check_pin_block(arguments.plugin, kit_pin_block())\n            for problem in problems:\n                print(f\"plugin-gate: {problem}\", file=sys.stderr)\n            if problems:\n                return 0"
+    },
+    {
+      "name": "the command checks against this kit's block",
+      "find": "            problems = check_pin_block(arguments.plugin, kit_pin_block())",
+      "replace": "            problems = check_pin_block(arguments.plugin, (Path(__file__).parent / 'fixtures' / 'kit_pin' / 'kit-0.5.1.block').read_text().rstrip())"
+    }
+  ]
+}

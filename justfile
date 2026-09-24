@@ -39,13 +39,21 @@ check-bin plugin:
 
 # Ask whether a plugin's manifests, its tags and its binary name still agree.
 #
-# The other half of what a plugin's own CI runs, beside `check-bin`. SCOPE.md
-# §11 carries the two-command recipe verbatim, because a paraphrase is how
-# three plugins end up running three different checks. Every disagreement this
-# names is silent in production: the install still works and simply stops
-# downloading.
+# One of the three checks a plugin's own CI runs, beside `check-bin` and
+# `check-pin-block`. SCOPE.md §11.3 carries the recipe verbatim, because a
+# paraphrase is how three plugins end up running three different checks. Every
+# disagreement this names is silent in production: the install still works and
+# simply stops downloading.
 gate plugin:
     python3 tools/plugin_gate.py versions {{plugin}}
+
+# Ask whether a plugin's copy of the kit pin resolution is still this kit's.
+#
+# The one piece of the recipe a plugin carries as text, so the one piece that
+# can drift in a plugin while every executable line still works. Compared byte
+# for byte, comments included. SCOPE.md §11.3 says how to re-copy it.
+check-pin-block plugin:
+    python3 tools/plugin_gate.py pin-block {{plugin}}
 
 # Run every test: the codegen guards, the shell templates, the mutation
 # harness's own tests, the plugin conformance gate, the one block that has to

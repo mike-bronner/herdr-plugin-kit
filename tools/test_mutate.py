@@ -220,6 +220,50 @@ class EndToEnd(unittest.TestCase):
             self.assertNotIn("every mutation was caught", result.stdout)
             self.assertIn("measured nothing", result.stdout)
 
+    def test_a_spec_naming_its_own_build_is_judged_by_that_build(self):
+        # 🔑 The Python spec's shape. The suite fails, so the mutation is a
+        # kill. Without the `build` key the harness appends cargo's flags to
+        # `false`, which fails too, and the kill would read as a broken build.
+        # This test is the one that tells those two readings apart.
+        result = self._spec({"command": ["false"], "build": ["true"]})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("KILLED", result.stdout)
+        self.assertNotIn("BUILD-ERROR", result.stdout)
+
+    def test_a_spec_whose_own_build_fails_measured_nothing(self):
+        # A suite that would kill the mutation does not outrank a build that
+        # says the mutated file is not valid source.
+        result = self._spec({"command": ["false"], "build": ["false"]})
+        self.assertIn("BUILD-ERROR", result.stdout)
+        self.assertNotIn("KILLED", result.stdout)
+
+    def test_without_a_build_key_the_build_is_cargos_no_run(self):
+        self.assertEqual(
+            mutate.build_command({"command": ["cargo", "test"]}),
+            ["cargo", "test", "--no-run", "--message-format=json"],
+        )
+        self.assertEqual(
+            mutate.build_command({"command": ["python3", "t.py"], "build": ["true"]}),
+            ["true"],
+        )
+
+    def _spec(self, fields):
+        """Runs one mutation of a fixture file under *fields*."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            (root / "source.txt").write_text("keep\n")
+            spec = root / "spec.json"
+            spec.write_text(
+                json.dumps(
+                    {
+                        "file": "source.txt",
+                        "mutations": [{"name": "one", "find": "keep", "replace": "drop"}],
+                        **fields,
+                    }
+                )
+            )
+            return self._run(spec, root)
+
     def _run(self, spec, root):
         """Runs the tool with its repository root pointed at a fixture."""
         tool = pathlib.Path(__file__).resolve().parent / "mutate.py"

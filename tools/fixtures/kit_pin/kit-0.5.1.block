@@ -1,0 +1,32 @@
+# ---8<--- kit pin resolution. This exact text sits in SCOPE.md §11.3's recipe
+# and in .github/workflows/plugin-release.yml, and tools/test_kit_pin.py runs
+# it and fails if the two copies differ.
+#
+# 🔑 It reads the pin out of the repository rather than asking the Actions
+# context. ✅ Measured 2026-09-12 (§11.2.1): a called workflow is told nothing
+# about which of its own versions was pinned. It does not need to be told —
+# `github.repository` is the *caller's*, so the plugin is already checked out,
+# and the pin is in the plugin's own Cargo.toml.
+#
+# `--no-deps` needs no network and no lockfile, and it answers for a
+# workspace-inherited dependency, which a regex over Cargo.toml cannot see.
+source=$(cargo metadata --no-deps --format-version 1 | python3 -c '
+import json, sys
+for package in json.load(sys.stdin)["packages"]:
+    for dependency in package["dependencies"]:
+        if dependency["name"] == "herdr-plugin-kit":
+            print(dependency.get("source") or "")
+' | head -1)
+case "$source" in
+  *\?tag=*) tag="${source##*\?tag=}" ;;
+  *) tag='' ;;
+esac
+if [ -z "$tag" ]; then
+  echo "this plugin does not pin herdr-plugin-kit to a tag." >&2
+  echo "cargo reports its source as: ${source:-<none>}" >&2
+  echo "A branch, a commit or a path pin has no version to check" >&2
+  echo "against, so nothing is guessed here. Pin a tag." >&2
+  exit 1
+fi
+echo "tag=$tag" >> "$GITHUB_OUTPUT"
+# --->8--- end kit pin resolution
