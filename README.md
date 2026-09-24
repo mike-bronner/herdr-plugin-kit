@@ -146,8 +146,16 @@ Pin to a tag:
 
 ```toml
 [dependencies]
-herdr-plugin-kit = { git = "https://github.com/mike-bronner/herdr-plugin-kit", tag = "0.5.1" }
+herdr-plugin-kit = { git = "https://github.com/mike-bronner/herdr-plugin-kit", tag = "0.5.2" }
 ```
+
+> 🚨 **Moving your pin to 0.5.2, re-copy the kit pin resolution in your CI, once.** 0.5.2
+> adds a third gate, `plugin_gate.py pin-block`, and changes the comment in the block it
+> checks. Bump the tag here and in your `plugin-release.yml` caller together. Replace your
+> whole block with the one in the recipe under *The three gates* below, both scissors
+> lines included, and add `- run: python3 kit/tools/plugin_gate.py pin-block .` beside
+> the other two gates. A copy made from 0.5.1 or earlier fails that step until it
+> is re-copied. `SCOPE.md` §11.3 lists the steps. Your Rust source needs nothing.
 
 > 🚨 **Coming from 0.4.x, the `dialog` API breaks.** 0.5.0 dropped the two-button pair:
 > `Buttons`, `Answer::Primary`, `Answer::Cancel`, `chose_primary` and their constants are
@@ -606,7 +614,7 @@ permissions:
   contents: write
 jobs:
   release:
-    uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-release.yml@0.5.1
+    uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-release.yml@0.5.2
     permissions:
       contents: write
 ```

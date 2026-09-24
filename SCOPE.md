@@ -3305,6 +3305,21 @@ tag form when recent-spaces migrates (§13).
   pins agree is unaffected, and one that bumps only some of them was already publishing
   assets from a kit it does not depend on. ⚠️ **"It can make a build fail" is not the
   test**, or every new check would be a break and no check would ever ship.
+  ✅ **0.5.2 is a patch that asks a plugin's CI for a step**, decided by Mike 2026-09-24.
+  It adds `plugin_gate.py pin-block` and changes the comment in the block that check
+  compares (§11.3), so a copy made from 0.5.1 or earlier fails it once, and every plugin
+  re-copies the block at its 0.5.2 bump. 🔑 **The re-copy comes with adopting the new
+  gate, and a correct upgrade does not require that.** A plugin that moves every kit pin
+  together (§11.4.1) and changes nothing else still runs what it ran: 0.5.2 leaves the
+  templates `sync_bin.py --check` reads and the `versions` gate untouched, and changes
+  only a comment in `plugin-release.yml`. So the stale copy fails only a check the plugin
+  has chosen to run, the same shape as 0.4.4's modules, which cost nothing until turned
+  on. The Rust side is additive too: the `update` setup (§8.2) changes no 0.5.1
+  signature and adds no dependency. ⚠️ **"It asks nothing of the Rust source" is not the
+  reason**: the clause on 0.4.0 already counts a workflow as something a consumer
+  depends on. ⚠️ That the pin bump alone stays green was read off the diff, not run
+  against a plugin. The three plugins pinning 0.5.2 will adopt the gate at the bump, so
+  none of them measures it.
 - ➕ **A consumer may pin any kind of tag**, added 2026-09-12. ✅ **Every tag this kit
   has cut is annotated**, and the probe in §11.2.1 measured both kinds behaving
   identically. ⚠️ **This clause read "all three of this kit's releases" until
