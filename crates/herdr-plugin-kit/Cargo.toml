@@ -1,6 +1,6 @@
 [package]
 name = "herdr-plugin-kit"
-version = "0.5.0"
+version = "0.5.1"
 description = "Shared building blocks for Herdr plugins, generated from Herdr's own API schema"
 edition.workspace = true
 license.workspace = true

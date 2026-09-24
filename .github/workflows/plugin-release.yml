@@ -13,7 +13,7 @@ name: Plugin Release
 #       contents: write          # ⚠️ required — see below
 #     jobs:
 #       release:
-#         uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-release.yml@0.5.0
+#         uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-release.yml@0.5.1
 #         permissions:
 #           contents: write
 #
