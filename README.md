@@ -149,16 +149,26 @@ Pin to a tag:
 
 ```toml
 [dependencies]
-herdr-plugin-kit = { git = "https://github.com/mike-bronner/herdr-plugin-kit", tag = "0.5.2" }
+herdr-plugin-kit = { git = "https://github.com/mike-bronner/herdr-plugin-kit", tag = "0.5.3" }
 ```
 
-> 🚨 **Moving your pin to 0.5.2, re-copy the kit pin resolution in your CI, once.** 0.5.2
-> adds a third gate, `plugin_gate.py pin-block`, and changes the comment in the block it
-> checks. Bump the tag here and in your `plugin-release.yml` caller together. Replace your
-> whole block with the one in the recipe under *The three gates* below, both scissors
-> lines included, and add `- run: python3 kit/tools/plugin_gate.py pin-block .` beside
-> the other two gates. A copy made from 0.5.1 or earlier fails that step until it
-> is re-copied. `SCOPE.md` §11.3 lists the steps. Your Rust source needs nothing.
+> 🚨 **Moving your pin to 0.5.3, check two things your own code may assume.** First,
+> `update::check_and_save` now leaves the saved result untouched on `NoAnswer`, where
+> 0.5.0 to 0.5.2 removed it. A test of yours that expects the removal fails: flip it to
+> expect the result kept. Second, a `Transport` of your own that wraps `Client` must
+> forward `clear_window_title`, which `dialog::ask` sends before it opens a popup. It
+> still compiles without it, but a headless `ask` then ends by the kill after its
+> 120-second wait instead of answering `NeverShown` at once. `SCOPE.md` §8.2 and §7.5.9
+> say why.
+
+> 🚨 **Coming from 0.5.1 or earlier, re-copy the kit pin resolution in your CI, once.**
+> 0.5.2 added a third gate, `plugin_gate.py pin-block`, and changed the comment in the
+> block it checks. Bump the tag here and in your `plugin-release.yml` caller together.
+> Replace your whole block with the one in the recipe under *The three gates* below, both
+> scissors lines included, and add `- run: python3 kit/tools/plugin_gate.py pin-block .`
+> beside the other two gates. A copy made from 0.5.1 or earlier fails that step until it
+> is re-copied. `SCOPE.md` §11.3 lists the steps. The re-copy asks nothing of your Rust
+> source.
 
 > 🚨 **Coming from 0.4.x, the `dialog` API breaks.** 0.5.0 dropped the two-button pair:
 > `Buttons`, `Answer::Primary`, `Answer::Cancel`, `chose_primary` and their constants are
@@ -617,7 +627,7 @@ permissions:
   contents: write
 jobs:
   release:
-    uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-release.yml@0.5.2
+    uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-release.yml@0.5.3
     permissions:
       contents: write
 ```

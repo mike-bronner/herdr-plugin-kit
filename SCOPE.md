@@ -3460,6 +3460,18 @@ tag form when recent-spaces migrates (§13).
   depends on. ⚠️ That the pin bump alone stays green was read off the diff, not run
   against a plugin. The three plugins pinning 0.5.2 will adopt the gate at the bump, so
   none of them measures it.
+  ✅ **0.5.3 is a patch of two fixes**, decided by Mike 2026-09-25. `dialog::ask` ends a
+  popup it gave up on and skips one nobody can see (§7.5.9), and `check_and_save` keeps
+  the saved result on `NoAnswer` (§8.2). 🔑 **Every 0.5.2 signature still compiles.** The
+  new `clear_window_title` is a default `Transport` method behind `dialog` (§7.5.6), and a
+  transport that does not forward it opens as 0.5.2 did, with the kill as backstop. So
+  forwarding it buys the fast headless answer, and leaving it out costs no correctness.
+  The `dialog` feature's floor rises to 1.89 (§11.8.1). That is not a break, because the
+  kit declares no `rust-version` and a plugin ships compiled. ⚠️ **The `NoAnswer` change
+  can still fail a plugin's own test**, and project-finder's does: `tests/updating.rs`
+  asserts the removal. That test pinned the defect §8.2 describes, not a contract the kit
+  offered, so flipping it is the fix arriving and not work the upgrade invents. The
+  README names both where a plugin bumps its pin.
 - ➕ **A consumer may pin any kind of tag**, added 2026-09-12. ✅ **Every tag this kit
   has cut is annotated**, and the probe in §11.2.1 measured both kinds behaving
   identically. ⚠️ **This clause read "all three of this kit's releases" until
