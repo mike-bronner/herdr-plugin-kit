@@ -713,7 +713,7 @@ just mutate tools/mutations/dialog.json    # the dialogs' 69
 just mutate tools/mutations/pin_block.json # the plugin pin-block check's 15
 just mutate tools/mutations/report.json    # the issue reports' 19
 just mutate tools/mutations/surface.json   # the shared seam's 3
-just mutate tools/mutations/update.json    # the update check's 85
+just mutate tools/mutations/update.json    # the update check's 100
 ```
 
 CI reads that directory rather than a list of those six paths. A spec added

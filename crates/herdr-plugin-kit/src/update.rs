@@ -59,9 +59,9 @@
 //! for another plugin, and one made stale because the plugin was upgraded
 //! since. [`due`] answers whether a detached check is worth spawning at all.
 //!
-//! ⚠️ **The caller passes every path.** Nothing here reads
-//! [`crate::env::PLUGIN_STATE_DIR_VAR`], because a Herdr event hook does not
-//! receive it.
+//! ⚠️ **These calls take every path from the caller**, and read no environment
+//! variable. Only the setup below chooses a directory, as the next sections
+//! say.
 //!
 //! # Wiring it into a plugin
 //!
@@ -71,28 +71,74 @@
 //!
 //! | Call | What it does |
 //! |---|---|
-//! | [`lookup`] | reads this plugin's install record through `plugin.list`, then [`managed`] |
-//! | [`managed`] | 🚨 **the one door**: [`Files`] for a GitHub install, `None` for anything else |
+//! | [`lookup`], [`lookup_in`] | reads this plugin's install record through `plugin.list`, then [`managed_in`] |
+//! | [`managed`], [`managed_in`] | 🚨 **the one door**: [`Files`] for a GitHub install, `None` for anything else |
 //! | [`spawn_check_if_due`] | re-runs this binary as [`CHECK_FLAG`], detached and reaped, when a check is due |
-//! | [`run_check`] | the [`CHECK_FLAG`] side: [`lookup`], then [`check_and_save`] |
+//! | [`run_check`], [`run_check_in`] | the [`CHECK_FLAG`] side: [`lookup_in`], then [`check_and_save`] |
 //! | [`Files::offered`] | the offer record for one channel, such as a dialog or a toast |
 //!
 //! 🔑 **The wording, the buttons, and the choice of dialog or toast stay in the
 //! plugin.** This module still never prompts and never depends on `dialog`,
 //! so a headless watcher can use all of it.
 //!
-//! 🚨 **The files live inside the install's own `plugin_root`.** An event hook
-//! is handed neither `HERDR_PLUGIN_STATE_DIR` nor `HERDR_BIN_PATH`, but every
-//! run holds the socket, and `plugin.list` names the root. [`managed`] answers
-//! `None` for a `local:` install, so a linked working tree never receives a
-//! file. ✅ A reinstall empties the directory (SCOPE.md §8.2.1), and every
+//! # Where the files live
+//!
+//! 🔑 **In Herdr's per-plugin state directory, and inside the install's own
+//! `plugin_root` only when Herdr provides none.** Decided by Mike 2026-09-25,
+//! shipped in 0.5.4. SCOPE.md §8.2 records the decision.
+//!
+//! ✅ **Measured on isolated Herdr 0.9.1 servers, 2026-09-25.** An `[[actions]]`
+//! command, four event hooks (`worktree.created`, `worktree.opened`,
+//! `workspace.created`, `workspace.focused`) and a `[[startup]]` entry all
+//! receive [`crate::env::PLUGIN_STATE_DIR_VAR`] and
+//! [`crate::env::BIN_PATH_VAR`]. The state directory is
+//! `$XDG_STATE_HOME/herdr/plugins/<plugin_id>`, and Herdr creates it. 🪤 Up to
+//! 0.5.3 the files lived in `plugin_root`, because the docs said an event hook
+//! receives neither variable. That claim rested on a Herdr 0.8.2 note that
+//! listed only pane ids, and it is false on 0.9.1.
+//!
+//! | The files live in | When `HERDR_PLUGIN_STATE_DIR` is |
+//! |---|---|
+//! | `<HERDR_PLUGIN_STATE_DIR>/<state_dir>` | an absolute path whose last component is this plugin's id |
+//! | `<plugin_root>/<state_dir>` | anything else: absent, empty, relative, or named for another plugin |
+//!
+//! 🚨 **A directory named for another plugin is not used.** A plugin that runs
+//! another plugin's binary can hand it its own state directory (see
+//! [`crate::env::PER_PLUGIN_VARS`]). Files written there would sit in the wrong
+//! plugin's state, and two plugins using one state-directory name would share
+//! an attempt stamp.
+//!
+//! 🚨 **The door is exactly as strict as before.** [`managed`] refuses a
+//! `local:` install before it looks at any directory, so a linked working tree
+//! gets no file in the state directory, as it gets none in its own root. It
+//! still refuses a record with no absolute root and a name that is not one
+//! plain path component, whichever directory would be used.
+//!
+//! ✅ **A reinstall empties `plugin_root`** (SCOPE.md §8.2.1). ⚠️ That it
+//! leaves the state directory alone is inferred from where that directory sits,
+//! outside the root, and has not been measured.
+//!
+//! ⚠️ **Accepted cost:** files an install saved under `plugin_root` before
+//! 0.5.4 are left behind, once. The first launch after the upgrade finds no
+//! stamp, which reads as "due", so it costs at most one extra check. Every
 //! missing file already reads as the safe default.
+//!
+//! 🔑 **The detached check resolves the same directory as its parent.** The
+//! child inherits its parent's process environment, but a caller of
+//! [`managed_in`] may have resolved from a different [`Environment`]. So
+//! [`spawn_check_if_due`] sets `HERDR_PLUGIN_STATE_DIR` on the child to the
+//! directory its [`Files`] used, and removes it when they fell back to
+//! `plugin_root`.
+//!
+//! The calls ending in `_in` take the [`Environment`] to resolve from. The
+//! calls without the suffix, which 0.5.3 shipped, read the process
+//! environment through [`Environment::from_process`].
 
 use std::cmp::Ordering;
 use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -101,6 +147,7 @@ use crate::api::client::Client;
 use crate::api::generated::{
     InstalledPluginInfo, PluginListAnswer, PluginListParams, PluginSourceKind, RequestMethod,
 };
+use crate::env::{Environment, PLUGIN_STATE_DIR_VAR};
 
 /// How long to wait between checks, when a caller expresses no opinion.
 pub const DEFAULT_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
@@ -617,9 +664,11 @@ pub const CHECK_FLAG: &str = "--check-update";
 
 /// Where one install keeps its update state.
 ///
-/// Built only by [`Files::under`], which refuses a path that could land outside
-/// the install. The names on disk are fixed, so a plugin that moves onto this
-/// from its own copy keeps the files it already wrote:
+/// Built by [`Files::under`], which refuses a path that could land outside the
+/// install, and by [`managed_in`], which moves the same name into Herdr's state
+/// directory when Herdr provides one (see "Where the files live" above). The
+/// names on disk are fixed, and are the ones agentic-panes-layout wrote from
+/// its own copy:
 ///
 /// | File | Name | Written by |
 /// |---|---|---|
@@ -629,6 +678,9 @@ pub const CHECK_FLAG: &str = "--check-update";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Files {
     dir: PathBuf,
+    /// Herdr's state directory `dir` sits in, or `None` when it sits under
+    /// `plugin_root`. [`spawn_check_if_due`] hands it to the child.
+    herdr_state: Option<PathBuf>,
 }
 
 impl Files {
@@ -645,6 +697,7 @@ impl Files {
         }
         Some(Files {
             dir: plugin_root.join(state_dir),
+            herdr_state: None,
         })
     }
 
@@ -690,36 +743,81 @@ fn plain_name(name: &str) -> bool {
     )
 }
 
+/// [`managed_in`], resolving from this process's environment.
+pub fn managed(
+    plugin: InstalledPluginInfo,
+    state_dir: &str,
+) -> Option<(InstalledPluginInfo, Files)> {
+    managed_in(plugin, state_dir, &Environment::from_process())
+}
+
 /// The install record and its [`Files`], when this is an install the plugin may
 /// update.
 ///
 /// 🚨 **The one door, and it fails closed.** `None` for a `local:` install
 /// (SCOPE.md §8.3), and `None` when [`Files::under`] refuses the record's
 /// `plugin_root` or `state_dir`, which includes a record with no root at all.
-/// A caller asks this first, and on `None` it spawns nothing, reads nothing,
-/// writes nothing and asks nothing.
-pub fn managed(
+/// Both refusals hold even when `env` names a usable state directory, so a
+/// linked working tree gets no file anywhere. A caller asks this first, and on
+/// `None` it spawns nothing, reads nothing, writes nothing and asks nothing.
+///
+/// Otherwise the files live in `<HERDR_PLUGIN_STATE_DIR>/<state_dir>` when
+/// `env` names an absolute state directory whose last component is this
+/// plugin's id, and in `<plugin_root>/<state_dir>` when it does not. The
+/// module documentation says why.
+pub fn managed_in(
     plugin: InstalledPluginInfo,
     state_dir: &str,
+    env: &Environment,
 ) -> Option<(InstalledPluginInfo, Files)> {
     if !is_managed(&plugin) {
         return None;
     }
     let files = Files::under(Path::new(&plugin.plugin_root), state_dir)?;
+    let files = match herdr_state_dir(&plugin, env) {
+        Some(root) => Files {
+            dir: root.join(state_dir),
+            herdr_state: Some(root),
+        },
+        None => files,
+    };
     Some((plugin, files))
 }
 
+/// Herdr's state directory for `plugin`, when `env` names one this install can
+/// use: an absolute path whose last component is the plugin's id.
+///
+/// ✅ Herdr 0.9.1 sets it to `$XDG_STATE_HOME/herdr/plugins/<plugin_id>`. 🚨 A
+/// directory named for another plugin is refused, because a plugin that runs
+/// another plugin's binary can hand it its own. An empty or relative value is
+/// refused too, and every refusal falls back to `plugin_root`.
+fn herdr_state_dir(plugin: &InstalledPluginInfo, env: &Environment) -> Option<PathBuf> {
+    let dir = Path::new(env.get(PLUGIN_STATE_DIR_VAR)?);
+    let ours = dir.file_name() == Some(std::ffi::OsStr::new(&plugin.plugin_id));
+    (dir.is_absolute() && ours).then(|| dir.to_path_buf())
+}
+
+/// [`lookup_in`], resolving from this process's environment.
+pub fn lookup(
+    client: &Client,
+    plugin_id: &str,
+    state_dir: &str,
+) -> Option<(InstalledPluginInfo, Files)> {
+    lookup_in(client, plugin_id, state_dir, &Environment::from_process())
+}
+
 /// Reads the install record for `plugin_id` through `plugin.list`, then asks
-/// [`managed`].
+/// [`managed_in`] with `env`.
 ///
 /// `None` on any failure: a call Herdr did not answer, and an answer holding no
 /// record for this plugin. ⚠️ **The answer is filtered by `plugin_id` again**,
 /// so a server that ignored the request's filter still cannot hand back
 /// another plugin's record.
-pub fn lookup(
+pub fn lookup_in(
     client: &Client,
     plugin_id: &str,
     state_dir: &str,
+    env: &Environment,
 ) -> Option<(InstalledPluginInfo, Files)> {
     let answer = client
         .call::<PluginListAnswer>(RequestMethod::PluginList(PluginListParams {
@@ -730,7 +828,7 @@ pub fn lookup(
         .plugins
         .into_iter()
         .find(|plugin| plugin.plugin_id == plugin_id)?;
-    managed(plugin, state_dir)
+    managed_in(plugin, state_dir, env)
 }
 
 /// Starts a detached check when one is due, and never waits for it.
@@ -744,6 +842,11 @@ pub fn lookup(
 /// thread waits and ends. It does not hold up the caller, and a caller that
 /// exits first loses nothing: the child is in its own process group.
 ///
+/// 🔑 **The child is told which directory to use.** It gets
+/// `HERDR_PLUGIN_STATE_DIR` set to the state directory `files` sits in, or
+/// removed when `files` sit under `plugin_root`. So its [`run_check`] resolves
+/// the directory this launch resolved, whatever environment it inherited.
+///
 /// ⚠️ A failure to spawn is ignored rather than reported: the worst case is
 /// that a later launch tries again.
 pub fn spawn_check_if_due(files: &Files, now: SystemTime, interval: Duration) -> bool {
@@ -753,7 +856,7 @@ pub fn spawn_check_if_due(files: &Files, now: SystemTime, interval: Duration) ->
     let Ok(me) = std::env::current_exe() else {
         return false;
     };
-    let Ok(mut child) = spawn_detached(&me) else {
+    let Ok(mut child) = detached(&me, files).spawn() else {
         return false;
     };
     std::thread::spawn(move || {
@@ -762,7 +865,9 @@ pub fn spawn_check_if_due(files: &Files, now: SystemTime, interval: Duration) ->
     true
 }
 
-/// Runs `program` with [`CHECK_FLAG`], with no stdio, in its own process group.
+/// Runs `program` with [`CHECK_FLAG`], with no stdio, in its own process group,
+/// and with `HERDR_PLUGIN_STATE_DIR` set to the Herdr state directory `files`
+/// sit in, or removed when they sit under `plugin_root`.
 ///
 /// 🔑 **Its own process group, so the check outlives a hook** whose group
 /// Herdr ends. ⚠️ Unix only: on Windows the child is spawned in the caller's
@@ -771,27 +876,29 @@ pub fn spawn_check_if_due(files: &Files, now: SystemTime, interval: Duration) ->
 /// 🚨 **No stdio, because an inherited pipe would hold the caller's reader
 /// open.** On the `[[startup]]` path stderr is a pipe (SCOPE.md §10), so a
 /// child that kept it would keep Herdr waiting for the whole network call.
-fn spawn_detached(program: &Path) -> io::Result<Child> {
+fn detached(program: &Path, files: &Files) -> Command {
     let mut command = Command::new(program);
     command
         .arg(CHECK_FLAG)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+    match files.herdr_state.as_deref() {
+        Some(dir) => command.env(PLUGIN_STATE_DIR_VAR, dir),
+        None => command.env_remove(PLUGIN_STATE_DIR_VAR),
+    };
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
         command.process_group(0);
     }
-    command.spawn()
+    command
 }
 
-/// The [`CHECK_FLAG`] side: finds the install, then asks `releases` and keeps
-/// the answer for a later launch.
+/// [`run_check_in`], resolving from this process's environment.
 ///
-/// `None` when [`lookup`] refuses, in which case nothing was asked and nothing
-/// was written. Otherwise the [`Decision`] from [`check_and_save`], for the
-/// plugin to log. Pass [`CurlReleases::default`] outside a test.
+/// 🔑 This is the call a plugin's `main` makes for [`CHECK_FLAG`], because
+/// [`spawn_check_if_due`] sets the one variable it resolves from.
 pub fn run_check(
     client: &Client,
     plugin_id: &str,
@@ -800,7 +907,33 @@ pub fn run_check(
     interval: Duration,
     releases: &impl Releases,
 ) -> Option<Decision> {
-    let (plugin, files) = lookup(client, plugin_id, state_dir)?;
+    run_check_in(
+        client,
+        plugin_id,
+        state_dir,
+        &Environment::from_process(),
+        now,
+        interval,
+        releases,
+    )
+}
+
+/// The [`CHECK_FLAG`] side: finds the install, then asks `releases` and keeps
+/// the answer for a later launch.
+///
+/// `None` when [`lookup_in`] refuses, in which case nothing was asked and
+/// nothing was written. Otherwise the [`Decision`] from [`check_and_save`], for
+/// the plugin to log. Pass [`CurlReleases::default`] outside a test.
+pub fn run_check_in(
+    client: &Client,
+    plugin_id: &str,
+    state_dir: &str,
+    env: &Environment,
+    now: SystemTime,
+    interval: Duration,
+    releases: &impl Releases,
+) -> Option<Decision> {
+    let (plugin, files) = lookup_in(client, plugin_id, state_dir, env)?;
     Some(check_and_save(
         &plugin,
         &files.stamp(),
@@ -1047,9 +1180,9 @@ mod tests {
     }
 
     /// A script at `<dir>/plugin` that writes to `<dir>/seen` the arguments
-    /// it was given, its process group, and then, for each of its stdin,
-    /// stdout and stderr, `null` when that descriptor is `/dev/null` and
-    /// `other` when it is not.
+    /// it was given, its process group, then, for each of its stdin, stdout
+    /// and stderr, `null` when that descriptor is `/dev/null` and `other` when
+    /// it is not, and last its `HERDR_PLUGIN_STATE_DIR`, or `unset`.
     ///
     /// `[ A -ef B ]` compares device and inode, so the script tells a null
     /// descriptor from an inherited one without reading from it.
@@ -1075,7 +1208,8 @@ mod tests {
                  for fd in 0 1 2; do\n\
                  if [ /dev/fd/$fd -ef /dev/null ]; then n=\"$n null\"; else n=\"$n other\"; fi\n\
                  done\n\
-                 echo $n >> {0:?}\n",
+                 echo $n >> {0:?}\n\
+                 printf '%s\\n' \"${{HERDR_PLUGIN_STATE_DIR-unset}}\" >> {0:?}\n",
                 seen
             ),
         )
@@ -1084,7 +1218,7 @@ mod tests {
         (dir, script, seen)
     }
 
-    /// 🔑 **`spawn_detached` is private, and the integration suite can only
+    /// 🔑 **`detached` is private, and the integration suite can only
     /// reach it by re-running its own test binary**, which answers the flag
     /// with an error and reports nothing back. So the spawn is driven here
     /// against a script that writes down what it was given.
@@ -1096,7 +1230,12 @@ mod tests {
     fn a_detached_check_gets_the_flag_its_own_process_group_and_no_output() {
         let (dir, script, seen) = probe_script("group");
 
-        let mut child = spawn_detached(&script).unwrap();
+        let state = dir.join("state");
+        let files = Files {
+            dir: state.join("u"),
+            herdr_state: Some(state.clone()),
+        };
+        let mut child = detached(&script, &files).spawn().unwrap();
         let pid = child.id();
         assert!(child.wait().unwrap().success());
 
@@ -1116,6 +1255,13 @@ mod tests {
         // and under `cargo test` driven by `tools/mutate.py` both are pipes.
         let fds: Vec<&str> = lines.get(2).unwrap_or(&"").split(' ').collect();
         assert_eq!(fds.get(1..), Some(&["null", "null"][..]), "{}", text);
+        // The state directory reaches the child as the variable it reads.
+        assert_eq!(
+            lines.get(3).copied(),
+            Some(state.to_string_lossy().as_ref()),
+            "{}",
+            text
+        );
     }
 
     /// Set only in the copy of the test binary the next test starts.
@@ -1132,7 +1278,8 @@ mod tests {
     #[cfg(unix)]
     fn a_detached_check_gets_a_null_stdin_even_from_a_parent_that_has_one() {
         if let Some(script) = std::env::var_os(PROBE) {
-            let mut child = spawn_detached(Path::new(&script)).unwrap();
+            let files = Files::under(Path::new("/plugins/p"), "u").unwrap();
+            let mut child = detached(Path::new(&script), &files).spawn().unwrap();
             assert!(child.wait().unwrap().success());
             return;
         }
@@ -1156,6 +1303,65 @@ mod tests {
         assert!(status.success(), "the probe copy failed: {}", text);
         let fds: Vec<&str> = text.lines().nth(2).unwrap_or("").split(' ').collect();
         assert_eq!(fds.first(), Some(&"null"), "{}", text);
+    }
+
+    /// An install of `plugin_id` at `/plugins/p`, managed from GitHub.
+    fn installed(plugin_id: &str) -> InstalledPluginInfo {
+        serde_json::from_value(serde_json::json!({
+            "plugin_id": plugin_id,
+            "name": "Probe",
+            "version": "0.8.1",
+            "plugin_root": "/plugins/p",
+            "manifest_path": "/plugins/p/herdr-plugin.toml",
+            "min_herdr_version": "0.9.0",
+            "enabled": true,
+            "source": {"kind": "github", "owner": "o", "repo": "r"},
+        }))
+        .expect("a minimal install record")
+    }
+
+    /// What a child started by `command` resolves, when the environment it
+    /// inherits is `inherited`: that environment, with the command's own
+    /// settings and removals applied, as the OS applies them.
+    fn resolved_by_child(command: &Command, inherited: &Environment) -> Option<Files> {
+        let mut vars: std::collections::BTreeMap<String, String> = inherited
+            .vars()
+            .map(|(key, value)| (key.to_string(), value.to_string()))
+            .collect();
+        for (key, value) in command.get_envs() {
+            let key = key.to_string_lossy().into_owned();
+            match value {
+                Some(value) => vars.insert(key, value.to_string_lossy().into_owned()),
+                None => vars.remove(&key),
+            };
+        }
+        let pairs: Vec<(&str, &str)> = vars.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        managed_in(installed("o.probe"), "u", &Environment::from_pairs(&pairs)).map(|(_, f)| f)
+    }
+
+    /// 🔑 **The child must resolve what its parent resolved, whatever it
+    /// inherits.** A caller of `managed_in` may resolve from an environment
+    /// that is not its process's, and the child only ever sees the process's.
+    /// So each case below gives the child an inheritance that disagrees with
+    /// the parent's answer, and a child that trusted it would resolve wrongly.
+    #[test]
+    fn a_detached_check_resolves_the_directory_its_parent_resolved() {
+        let ours = "/state/herdr/plugins/o.probe";
+        let with_state = Environment::from_pairs(&[(PLUGIN_STATE_DIR_VAR, ours)]);
+        let without = Environment::default();
+
+        // The parent used the state directory, and the child inherits none.
+        let (_, parent) = managed_in(installed("o.probe"), "u", &with_state).unwrap();
+        assert_eq!(parent.dir(), Path::new(ours).join("u"));
+        let command = detached(Path::new("/bin/true"), &parent);
+        assert_eq!(resolved_by_child(&command, &without), Some(parent));
+
+        // The parent fell back to plugin_root, and the child inherits a state
+        // directory it would otherwise use.
+        let (_, parent) = managed_in(installed("o.probe"), "u", &without).unwrap();
+        assert_eq!(parent.dir(), Path::new("/plugins/p/u"));
+        let command = detached(Path::new("/bin/true"), &parent);
+        assert_eq!(resolved_by_child(&command, &with_state), Some(parent));
     }
 
     #[test]

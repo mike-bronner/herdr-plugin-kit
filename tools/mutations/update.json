@@ -434,6 +434,81 @@
       "name": "a detached check is reaped rather than left a zombie",
       "find": "        let _ = child.wait();\n",
       "replace": "        drop(child);\n"
+    },
+    {
+      "name": "a local install is refused even when Herdr provides a state directory",
+      "find": "    if !is_managed(&plugin) {\n        return None;\n    }\n    let files = Files::under(",
+      "replace": "    if !is_managed(&plugin) && herdr_state_dir(&plugin, env).is_none() {\n        return None;\n    }\n    let files = Files::under("
+    },
+    {
+      "name": "a record with no usable root is refused whichever directory is used",
+      "find": "    let files = Files::under(Path::new(&plugin.plugin_root), state_dir)?;",
+      "replace": "    let files = Files::under(Path::new(\"/\"), state_dir)?;"
+    },
+    {
+      "name": "a state directory name is checked inside Herdr's state directory too",
+      "find": "    let files = Files::under(Path::new(&plugin.plugin_root), state_dir)?;",
+      "replace": "    let files = Files::under(Path::new(&plugin.plugin_root), \"u\")?;"
+    },
+    {
+      "name": "the files live in Herdr's state directory when it provides one",
+      "find": "    let files = match herdr_state_dir(&plugin, env) {",
+      "replace": "    let files = match None::<PathBuf> {"
+    },
+    {
+      "name": "a relative state directory is not used",
+      "find": "    (dir.is_absolute() && ours).then(|| dir.to_path_buf())",
+      "replace": "    ours.then(|| dir.to_path_buf())"
+    },
+    {
+      "name": "a state directory named for another plugin is not used",
+      "find": "    (dir.is_absolute() && ours).then(|| dir.to_path_buf())",
+      "replace": "    dir.is_absolute().then(|| dir.to_path_buf())"
+    },
+    {
+      "name": "the state directory's name is compared whole, not as a prefix",
+      "find": "    let ours = dir.file_name() == Some(std::ffi::OsStr::new(&plugin.plugin_id));",
+      "replace": "    let ours = dir\n        .file_name()\n        .is_some_and(|name| name.to_string_lossy().starts_with(plugin.plugin_id.as_str()));"
+    },
+    {
+      "name": "managed reads the process environment",
+      "find": "    managed_in(plugin, state_dir, &Environment::from_process())",
+      "replace": "    managed_in(plugin, state_dir, &Environment::default())"
+    },
+    {
+      "name": "lookup reads the process environment",
+      "find": "    lookup_in(client, plugin_id, state_dir, &Environment::from_process())",
+      "replace": "    lookup_in(client, plugin_id, state_dir, &Environment::default())"
+    },
+    {
+      "name": "run_check reads the process environment",
+      "find": "        &Environment::from_process(),\n        now,",
+      "replace": "        &Environment::default(),\n        now,"
+    },
+    {
+      "name": "lookup_in resolves from the environment it is given",
+      "find": "    managed_in(plugin, state_dir, env)\n}",
+      "replace": "    managed_in(plugin, state_dir, &Environment::default())\n}"
+    },
+    {
+      "name": "run_check_in resolves from the environment it is given",
+      "find": "lookup_in(client, plugin_id, state_dir, env)?;",
+      "replace": "lookup_in(client, plugin_id, state_dir, &Environment::default())?;"
+    },
+    {
+      "name": "the detached check is told which directory its files use",
+      "find": "    match files.herdr_state.as_deref() {",
+      "replace": "    match None::<&Path> {"
+    },
+    {
+      "name": "the detached check is handed its parent's state directory",
+      "find": "        Some(dir) => command.env(PLUGIN_STATE_DIR_VAR, dir),",
+      "replace": "        Some(_) => &mut command,"
+    },
+    {
+      "name": "the detached check is not handed a state directory its parent did not use",
+      "find": "        None => command.env_remove(PLUGIN_STATE_DIR_VAR),",
+      "replace": "        None => &mut command,"
     }
   ]
 }

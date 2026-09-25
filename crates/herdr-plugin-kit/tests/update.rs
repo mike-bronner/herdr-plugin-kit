@@ -26,10 +26,11 @@ use serde_json::{json, Value};
 
 use herdr_plugin_kit::api::client::{Client, Socket};
 use herdr_plugin_kit::api::generated::{InstalledPluginInfo, PluginSourceInfo, PluginSourceKind};
+use herdr_plugin_kit::env::{Environment, PLUGIN_STATE_DIR_VAR};
 use herdr_plugin_kit::update::{
-    apply, check, check_and_save, due, install_arguments, is_managed, lookup, managed, offer,
-    record_offer, run_check, spawn_check_if_due, Available, Decision, Files, Installer, Releases,
-    Skipped, DEFAULT_INTERVAL,
+    apply, check, check_and_save, due, install_arguments, is_managed, lookup, lookup_in, managed,
+    managed_in, offer, record_offer, run_check, run_check_in, spawn_check_if_due, Available,
+    Decision, Files, Installer, Releases, Skipped, DEFAULT_INTERVAL,
 };
 
 /// A directory that removes itself, so a failing test leaks nothing.
@@ -1161,6 +1162,98 @@ fn one_channel_recording_an_offer_does_not_silence_another() {
     );
 }
 
+// ------------------------------------------------- where the files live
+
+/// Herdr's state directory for [`plugin`], as Herdr 0.9.1 names it.
+const OURS: &str = "/state/herdr/plugins/mikebronner.project-finder";
+
+/// An environment carrying `HERDR_PLUGIN_STATE_DIR` set to `value`.
+fn state(value: &str) -> Environment {
+    Environment::from_pairs(&[(PLUGIN_STATE_DIR_VAR, value)])
+}
+
+#[test]
+fn the_files_live_in_herdrs_state_directory_when_it_provides_one() {
+    let (_, files) = managed_in(
+        plugin(PluginSourceKind::Github, "0.8.1"),
+        STATE_DIR,
+        &state(OURS),
+    )
+    .expect("a GitHub install is managed");
+
+    assert_eq!(files.dir(), Path::new(OURS).join(STATE_DIR));
+    assert_eq!(
+        files.stamp(),
+        Path::new(OURS).join(STATE_DIR).join("checked")
+    );
+}
+
+#[test]
+fn the_files_fall_back_to_the_install_when_herdr_provides_no_usable_state_directory() {
+    // Absent, empty, relative, and the state directory of another plugin,
+    // which a plugin running another plugin's binary can hand it.
+    let cases = [
+        Environment::default(),
+        state(""),
+        state("state/herdr/plugins/mikebronner.project-finder"),
+        state("/state/herdr/plugins/mikebronner.recent-spaces"),
+        state("/state/herdr/plugins/mikebronner.project-finder-extra"),
+    ];
+    for env in &cases {
+        let (_, files) = managed_in(plugin(PluginSourceKind::Github, "0.8.1"), STATE_DIR, env)
+            .expect("a GitHub install is managed");
+        assert_eq!(
+            files,
+            Files::under(Path::new("/plugins/p"), STATE_DIR).unwrap(),
+            "{:?}",
+            env
+        );
+    }
+}
+
+#[test]
+fn a_local_install_is_never_managed_even_when_herdr_provides_a_state_directory() {
+    // 🚨 The state directory is outside the working tree, so it could take a
+    // file where `plugin_root` never could. The door refuses it all the same.
+    assert!(managed_in(
+        plugin(PluginSourceKind::Local, "0.8.1"),
+        STATE_DIR,
+        &state(OURS)
+    )
+    .is_none());
+}
+
+#[test]
+fn a_record_with_no_usable_root_is_refused_even_when_the_state_directory_would_not_use_it() {
+    for root in ["", "plugins/p"] {
+        let record = InstalledPluginInfo {
+            plugin_root: root.to_string(),
+            ..plugin(PluginSourceKind::Github, "0.8.1")
+        };
+        assert!(
+            managed_in(record, STATE_DIR, &state(OURS)).is_none(),
+            "{:?}",
+            root
+        );
+    }
+}
+
+#[test]
+fn a_name_that_could_leave_the_state_directory_is_refused() {
+    for name in ["", ".", "..", "a/b", "/tmp/elsewhere", "../x"] {
+        assert!(
+            managed_in(
+                plugin(PluginSourceKind::Github, "0.8.1"),
+                name,
+                &state(OURS)
+            )
+            .is_none(),
+            "{:?}",
+            name
+        );
+    }
+}
+
 // ------------------------------------------------- reading the install record
 
 /// Keeps two peers in one test run from colliding on a path.
@@ -1274,6 +1367,21 @@ fn lookup_refuses_a_local_install() {
 }
 
 #[test]
+fn lookup_in_resolves_from_the_environment_it_is_given() {
+    let herdr = Herdr::listing(vec![plugin(PluginSourceKind::Github, "0.8.1")]);
+
+    let (_, files) = lookup_in(
+        &herdr.client(),
+        "mikebronner.project-finder",
+        STATE_DIR,
+        &state(OURS),
+    )
+    .expect("this plugin's record is in the list");
+
+    assert_eq!(files.dir(), Path::new(OURS).join(STATE_DIR));
+}
+
+#[test]
 fn lookup_answers_none_when_herdr_does_not_answer() {
     let client = Client::new(
         Socket::at(std::env::temp_dir().join("herdr-kit-update-nobody.sock")),
@@ -1335,6 +1443,126 @@ fn run_check_writes_nothing_into_a_local_install() {
     assert_eq!(decision, None);
     assert!(releases.asked.borrow().is_empty());
     assert_eq!(contents(&directory.0), Vec::<PathBuf>::new());
+}
+
+/// A state directory for [`plugin`] inside `directory`, named as Herdr names it.
+fn state_dir_in(directory: &TempDir) -> PathBuf {
+    directory.0.join("state").join("mikebronner.project-finder")
+}
+
+#[test]
+fn run_check_in_saves_into_herdrs_state_directory_and_not_the_install() {
+    let root = TempDir::new("run-check-root");
+    let elsewhere = TempDir::new("run-check-state");
+    let ours = state_dir_in(&elsewhere);
+    let herdr = Herdr::listing(vec![rooted(PluginSourceKind::Github, &root.0)]);
+
+    let decision = run_check_in(
+        &herdr.client(),
+        "mikebronner.project-finder",
+        STATE_DIR,
+        &state(&ours.to_string_lossy()),
+        at(1_000_000),
+        DEFAULT_INTERVAL,
+        &Answers::newest("0.9.1"),
+    );
+
+    assert_eq!(decision, Some(Decision::Available(found())));
+    let dir = ours.join(STATE_DIR);
+    assert_eq!(
+        std::fs::read_to_string(dir.join("checked")).unwrap(),
+        "1000000\n"
+    );
+    assert!(dir.join("available.json").exists());
+    assert_eq!(contents(&root.0), Vec::<PathBuf>::new());
+}
+
+#[test]
+fn run_check_in_writes_nothing_for_a_local_install_even_into_the_state_directory() {
+    // 🚨 The door, end to end, where there is now a directory outside the
+    // working tree that a local install could otherwise write to.
+    let root = TempDir::new("run-check-local-root");
+    let elsewhere = TempDir::new("run-check-local-state");
+    let ours = state_dir_in(&elsewhere);
+    std::fs::create_dir_all(&ours).unwrap();
+    let herdr = Herdr::listing(vec![rooted(PluginSourceKind::Local, &root.0)]);
+    let releases = Answers::newest("9.9.9");
+
+    let decision = run_check_in(
+        &herdr.client(),
+        "mikebronner.project-finder",
+        STATE_DIR,
+        &state(&ours.to_string_lossy()),
+        at(1_000_000),
+        DEFAULT_INTERVAL,
+        &releases,
+    );
+
+    assert_eq!(decision, None);
+    assert!(releases.asked.borrow().is_empty());
+    assert_eq!(contents(&ours), Vec::<PathBuf>::new());
+    assert_eq!(contents(&root.0), Vec::<PathBuf>::new());
+}
+
+/// Set only in the copy of this test binary the next test starts, to the
+/// scratch directory that copy works in.
+const PROCESS_PROBE: &str = "HERDR_PLUGIN_KIT_UPDATE_PROCESS_PROBE";
+
+/// 🔑 **`managed`, `lookup` and `run_check` read the process environment**,
+/// which is how a plugin written against 0.5.3 gets the state directory with
+/// no change to its source. A test cannot set a variable on its own process
+/// without racing every other test, so this re-runs its own binary with
+/// `HERDR_PLUGIN_STATE_DIR` set, and that copy asserts.
+#[test]
+fn the_calls_without_an_environment_read_the_process_environment() {
+    if let Some(scratch) = std::env::var_os(PROCESS_PROBE) {
+        let root = PathBuf::from(scratch);
+        let ours = PathBuf::from(std::env::var_os(PLUGIN_STATE_DIR_VAR).unwrap());
+        let dir = ours.join(STATE_DIR);
+
+        let (_, files) = managed(rooted(PluginSourceKind::Github, &root), STATE_DIR).unwrap();
+        assert_eq!(files.dir(), dir, "managed");
+
+        let herdr = Herdr::listing(vec![rooted(PluginSourceKind::Github, &root)]);
+        let (_, files) = lookup(&herdr.client(), "mikebronner.project-finder", STATE_DIR).unwrap();
+        assert_eq!(files.dir(), dir, "lookup");
+
+        let herdr = Herdr::listing(vec![rooted(PluginSourceKind::Github, &root)]);
+        run_check(
+            &herdr.client(),
+            "mikebronner.project-finder",
+            STATE_DIR,
+            at(1_000_000),
+            DEFAULT_INTERVAL,
+            &Answers::newest("0.9.1"),
+        )
+        .unwrap();
+        assert!(dir.join("checked").exists(), "run_check");
+        return;
+    }
+
+    let root = TempDir::new("process-root");
+    let elsewhere = TempDir::new("process-state");
+    let mut probe = std::process::Command::new(std::env::current_exe().unwrap());
+    probe
+        .args([
+            "--exact",
+            "the_calls_without_an_environment_read_the_process_environment",
+            "--test-threads=1",
+        ])
+        .env(PROCESS_PROBE, &root.0)
+        .env(PLUGIN_STATE_DIR_VAR, state_dir_in(&elsewhere));
+    let finished = probe.output().unwrap();
+
+    let stdout = String::from_utf8_lossy(&finished.stdout);
+    assert!(
+        finished.status.success(),
+        "the probe copy failed:\n{}\n{}",
+        stdout,
+        String::from_utf8_lossy(&finished.stderr)
+    );
+    // It ran the one test, rather than matching nothing and passing.
+    assert!(stdout.contains("1 passed"), "{}", stdout);
 }
 
 #[test]

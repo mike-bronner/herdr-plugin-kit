@@ -131,7 +131,7 @@ herdr-plugin-kit/
 │       ├── pin_block.json            # the plugin pin-block check's 15, in Python
 │       ├── report.json               # the issue reports' 19 mutations
 │       ├── surface.json              # the shared seam's 3 mutations
-│       └── update.json               # the update check's 85 mutations
+│       └── update.json               # the update check's 100 mutations
 ├── .github/workflows/
 │   ├── kit-ci.yml                    # the kit's own, fast
 │   └── kit-mutation.yml              # the kit's own, slow — §11.8
@@ -871,9 +871,10 @@ belong to *this* plugin is a fact about Herdr's contract, Herdr writes it down n
 and the first person to answer it got two of three. The second person writing this filter
 gets it wrong too, for the same reason.
 
-⚠️ **Unverified, and the list does not rest on it**: nobody has confirmed that Herdr sets
-`HERDR_PLUGIN_STATE_DIR` for a pane command at all, so that particular leak may be
-theoretical.
+✅ **Herdr does set it for plugin processes, measured 2026-09-25 on Herdr 0.9.1**: an
+`[[actions]]` command, four event hooks and a `[[startup]]` entry all receive it (§8.2,
+"Where the files live"). ⚠️ **Still unmeasured, and the list does not rest on it**:
+whether a pane command receives it, so the leak through a pane may be theoretical.
 
 🔑 **Named for the condition, not for what a caller does with it.** `without_plugin_vars`
 was the donor's name and the donor flagged it as wrong: it says what it removes rather
@@ -1846,10 +1847,13 @@ it before asking: Enter, then Escape. The live `plugins.json` and the listing of
 
 - **Timer:** a stamp file, checked at launch against a minimum interval. Default 24
   hours. No new process for the two on-demand plugins. recent-spaces folds the check
-  into its existing poll loop. ⚠️ **The caller passes the path, and every other path
-  below.** This said the stamp lives in `HERDR_PLUGIN_STATE_DIR`, but a Herdr event hook
-  receives neither that variable nor `HERDR_BIN_PATH`, and nobody has confirmed the
-  first is ever set (see `env.rs`). So the module reads no environment variable at all.
+  into its existing poll loop. The low-level calls below take every path from the
+  caller. 🔑 **The setup that chooses the paths puts them in `HERDR_PLUGIN_STATE_DIR`,
+  and falls back to `plugin_root` only when Herdr provides none.** Decided by Mike
+  2026-09-25, for 0.5.4. "Where the files live" below has the measurement and the rule.
+  🪤 Up to 0.5.3 this said a Herdr event hook receives neither that variable nor
+  `HERDR_BIN_PATH`, so the module read no environment variable at all. That was false on
+  Herdr 0.9.1.
 - 🚨 **The stamp records the attempt, not the result**, decided 2026-09-13 and the one
   design consequence of asking an API instead of git.
 
@@ -2012,24 +2016,85 @@ it before asking: Enter, then Escape. The live `plugins.json` and the listing of
   |---|---|
   | `lookup(client, plugin_id, state_dir)`: the install record through `plugin.list`, filtered by id again | its plugin id and its state-directory name |
   | `managed(plugin, state_dir)`: 🚨 **the one door**. `None` for a `local:` install, a root that is not absolute, or a name that could leave the install | what to do on `None`, which is nothing |
-  | `Files`: `checked`, `available.json` and `offered-<name>` inside `plugin_root/state_dir` | a name for each offer channel |
-  | `spawn_check_if_due(files, now, interval)`: re-runs the binary as `CHECK_FLAG`, detached, in its own process group with no stdio, and reaps it on a thread so a long-lived caller collects no zombies | answering `CHECK_FLAG` in `main` |
+  | `Files`: `checked`, `available.json` and `offered-<name>` inside `HERDR_PLUGIN_STATE_DIR/state_dir`, or `plugin_root/state_dir` when Herdr provides no usable state directory | a name for each offer channel |
+  | `spawn_check_if_due(files, now, interval)`: re-runs the binary as `CHECK_FLAG`, detached, in its own process group with no stdio, with `HERDR_PLUGIN_STATE_DIR` set to the directory `files` use or removed, and reaps it on a thread so a long-lived caller collects no zombies | answering `CHECK_FLAG` in `main` |
   | `run_check(client, plugin_id, state_dir, now, interval, releases)`: `lookup`, then `check_and_save` | logging the `Decision` it answers |
+  | ➕ 0.5.4: `lookup_in`, `managed_in` and `run_check_in`, which take an `Environment` after `state_dir`. The calls above read the process environment and are otherwise unchanged | nothing, unless it already holds an `Environment` or tests the placement |
   | | 🔑 the wording, the buttons, the dialog-or-toast choice, and acting on the answer |
 
-  - 🚨 **The files live inside the install's own `plugin_root`.** An event hook is handed
-    neither `HERDR_PLUGIN_STATE_DIR` nor `HERDR_BIN_PATH`, but every run holds the
-    socket, and `plugin.list` names the root. That was Mike's call. §8.2.1 measured that
-    a reinstall empties the directory, and every missing file already reads as the safe
-    default: nothing to offer, a check that is due, an offer never shown.
+  - 🔑 **Where the files live: Herdr's state directory first, `plugin_root` second.**
+    Decided by Mike 2026-09-25, for 0.5.4. See "Where the files live" below.
   - **Any number of named offer records.** agentic-panes-layout keeps one for its dialog
     and one for its toast, so a toast does not silence the dialog it points to. A name,
     like the state directory, must be one plain path component, or `Files` refuses it.
-  - **The file names are the ones agentic-panes-layout already wrote**, so moving onto
-    the kit strands no saved result and restarts no interval.
+  - **The file names are the ones agentic-panes-layout already wrote.** Moving onto the
+    kit in 0.5.2 stranded no saved result. ⚠️ The 0.5.4 move to the state directory
+    strands them once, which is the cost accepted below.
   - ⚠️ **Still no prompt, and still no `dialog`.** Mike's 2026-09-13 decision holds, so
     nothing in this table pulls `dialog` in, and the headless recent-spaces watcher can
     still build the module.
+- **Where the files live.** 🔑 **In `HERDR_PLUGIN_STATE_DIR`, and in `plugin_root` only
+  when Herdr provides none. Decided by Mike 2026-09-25, for 0.5.4.**
+
+  ✅ **Measured 2026-09-25 on isolated Herdr 0.9.1 servers**, each with `XDG_CONFIG_HOME`
+  and `XDG_STATE_HOME` inside a `mktemp -d` root and every client call under `env -i`. A
+  probe plugin dumped its environment from every process kind Herdr starts for it:
+
+  | Process | `HERDR_PLUGIN_STATE_DIR` | `HERDR_BIN_PATH` |
+  |---|---|---|
+  | `[[actions]]`, from a `plugin_action` keybinding and from `herdr plugin action invoke` | ✅ | ✅ |
+  | event hook: `worktree.created`, `worktree.opened`, `workspace.created`, `workspace.focused` | ✅ | ✅ |
+  | `[[startup]]` | ✅ | ✅ |
+
+  The value is `$XDG_STATE_HOME/herdr/plugins/<plugin_id>`, and Herdr creates the
+  directory. The vault notes `insights/2026-09-25-herdr-action-process-environment.md`
+  and `insights/2026-09-25-herdr-0-9-1-event-and-startup-environment.md` hold the full
+  tables. ⚠️ **Not measured:** Herdr 0.9.0, a pane command, and the value for an event or
+  startup process when `XDG_STATE_HOME` is unset. That value is inferred to be
+  `~/.local/state/herdr/plugins/<plugin_id>`, which is what an action got.
+
+  🪤 **What this replaced.** Up to 0.5.3 the files lived in `plugin_root`, because this
+  section said an event hook receives neither variable. That claim was copied from
+  agentic-panes-layout's `docs/herdr-behaviour.md`, which rests on a Herdr 0.8.2 note
+  that listed only pane ids rather than a full dump. It is false on 0.9.1.
+
+  | `HERDR_PLUGIN_STATE_DIR` is | The files live in |
+  |---|---|
+  | an absolute path whose last component is this plugin's id | `HERDR_PLUGIN_STATE_DIR/state_dir` |
+  | absent, empty, or relative | `plugin_root/state_dir`, as in 0.5.3 |
+  | named for another plugin | `plugin_root/state_dir`. 🚨 A plugin that runs another plugin's binary can hand it its own state directory (§5.1, `PER_PLUGIN_VARS`), and two plugins with one state-directory name would then share a stamp |
+
+  **Mike's reasons, 2026-09-25.** Herdr provides the directory for exactly this. A
+  reinstall empties `plugin_root` (§8.2.1) but not the state directory. And the
+  `plugin_root` choice rested on a belief that was false. ⚠️ That a reinstall leaves the
+  state directory alone is inferred from where it sits, outside the root, and is not
+  measured. **Two alternatives were rejected:** keeping `plugin_root` with the docs
+  corrected, and deferring the move.
+
+  ⚠️ **Accepted cost: state a plugin saved under `plugin_root` is left behind, once.** The
+  first launch after the upgrade finds no stamp, which reads as due, so it costs at most
+  one extra check. A found update not yet offered is found again by that check. Nothing
+  moves or deletes the old files.
+
+  🚨 **The door is exactly as strict.** `managed` refuses a `local:` install before it
+  reads any directory, so a linked working tree gets no file in the state directory,
+  which now sits outside the tree and could otherwise take one. A record with no
+  absolute root and a name that is not one plain component are refused whichever
+  directory would be used.
+
+  🔑 **The detached check resolves the same directory as its parent.** The child is this
+  binary re-run by `spawn_check_if_due`, so it inherits the parent's process
+  environment. That is not enough: a caller of `managed_in` may have resolved from
+  another `Environment`. So the spawn sets `HERDR_PLUGIN_STATE_DIR` on the child to the
+  directory its `Files` used, or removes it when they fell back, and the child's
+  `run_check` resolves from that.
+
+  🔑 **Source-compatible with 0.5.3.** `managed`, `lookup` and `run_check` keep their
+  signatures and read the process environment, so a plugin that bumps its pin gets the
+  new placement with no change to its source. `managed_in`, `lookup_in` and
+  `run_check_in` take the `Environment` explicitly: they are the test seam, and the
+  choice for a plugin that already holds one. Still no dependency, and still no
+  `dialog`.
 - **Prompt:** ✅ **`dialog::ask`, which already exists.** `crates/herdr-plugin-kit/src/dialog.rs`
   ships `ask` taking a list of `Button`s and answering `Answer`, beside `notify`. ➕ The
   line numbers this cited went stale when the pair became a list (§7.5.8). ⚠️ This said "a popup through `report`, never a toast", which was

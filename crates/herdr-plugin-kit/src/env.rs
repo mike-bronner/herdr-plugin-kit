@@ -28,6 +28,11 @@ use std::path::{Path, PathBuf};
 pub const SOCKET_PATH_VAR: &str = "HERDR_SOCKET_PATH";
 
 /// Absolute path to the `herdr` binary that launched this process.
+///
+/// ✅ Measured 2026-09-25 on Herdr 0.9.1: set for an `[[actions]]` command,
+/// four event hooks and a `[[startup]]` entry, the same processes as
+/// [`PLUGIN_STATE_DIR_VAR`]. ⚠️ A `[[build]]` hook gets no `HERDR_*` variable
+/// at all (SCOPE.md §8.3).
 pub const BIN_PATH_VAR: &str = "HERDR_BIN_PATH";
 
 /// Overrides where Herdr's own `config.toml` is read from.
@@ -40,6 +45,23 @@ pub const PLUGIN_ROOT_VAR: &str = "HERDR_PLUGIN_ROOT";
 pub const PLUGIN_CONFIG_DIR_VAR: &str = "HERDR_PLUGIN_CONFIG_DIR";
 
 /// Where this plugin may write state that outlives one invocation.
+///
+/// ✅ **Measured 2026-09-25 on isolated Herdr 0.9.1 servers, and set for every
+/// kind of plugin process measured:** an `[[actions]]` command, four event
+/// hooks (`worktree.created`, `worktree.opened`, `workspace.created`,
+/// `workspace.focused`) and a `[[startup]]` entry. Its value is
+/// `$XDG_STATE_HOME/herdr/plugins/<plugin_id>`, and Herdr creates the
+/// directory. [`BIN_PATH_VAR`] was set beside it in every case.
+///
+/// 🪤 **This corrects an earlier claim.** The kit said an event hook receives
+/// neither variable, and that nobody had confirmed this one is set at all. The
+/// claim came from agentic-panes-layout's docs, which rest on a Herdr 0.8.2
+/// note that listed only pane ids. SCOPE.md §8.2 holds the table.
+///
+/// ⚠️ **Not measured:** Herdr 0.9.0, a pane command, and the value when
+/// `XDG_STATE_HOME` is unset. For an action with it unset the value was
+/// `~/.local/state/herdr/plugins/<plugin_id>`, and the other kinds are inferred
+/// to match.
 pub const PLUGIN_STATE_DIR_VAR: &str = "HERDR_PLUGIN_STATE_DIR";
 
 /// The name of the event that triggered this invocation.
@@ -91,9 +113,11 @@ pub const PLUGIN_EVENT_JSON_VAR: &str = "HERDR_PLUGIN_EVENT_JSON";
 /// plugin had a bug; it is that the second person to write this filter had
 /// nothing to copy.
 ///
-/// ⚠️ **Unverified, and the list does not rest on it:** nobody has confirmed
-/// that Herdr sets [`PLUGIN_STATE_DIR_VAR`] for a pane command at all, so that
-/// particular leak may be theoretical. The reason to write the list down is
+/// ✅ **Herdr does set [`PLUGIN_STATE_DIR_VAR`] for a plugin's own
+/// processes.** Measured 2026-09-25 on isolated Herdr 0.9.1 servers: see
+/// [`PLUGIN_STATE_DIR_VAR`]. ⚠️ **Still unmeasured, and the list does not rest
+/// on it:** whether a pane command receives it, so the leak through a pane may
+/// be theoretical. The reason to write the list down is
 /// that nothing else states it.
 ///
 /// 🔑 **The event pair is included on a fail-closed reading.** A child was not
