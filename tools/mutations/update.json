@@ -287,18 +287,18 @@
     },
     {
       "name": "an up-to-date answer clears the older result",
-      "find": "        Decision::Skipped(_) => {}",
-      "replace": "        Decision::Skipped(_) | Decision::UpToDate => {}"
+      "find": "        Decision::UpToDate => {\n            let _ = fs::remove_file(result);\n        }",
+      "replace": "        Decision::UpToDate => {}"
     },
     {
-      "name": "a non-answer clears the older result",
-      "find": "        Decision::Skipped(_) => {}",
-      "replace": "        Decision::Skipped(_) | Decision::NoAnswer(_) => {}"
+      "name": "a non-answer keeps the last answer",
+      "find": "        Decision::NoAnswer(_) => {}",
+      "replace": "        Decision::NoAnswer(_) => {\n            let _ = fs::remove_file(result);\n        }"
     },
     {
       "name": "a skipped check keeps the last answer",
-      "find": "        Decision::Skipped(_) => {}\n",
-      "replace": ""
+      "find": "        Decision::Skipped(_) => {}",
+      "replace": "        Decision::Skipped(_) => {\n            let _ = fs::remove_file(result);\n        }"
     },
     {
       "name": "a saved result is never offered to a local install",

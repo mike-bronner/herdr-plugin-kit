@@ -47,7 +47,7 @@
 //! | File | Written by | Holds |
 //! |---|---|---|
 //! | the attempt stamp | [`check`], before the network call | when a check was last attempted |
-//! | the result | [`check_and_save`], after the answer | the [`Available`] it found, or nothing |
+//! | the result | [`check_and_save`], after the answer | the [`Available`] the last answered check found, or nothing |
 //! | the offer record | [`record_offer`], at the launch that offered it | when an offer was last shown or declined |
 //!
 //! 🚨 **One shared file would reopen the retry storm.** A result written after
@@ -489,13 +489,24 @@ fn numeric_order(x: &str, y: &str) -> Ordering {
 /// |---|---|
 /// | [`Decision::Available`] | holds that update |
 /// | [`Decision::UpToDate`] | removed |
-/// | [`Decision::NoAnswer`] | removed |
+/// | [`Decision::NoAnswer`] | untouched |
 /// | [`Decision::Skipped`] | untouched |
 ///
-/// 🚨 **A check that found nothing clears the older result.** An `Available`
-/// left standing after the newest answer was "current" or "nobody answered"
-/// would be offered as if it were still true. A skip asked nothing, so it has
-/// nothing to replace the last answer with.
+/// 🚨 **Only an answer replaces the last answer.** `UpToDate` is an answer: the
+/// saved update is no longer current, and left standing it would be offered
+/// as if it were still true. A skip asked nothing, and a non-answer learned
+/// nothing, so neither has anything to replace the older find with.
+///
+/// 🚨 **A non-answer is not information.** It is a network outage, a timeout,
+/// a missing `curl`, or a tag that is not a version. Clearing on it lost a
+/// found update that no launch had offered yet, until the next answered check
+/// up to one interval later. Decided by Mike 2026-09-24, shipped in 0.5.3.
+///
+/// ✅ **A result kept this way is still safe to read**, because [`offer`]
+/// refuses one that is corrupt, found for another repository, found against
+/// another installed version, or not newer than the version installed now.
+/// ⚠️ The one case it cannot catch is a release pulled from GitHub after it was
+/// found. The next answered check clears that.
 ///
 /// ⚠️ A result that cannot be written or removed is ignored, as the stamp is:
 /// the decision is still returned, and [`offer`] refuses anything it cannot
@@ -647,7 +658,7 @@ impl Files {
         self.dir.join("checked")
     }
 
-    /// The update the last check found. Pass it to [`check_and_save`] and
+    /// The update the last answered check found. Pass it to [`check_and_save`] and
     /// [`offer`].
     pub fn result(&self) -> PathBuf {
         self.dir.join("available.json")
@@ -819,10 +830,11 @@ fn save(result: &Path, decision: &Decision) {
                 let _ = write_whole(result, &text);
             }
         }
-        Decision::Skipped(_) => {}
-        _ => {
+        Decision::UpToDate => {
             let _ = fs::remove_file(result);
         }
+        Decision::NoAnswer(_) => {}
+        Decision::Skipped(_) => {}
     }
 }
 

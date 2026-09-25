@@ -847,16 +847,14 @@ fn a_saved_result_is_never_offered_to_a_local_install() {
 }
 
 #[test]
-fn a_later_up_to_date_or_non_answer_clears_the_older_result() {
+fn a_later_up_to_date_answer_clears_the_older_result() {
     // 🚨 An Available left standing after a newer answer would be offered as
     // if it were still true.
     for (name, releases) in [
         ("up to date", Answers::newest("0.8.1")),
         ("the same version under a v", Answers::newest("v0.8.1")),
         ("an older release", Answers::newest("0.8.0")),
-        ("a tag that is not a version", Answers::newest("nightly")),
         ("no releases", Answers::none()),
-        ("no answer", Answers::refused("403 rate limit exceeded")),
     ] {
         let directory = TempDir::new("cleared");
         saved_by_a_detached_check(&directory);
@@ -872,6 +870,41 @@ fn a_later_up_to_date_or_non_answer_clears_the_older_result() {
 
         assert!(!directory.result().exists(), "{}", name);
         assert_eq!(offered_now(&directory, "0.8.1"), None, "{}", name);
+    }
+}
+
+#[test]
+fn a_non_answer_keeps_the_last_answer() {
+    // 🚨 A non-answer learned nothing, so it has nothing to replace the older
+    // find with. Clearing on it lost an update no launch had offered yet,
+    // until the next answered check (0.5.0 to 0.5.2).
+    for (name, releases) in [
+        ("rate limited", Answers::refused("403 rate limit exceeded")),
+        ("timed out", Answers::refused("timed out after 10s")),
+        ("curl missing", Answers::refused("curl could not run")),
+        ("a tag that is not a version", Answers::newest("nightly")),
+    ] {
+        let directory = TempDir::new("unanswered");
+        saved_by_a_detached_check(&directory);
+        let before = std::fs::read_to_string(directory.result()).unwrap();
+
+        let decision = check_and_save(
+            &plugin(PluginSourceKind::Github, "0.8.1"),
+            &directory.stamp(),
+            &directory.result(),
+            at(1_000_000 + DEFAULT_INTERVAL.as_secs()),
+            DEFAULT_INTERVAL,
+            &releases,
+        );
+
+        assert!(matches!(decision, Decision::NoAnswer(_)), "{}", name);
+        assert_eq!(
+            std::fs::read_to_string(directory.result()).unwrap(),
+            before,
+            "{}",
+            name
+        );
+        assert_eq!(offered_now(&directory, "0.8.1"), Some(found()), "{}", name);
     }
 }
 

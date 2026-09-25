@@ -1851,8 +1851,24 @@ with them. Its migration is `src/confirm.rs`, planned against the table above.
   |---|---|---|
   | `Available` | that update, written whole through a rename | a launch reading mid-write sees the old file or the new one |
   | `UpToDate` | removed | 🚨 an older `Available` left standing would be offered as if still true |
-  | `NoAnswer` | removed | 🚨 the same, and a refusal says nothing about the older find |
+  | `NoAnswer` | untouched | 🚨 a refusal says nothing about the older find, so it has nothing to replace it with |
   | `Skipped` | untouched | nothing was asked, so there is nothing to replace the last answer with |
+
+  ✅ **A non-answer leaves the result alone.** Decided by Mike 2026-09-24, shipped in
+  0.5.3. Holmes found it reviewing project-finder 0.9.4, the second consumer. Up to 0.5.2
+  `NoAnswer` removed the result. So a due check that hit a network outage, a timeout or a
+  missing `curl` deleted a found update that no launch had offered yet. It stayed lost
+  until the next answered check, up to one interval later. 🚨 That treated a non-answer as
+  information, which is the conflation `Decision` keeps `NoAnswer` apart from `UpToDate`
+  to prevent. Mike rejected keeping the clearing and documenting the delay. He also
+  rejected an age-based expiry on the saved result.
+
+  🔑 **A kept result is still safe, because `offer` re-checks it at every launch.** It
+  refuses one that is corrupt, found for another repository, or found against another
+  installed version (the table below). It also refuses one not newer than the version
+  installed now (the precedence rule above). ⚠️ **The one
+  case it cannot catch is a release pulled from GitHub after it was found.** The next
+  answered check clears it, as `UpToDate` or as a newer find.
 
   `offer` refuses, rather than repairs, anything it cannot trust:
 
