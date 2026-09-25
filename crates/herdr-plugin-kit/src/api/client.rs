@@ -23,11 +23,20 @@
 //! `HERDR_SOCKET_PATH` set explicitly on the invoking CLI, and the hook's
 //! environment was identical both times. `GIT_CONFIG_*` passed through
 //! untouched, so Herdr strips its own variables rather than losing them to
-//! inheritance. A plugin event hook receives pane and workspace variables but
-//! not this one. A `[[startup]]` hook and a pane-hosted command both receive
-//! full environments.
+//! inheritance. A `[[startup]]` hook and a pane-hosted command both receive
+//! full environments. Herdr 0.9.1 did not repeat the `[[build]]` measurement.
 //!
-//! So the fallback is an ordinary path rather than a rare branch. [`Socket`]
+//! ✅ **Measured 2026-09-25 on isolated Herdr 0.9.1 servers.** An
+//! `[[actions]]` command, four event hooks (`worktree.created`,
+//! `worktree.opened`, `workspace.created`, `workspace.focused`) and a
+//! `[[startup]]` entry all receive `HERDR_SOCKET_PATH`.
+//!
+//! 🪤 **This corrects an earlier claim.** Up to 0.5.3 this said a plugin event
+//! hook on 0.9.0 receives pane and workspace variables but not the socket.
+//! It most likely came from a Herdr 0.8.2 note that listed only pane ids.
+//! Whether 0.9.0 behaved that way is unknown. SCOPE.md §8.3 holds the table.
+//!
+//! So the fallback is an ordinary path because of `[[build]]`. [`Socket`]
 //! records which of the two answered, and [`CallError::Connect`] says so,
 //! because "cannot reach this path" and "cannot reach this path, and nothing
 //! named it" are different problems.

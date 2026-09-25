@@ -199,8 +199,9 @@ fn the_variable_names_the_socket_when_it_is_set() {
 #[test]
 #[cfg(unix)]
 fn an_absent_variable_falls_back_to_the_default() {
-    // ✅ Measured: a `[[build]]` hook gets zero HERDR_* variables, and an
-    // event hook gets no socket path either. This is an ordinary path.
+    // ✅ Measured on Herdr 0.9.0: a `[[build]]` hook gets zero HERDR_*
+    // variables, so this is an ordinary path. An event hook does get the
+    // socket path on Herdr 0.9.1 (SCOPE.md §8.3).
     let env = Environment::from_pairs(&[("HOME", "/home/mike")]);
     let socket = Socket::resolve(&env).expect("Unix has a documented default");
 

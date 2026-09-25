@@ -2186,12 +2186,23 @@ that.** What is measured:
 
 | Context | `HERDR_SOCKET_PATH` present? |
 |---|---|
-| `[[keys.command]]` | ✅ measured present, 2026-09-05 |
-| plugin event hook | ⚠️ measured **absent** from the injected set |
-| `[[startup]]` | ✅ measured **present**, 2026-09-11, with the plugin id and a context JSON beside it |
-| `[[build]]` | 🚨 measured **absent**, 2026-09-11, along with every other `HERDR_*` variable |
+| `[[keys.command]]` | ✅ measured present, 2026-09-05, on Herdr 0.8.2 |
+| `[[actions]]` | ✅ measured **present**, 2026-09-25, on Herdr 0.9.1 |
+| plugin event hook | ✅ measured **present**, 2026-09-25, on Herdr 0.9.1, for `worktree.created`, `worktree.opened`, `workspace.created` and `workspace.focused`. 🪤 Up to 0.5.3 this row said **absent**, with no version. See below |
+| `[[startup]]` | ✅ measured **present**, 2026-09-11 on Herdr 0.9.0, with the plugin id and a context JSON beside it. ✅ Present again 2026-09-25 on Herdr 0.9.1 |
+| `[[build]]` | 🚨 measured **absent**, 2026-09-11 on Herdr 0.9.0, along with every other `HERDR_*` variable. ⚠️ Not re-measured on 0.9.1 |
 
-🚨 **Measured 2026-09-11: a `[[build]]` hook is handed no `HERDR_*` variables at all.**
+🪤 **The event-hook row was corrected on 2026-09-25.** Isolated Herdr 0.9.1 servers
+dumped the full environment of every plugin process kind (§8.2, "Where the files live",
+has the method). Each one received `HERDR_SOCKET_PATH`. The old **absent** most likely
+came from the same partial source as §8.2's old state-directory claim: a Herdr 0.8.2 note
+that listed only pane ids, not a full dump. Whether 0.9.0 withheld the socket from an
+event hook is unknown, and 0.9.0 can no longer be measured. The vault notes
+`insights/2026-09-25-herdr-action-process-environment.md` and
+`insights/2026-09-25-herdr-0-9-1-event-and-startup-environment.md` hold the tables.
+
+🚨 **Measured 2026-09-11 on Herdr 0.9.0: a `[[build]]` hook is handed no `HERDR_*`
+variables at all.**
 No socket path, no plugin id, no root, no bin path. It is an **active strip** rather than
 inheritance loss: the same install was run twice, once with `HERDR_SOCKET_PATH` set
 explicitly on the invoking CLI, and produced the same empty set both times, while
@@ -3833,6 +3844,10 @@ Related vault note:
 `insights/2026-09-11-plugin-pane-open-placement-decides-the-handle.md`, which carries the
 measured `[[build]]`-hook and event-hook environments that make the socket fallback an
 ordinary path rather than a rare branch.
+
+➕ **Amended 2026-09-25.** The event-hook half of that sentence does not hold on Herdr
+0.9.1. Four event hooks received `HERDR_SOCKET_PATH` there (§8.3). The `[[build]]` half
+stands as a Herdr 0.9.0 measurement, and it alone keeps the fallback an ordinary path.
 
 ### 15.4 Extended 2026-09-11: CI, and §11 corrected against what shipped
 

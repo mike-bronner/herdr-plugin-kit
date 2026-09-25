@@ -293,10 +293,16 @@ use herdr_plugin_kit::api::{GENERATED_FOR_HERDR_TAG, GENERATED_PROTOCOL};
 ```
 
 ⚠️ **Do not assume `HERDR_SOCKET_PATH` is set.** Measured on Herdr 0.9.0: a `[[build]]`
-hook during `herdr plugin install` receives **zero** `HERDR_*` variables, and a plugin
-event hook receives pane and workspace variables but not this one. `Socket::resolve`
-falls back to `~/.config/herdr/herdr.sock` on Unix, and `Socket` records which of the two
-answered so a connection failure can say.
+hook during `herdr plugin install` receives **zero** `HERDR_*` variables. Herdr 0.9.1 did
+not repeat that measurement. `Socket::resolve` falls back to `~/.config/herdr/herdr.sock`
+on Unix, and `Socket` records which of the two answered so a connection failure can say.
+
+✅ Measured on Herdr 0.9.1: an `[[actions]]` command, four event hooks
+(`worktree.created`, `worktree.opened`, `workspace.created`, `workspace.focused`) and a
+`[[startup]]` entry all receive `HERDR_SOCKET_PATH`. Up to 0.5.3 this README said a 0.9.0
+event hook did not. That claim most likely came from a Herdr 0.8.2 note that listed only
+pane ids. Whether 0.9.0 behaved that way is unknown, because 0.9.0 can no longer be
+measured.
 
 ## The generated layer
 
