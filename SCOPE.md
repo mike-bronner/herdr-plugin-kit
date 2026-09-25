@@ -2064,6 +2064,16 @@ it before asking: Enter, then Escape. The live `plugins.json` and the listing of
   | absent, empty, or relative | `plugin_root/state_dir`, as in 0.5.3 |
   | named for another plugin | `plugin_root/state_dir`. 🚨 A plugin that runs another plugin's binary can hand it its own state directory (§5.1, `PER_PLUGIN_VARS`), and two plugins with one state-directory name would then share a stamp |
 
+  ✅ **Herdr percent-encodes some plugin ids in the state directory's name.** Seen live:
+  a state directory named `mvc.%52%45%4E%41%4D%45%44-id`, which decodes to
+  `mvc.RENAMED-id`, with each capital letter encoded. The kit compares that last
+  component to the plugin id byte for byte and decodes nothing. So such a plugin falls
+  back to `plugin_root/state_dir` by the last row above. It keeps the 0.5.3 placement
+  rather than breaking. ⚠️ **Which characters Herdr encodes is not measured** beyond
+  those capitals, and the Herdr version of that observation was not recorded. None of
+  Mike's plugin ids needs encoding, so none of them falls back. Decoding the name would
+  buy the state directory for such a plugin, and nobody has one yet.
+
   **Mike's reasons, 2026-09-25.** Herdr provides the directory for exactly this. A
   reinstall empties `plugin_root` (§8.2.1) but not the state directory. And the
   `plugin_root` choice rested on a belief that was false. ⚠️ That a reinstall leaves the
@@ -3548,6 +3558,24 @@ tag form when recent-spaces migrates (§13).
   asserts the removal. That test pinned the defect §8.2 describes, not a contract the kit
   offered, so flipping it is the fix arriving and not work the upgrade invents. The
   README names both where a plugin bumps its pin.
+  ✅ **0.5.4 is a patch of one fix and one correction**, decided by Mike 2026-09-25. The
+  `update` setup keeps its files in Herdr's state directory when Herdr provides one for
+  this plugin (§8.2), and the `HERDR_SOCKET_PATH` claims now name the Herdr version they
+  were measured on (§8.3). 🔑 **Every 0.5.3 signature still compiles.** `managed`,
+  `lookup` and `run_check` keep theirs, and `managed_in`, `lookup_in` and `run_check_in`
+  are additions. `templates/` is unchanged, so no plugin runs `sync-bin` at this bump. A
+  plugin that moves its pins gets the new placement with no change to its source. ⚠️
+  **The placement change is behaviour a plugin can see**, in three ways the README names
+  where a plugin bumps its pin. State saved under `plugin_root` is left behind once,
+  which costs at most one extra check and restarts the offer intervals. A plugin test
+  that asserts files under `plugin_root` through the calls without the suffix moves them
+  when `HERDR_PLUGIN_STATE_DIR` is set in its environment. And a plugin whose id Herdr
+  percent-encodes falls back to `plugin_root` (§8.2). 🔑 **Still a patch**, because the
+  files' place is not part of any signature, and a test that pins it has the `_in`
+  calls to pin it with. The 0.5.3 placement also rested on a belief §8.2 shows false,
+  so moving it is the fix arriving. ✅ Checked
+  2026-09-25: no test in agentic-panes-layout, project-finder or recent-spaces calls
+  `managed`, `lookup` or `run_check`, and none of their ids needs encoding.
 - ➕ **A consumer may pin any kind of tag**, added 2026-09-12. ✅ **Every tag this kit
   has cut is annotated**, and the probe in §11.2.1 measured both kinds behaving
   identically. ⚠️ **This clause read "all three of this kit's releases" until

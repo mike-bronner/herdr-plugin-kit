@@ -149,12 +149,25 @@ Pin to a tag:
 
 ```toml
 [dependencies]
-herdr-plugin-kit = { git = "https://github.com/mike-bronner/herdr-plugin-kit", tag = "0.5.3" }
+herdr-plugin-kit = { git = "https://github.com/mike-bronner/herdr-plugin-kit", tag = "0.5.4" }
 ```
 
-> 🚨 **Moving your pin to 0.5.3, check two things your own code may assume.** First,
-> `update::check_and_save` now leaves the saved result untouched on `NoAnswer`, where
-> 0.5.0 to 0.5.2 removed it. A test of yours that expects the removal fails: flip it to
+> 🚨 **Moving your pin to 0.5.4, the `update` setup's files move, once.** They now live in
+> `HERDR_PLUGIN_STATE_DIR/<state_dir>` when Herdr provides that directory for your plugin,
+> and in `plugin_root/<state_dir>` otherwise, as in 0.5.3. Three things follow. First,
+> state your plugin saved under `plugin_root` is left behind. The first launch after the
+> upgrade finds no stamp, so it costs at most one extra check, and the offer intervals
+> start again. Nothing moves or deletes the old files. Second, a test of yours that
+> asserts files under `plugin_root` through `managed`, `lookup` or `run_check` reads the
+> process environment. With `HERDR_PLUGIN_STATE_DIR` set there, its files move. Call
+> `managed_in`, `lookup_in` or `run_check_in` with an `Environment` of your own instead.
+> Third, Herdr percent-encodes some plugin ids in the state directory's name. Such a
+> plugin keeps its files in `plugin_root`, as before. Outside such a test, your Rust source
+> needs no change. `SCOPE.md` §8.2 says why.
+
+> 🚨 **Coming from 0.5.2 or earlier, check two things your own code may assume.** First,
+> `update::check_and_save` leaves the saved result untouched on `NoAnswer` from 0.5.3,
+> where 0.5.0 to 0.5.2 removed it. A test of yours that expects the removal fails: flip it to
 > expect the result kept. Second, a `Transport` of your own that wraps `Client` must
 > forward `clear_window_title`, which `dialog::ask` sends before it opens a popup. It
 > still compiles without it, but a headless `ask` then ends by the kill after its
@@ -633,7 +646,7 @@ permissions:
   contents: write
 jobs:
   release:
-    uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-release.yml@0.5.3
+    uses: mike-bronner/herdr-plugin-kit/.github/workflows/plugin-release.yml@0.5.4
     permissions:
       contents: write
 ```
