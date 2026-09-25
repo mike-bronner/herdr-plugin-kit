@@ -61,6 +61,8 @@ use crate::api::generated::{
 use crate::api::{Request, ResponseVariant};
 use crate::env::{Environment, SOCKET_PATH_VAR};
 
+#[cfg(feature = "dialog")]
+use crate::api::generated::{ClientWindowTitleAnswer, ClientWindowTitleReason, EmptyParams};
 #[cfg(any(feature = "dialog", feature = "report"))]
 use crate::api::generated::{
     NotificationShowAnswer, NotificationShowParams, NotificationShowReason, PluginPaneOpenParams,
@@ -679,7 +681,8 @@ impl Client {
     }
 }
 
-/// The kit's own client, answering the two calls a user-facing module needs.
+/// The kit's own client, answering the two calls a user-facing module needs,
+/// and `dialog`'s third when that feature is on.
 ///
 /// 🔑 **This is what SCOPE.md §7.5.6 was waiting for.** The trait was not a
 /// workaround for the transport being unbuilt, so nothing in `dialog` changed
@@ -726,5 +729,18 @@ impl Transport for Client {
         self.call::<NotificationShowAnswer>(RequestMethod::NotificationShow(params))
             .map(|answer| answer.reason)
             .map_err(|error| error.to_string())
+    }
+
+    /// `dialog`'s pre-check, SCOPE.md §7.5.9. The answer is read as the typed
+    /// `client_window_title` result, so a reason this build does not know
+    /// fails to deserialize and reaches `dialog::ask` as `Err`, which opens
+    /// the popup as 0.5.2 did.
+    #[cfg(feature = "dialog")]
+    fn clear_window_title(&mut self) -> Result<ClientWindowTitleReason, String> {
+        self.call::<ClientWindowTitleAnswer>(RequestMethod::ClientWindowTitleClear(EmptyParams(
+            Default::default(),
+        )))
+        .map(|answer| answer.reason)
+        .map_err(|error| error.to_string())
     }
 }

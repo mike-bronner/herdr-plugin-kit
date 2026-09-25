@@ -14,7 +14,8 @@
 use std::time::{Duration, Instant};
 
 use herdr_plugin_kit::api::generated::{
-    NotificationShowParams, NotificationShowReason, PluginPaneOpenParams, PluginPanePlacement,
+    ClientWindowTitleReason, NotificationShowParams, NotificationShowReason, PluginPaneOpenParams,
+    PluginPanePlacement,
 };
 use herdr_plugin_kit::dialog::{
     ask, button_var, layout, notify, render, Answer, Button, Dialog, Explained, Key, OpenError,
@@ -38,6 +39,11 @@ struct Fake {
     notification: Option<NotificationShowReason>,
     seen: Vec<PluginPaneOpenParams>,
     notified: Vec<NotificationShowParams>,
+    /// What `client.window_title.clear` answers. The trait's own default is
+    /// `Err`, so that is what a fake starts with.
+    title: Result<ClientWindowTitleReason, String>,
+    /// How many times the pre-check was sent.
+    cleared: usize,
 }
 
 impl Fake {
@@ -47,7 +53,15 @@ impl Fake {
             notification: Some(NotificationShowReason::Shown),
             seen: Vec::new(),
             notified: Vec::new(),
+            title: Err("not asked".to_string()),
+            cleared: 0,
         }
+    }
+
+    /// A fake whose pre-check answers `reason`.
+    fn titled(mut self, reason: ClientWindowTitleReason) -> Fake {
+        self.title = Ok(reason);
+        self
     }
 
     fn ok() -> Fake {
@@ -95,6 +109,11 @@ impl Transport for Fake {
         self.notified.push(params);
         self.notification
             .ok_or_else(|| "the socket is gone".to_string())
+    }
+
+    fn clear_window_title(&mut self) -> Result<ClientWindowTitleReason, String> {
+        self.cleared += 1;
+        self.title.clone()
     }
 }
 
@@ -936,6 +955,76 @@ fn an_answer_arriving_before_the_marker_is_still_heard() {
     assert_eq!(
         ask(&mut opener, PLUGIN, &dialog(), &buttons()),
         Answer::Chose(0)
+    );
+}
+
+// ── Nobody attached: the pre-check ────────────────────────────────────────
+
+#[test]
+fn a_question_nobody_can_see_is_not_shown_and_never_opened() {
+    // 🚨 ✅ Measured 2026-09-24 on 0.9.1: with no client attached, a popup
+    // opens on a pty nobody sees and holds the global slot for the whole wait.
+    // `no_foreground_client` is the one signal that told the two apart.
+    let mut opener = Fake::ok().titled(ClientWindowTitleReason::NoForegroundClient);
+    let started = Instant::now();
+
+    let answer = ask(&mut opener, PLUGIN, &dialog(), &buttons());
+
+    assert_eq!(answer, Answer::Unanswered(Unanswered::NeverShown));
+    assert!(
+        opener.seen.is_empty(),
+        "a popup was opened with nobody attached"
+    );
+    assert!(opener.notified.is_empty(), "nobody is there to notify");
+    assert_eq!(opener.cleared, 1);
+    assert!(
+        started.elapsed() < Duration::from_secs(1),
+        "a question nobody could see waited {:?}",
+        started.elapsed()
+    );
+}
+
+#[test]
+fn a_question_opens_when_a_client_answers_the_pre_check_or_it_says_nothing() {
+    // 🔑 Only the one measured reason stops a popup. `cleared` is what 0.9.1
+    // answers with a client attached, `set` is the schema's other reason, and
+    // an error is a transport that cannot ask. All three open as 0.5.2 did,
+    // and the timeout kill is the backstop behind them. A busy popup is used so
+    // the open answers at once: `Busy` proves the request was sent.
+    for title in [
+        Ok(ClientWindowTitleReason::Cleared),
+        Ok(ClientWindowTitleReason::Set),
+        Err("the socket is gone".to_string()),
+    ] {
+        let mut opener = Fake::busy();
+        opener.title = title.clone();
+
+        let answer = ask(&mut opener, PLUGIN, &dialog(), &buttons());
+
+        assert!(
+            matches!(answer, Answer::Unanswered(Unanswered::Busy(_))),
+            "{:?} answered {:?}",
+            title,
+            answer
+        );
+        assert_eq!(opener.seen.len(), 1, "{:?} did not open", title);
+        assert_eq!(opener.cleared, 1);
+    }
+}
+
+#[test]
+fn a_transport_that_does_not_implement_the_pre_check_still_opens() {
+    // `Answering` implements only 0.5.2's two calls, as a consumer's own
+    // transport would. The trait's default must not read as "nobody there",
+    // or every such consumer would stop showing dialogs.
+    let mut opener = Answering {
+        word: "1".to_string(),
+        marks_started: true,
+        delay: Duration::from_millis(20),
+    };
+    assert_eq!(
+        ask(&mut opener, PLUGIN, &dialog(), &buttons()),
+        Answer::Chose(1)
     );
 }
 

@@ -109,6 +109,11 @@
       "name": "the handshake reads the server's own protocol number",
       "find": "            protocol: pong.protocol,",
       "replace": "            protocol: GENERATED_PROTOCOL,"
+    },
+    {
+      "name": "the pre-check hands back the reason Herdr gave",
+      "find": "        )))\n        .map(|answer| answer.reason)",
+      "replace": "        )))\n        .map(|_| ClientWindowTitleReason::Cleared)"
     }
   ]
 }

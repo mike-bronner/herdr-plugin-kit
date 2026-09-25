@@ -3,9 +3,9 @@ name: Mutation
 # Does the suite actually notice when a guarded behaviour breaks?
 #
 # 🚨 Separate from kit-ci.yml on purpose, and this is the decision rather than
-# a filing convenience. There are two hundred mutations, and the harness
-# recompiles the crate once for each of the hundred and eighty-five of them that
-# break Rust, so a run costs minutes rather than seconds. The other fifteen
+# a filing convenience. There are two hundred and twelve mutations, and the
+# harness recompiles the crate once for each of the hundred and ninety-seven of
+# them that break Rust, so a run costs minutes rather than seconds. The other fifteen
 # break the plugin pin-block check in tools/plugin_gate.py and run in seconds.
 # Two failures were weighed against each other:
 #
@@ -92,7 +92,7 @@ jobs:
       - uses: actions/checkout@v7
 
       # Warm the build once, so the per-mutation cost is an incremental
-      # rebuild rather than a cold one a hundred and eighty-five times over.
+      # rebuild rather than a cold one a hundred and ninety-seven times over.
       #
       # `--all-features` rather than each spec's own set: it warms every
       # dependency for every job, and a named list goes stale the day a feature

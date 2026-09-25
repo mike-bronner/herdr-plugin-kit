@@ -808,7 +808,8 @@ mod dialog_seam {
     use super::*;
 
     use herdr_plugin_kit::api::generated::{
-        NotificationShowParams, NotificationShowReason, PluginPaneOpenParams, PluginPanePlacement,
+        ClientWindowTitleReason, NotificationShowParams, NotificationShowReason,
+        PluginPaneOpenParams, PluginPanePlacement,
     };
     use herdr_plugin_kit::dialog::{OpenError, Transport, BUSY_CODE};
 
@@ -1008,5 +1009,63 @@ mod dialog_seam {
             Err(detail) => assert!(detail.contains("notification_show"), "{}", detail),
             Ok(reason) => panic!("an ok carries no reason, got {:?}", reason),
         }
+    }
+
+    #[test]
+    fn the_client_sends_the_pre_check_and_hands_back_its_reason() {
+        // ✅ Measured 2026-09-24 on 0.9.1: with no client attached, Herdr
+        // answers exactly this. `dialog::ask` reads it as "nobody can see a
+        // popup", SCOPE.md §7.5.9.
+        let mut server = Server::answering(1, |request| {
+            success(
+                request,
+                json!({"type": "client_window_title", "changed": false, "reason": "no_foreground_client"}),
+            )
+        });
+
+        let answered = server.client().clear_window_title();
+
+        let sent = server.requests();
+        assert_eq!(answered, Ok(ClientWindowTitleReason::NoForegroundClient));
+        assert_eq!(sent[0]["method"], json!("client.window_title.clear"));
+        assert_eq!(sent[0]["params"], json!({}));
+    }
+
+    #[test]
+    fn an_attached_client_is_told_apart_from_none() {
+        // ✅ The attached answer from the same measurement.
+        let server = Server::answering(1, |request| {
+            success(
+                request,
+                json!({"type": "client_window_title", "changed": true, "reason": "cleared"}),
+            )
+        });
+
+        assert_eq!(
+            server.client().clear_window_title(),
+            Ok(ClientWindowTitleReason::Cleared)
+        );
+    }
+
+    #[test]
+    fn a_reason_this_build_does_not_know_is_an_error_rather_than_a_guess() {
+        // A later Herdr may add a reason. It must not be read as any known one,
+        // and `ask` opens the popup on an error.
+        let server = Server::answering(1, |request| {
+            success(
+                request,
+                json!({"type": "client_window_title", "changed": false, "reason": "invented"}),
+            )
+        });
+
+        assert!(server.client().clear_window_title().is_err());
+    }
+
+    #[test]
+    fn a_pre_check_that_cannot_be_sent_is_an_error() {
+        let mut client = Client::new(Socket::at("/nowhere/at/all/herdr.sock"), PLUGIN)
+            .with_timeout(super::PATIENT);
+
+        assert!(client.clear_window_title().is_err());
     }
 }

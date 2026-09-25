@@ -43,7 +43,9 @@
 //!
 //! The marker is what proves a process actually started, because
 //! `plugin.pane.open` answers `ok` whether or not it does. Its pid is what lets
-//! a popup the user closed be noticed at once rather than waited out.
+//! a popup the user closed be noticed at once rather than waited out. ➕ From
+//! 0.5.3 the popup also holds the marker locked while it runs, which is what
+//! lets [`ask`] end a popup it gave up on without trusting a bare pid.
 //!
 //! Promoted from `agentic-panes-layout/src/confirm.rs`, where this machinery
 //! was solved once against a live server. ⚠️ **Neither file is removable while
@@ -168,8 +170,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use crate::api::generated::{
-    NotificationShowParams, NotificationShowReason, PluginPaneOpenParams, PluginPanePlacement,
-    PopupSize, PopupSizeString,
+    ClientWindowTitleReason, NotificationShowParams, NotificationShowReason, PluginPaneOpenParams,
+    PluginPanePlacement, PopupSize, PopupSizeString,
 };
 use crate::env::Environment;
 
@@ -873,12 +875,16 @@ pub enum Unanswered {
     /// the same rule it already applies to a click on the body and to an unbound
     /// key. SCOPE.md §7.5.8 records it.
     Dismissed,
-    /// The popup never reported that it started, so it never drew.
+    /// The popup never reported that it started, so it never drew. ➕ Or, from
+    /// 0.5.3, Herdr answered that no client is attached, so no popup was opened.
     ///
     /// ⚠️ This marker is the only evidence either way. `plugin.pane.open`
     /// answers `ok` regardless, and a popup cannot be found in `pane.list`.
     NeverShown,
     /// Nobody answered inside `WAIT`.
+    ///
+    /// ➕ From 0.5.3 the popup is ended before this is answered, where the kit
+    /// can prove the process is this dialog's own. See [`ask`].
     TimedOut,
     /// The channel carried a word that names no button of this dialog.
     ///
@@ -968,6 +974,24 @@ pub fn notify(transport: &mut impl Transport, plugin_id: &str, dialog: &Dialog) 
 /// 🚨 **A list with no buttons is refused rather than opened.** Nobody could
 /// answer it, and the single-popup limit is global (§7.5.3), so an unanswerable
 /// question would block every dialog in every workspace until it timed out.
+///
+/// 🚨 **No popup outlives this call, and none opens where nobody can see it.**
+/// ✅ Measured 2026-09-24 on Herdr 0.9.1: with no client attached, a popup opens
+/// on a pty nobody sees and holds the global slot. So two guards, SCOPE.md
+/// §7.5.9:
+///
+/// - **The pre-check is the fast path.** `ask` first sends
+///   `client.window_title.clear` through [`Transport::clear_window_title`]. The
+///   reason `no_foreground_client` answers [`Unanswered::NeverShown`] at once,
+///   and no popup is opened. ⚠️ With a client attached, that call re-emits
+///   Herdr's default window title and drops any title override. And the reason
+///   code is undocumented: it is what 0.9.1 was measured to answer.
+/// - **The timeout kill is the backstop.** A client can detach between the
+///   pre-check and the open, and a transport may not implement the pre-check at
+///   all. When the wait runs out, `ask` ends the popup process before it
+///   answers [`Unanswered::TimedOut`], but only a process it can prove is this
+///   dialog's own popup. ⚠️ On Windows nothing is signalled, so a timed-out
+///   popup stays open until somebody answers it or Herdr stops, as in 0.5.2.
 pub fn ask(
     transport: &mut impl Transport,
     plugin_id: &str,
@@ -978,6 +1002,14 @@ pub fn ask(
         return Answer::Unanswered(Unanswered::Failed(
             "a question with no buttons cannot be answered".to_string(),
         ));
+    }
+
+    // 🚨 Asked before anything is opened, because a popup nobody can see still
+    // holds the global slot for the whole WAIT. Only the one measured reason
+    // stops here. Any other answer, an error included, opens as 0.5.2 did, and
+    // the timeout kill is the backstop for that path.
+    if transport.clear_window_title() == Ok(ClientWindowTitleReason::NoForegroundClient) {
+        return Answer::Unanswered(Unanswered::NeverShown);
     }
 
     let channel = match Channel::new() {
@@ -1222,7 +1254,45 @@ impl Channel {
             }
             std::thread::sleep(POLL);
         }
+        // 🚨 Giving up on a popup ends it. Left running, it holds the global
+        // slot, and an answer given later is lost, because this channel's
+        // directory goes when the channel drops.
+        self.end_popup();
         Ended::TimedOut
+    }
+
+    /// Ends the popup this channel was waiting on, if it can be proven to be it.
+    ///
+    /// 🚨 **A pid alone proves nothing.** A process that exits frees its pid, and
+    /// a later process of Mike's can be given the same one. Signalling that
+    /// process is worse than leaving an orphan popup. So the marker is trusted
+    /// only while the popup holds it locked: [`run`] takes the lock before it
+    /// writes its pid, and keeps it until the process exits. A pid cannot be
+    /// reused while its process lives, so a held lock ties the pid to this
+    /// dialog's own popup.
+    ///
+    /// Signals nothing unless all of these hold:
+    ///
+    /// - The marker is locked by somebody else, which is the popup being alive.
+    /// - The marker names a pid exactly as a number, and not `0`, which names a
+    ///   process group.
+    /// - The pid is not this process.
+    ///
+    /// ⚠️ **One window is left, and it is microseconds wide.** The popup could
+    /// exit between the lock check and the signal, and its pid could be reused
+    /// in that gap. Herdr must reap it first, and the pid space must come round
+    /// to it. Closing this would need a pidfd or a process handle, which `std`
+    /// does not offer on every Unix and `lib.rs` forbids reaching with `unsafe`.
+    ///
+    /// Answers whether a signal was sent, which is what the tests read.
+    fn end_popup(&self) -> bool {
+        if !popup_holds(&self.started) {
+            return false;
+        }
+        match Self::read(&self.started).as_deref().and_then(popup_pid) {
+            Some(pid) => terminate(pid),
+            None => false,
+        }
     }
 
     fn await_start(&self, startup: Duration) -> Option<String> {
@@ -1281,6 +1351,69 @@ fn process_is_alive(pid: &str) -> bool {
 #[cfg(not(unix))]
 fn process_is_alive(_pid: &str) -> bool {
     true
+}
+
+/// Writes this process's id to the started marker, and holds the marker locked.
+///
+/// 🔑 **The lock is what lets [`Channel::end_popup`] trust the pid.** It is taken
+/// before the pid is written, so a marker with a pid in it is already locked,
+/// and it is released only when the returned file drops or the process exits.
+///
+/// A lock that cannot be taken still writes the pid, so the liveness check
+/// works as before. The only thing lost is the kill, which then never fires.
+/// That fails towards an orphan popup rather than towards a wrong signal.
+fn mark_started(path: &Path) -> Option<std::fs::File> {
+    use std::io::Write;
+    let mut file = std::fs::File::create(path).ok()?;
+    let _ = file.lock();
+    file.write_all(std::process::id().to_string().as_bytes())
+        .ok()?;
+    Some(file)
+}
+
+/// Whether some other open handle holds the marker locked.
+///
+/// Only a live popup does. Anything short of a clear "held", a missing file or
+/// a lock call that failed included, answers `false`, so no signal is sent.
+fn popup_holds(marker: &Path) -> bool {
+    let Ok(file) = std::fs::File::open(marker) else {
+        return false;
+    };
+    matches!(file.try_lock(), Err(std::fs::TryLockError::WouldBlock))
+}
+
+/// The pid a marker names, if it names one this kit may ever signal.
+///
+/// 🔑 **Matched by rebuilding it, as [`decide`] matches an index.** `+12`, `012`
+/// and ` 12` stay unread. `0` is refused, because `kill 0` signals the whole
+/// process group, and this process's own pid is refused, because a popup is
+/// never the process that asked.
+fn popup_pid(text: &str) -> Option<u32> {
+    let pid: u32 = text.parse().ok()?;
+    (pid > 0 && pid.to_string() == text && pid != std::process::id()).then_some(pid)
+}
+
+/// Sends `SIGTERM`. `/bin/kill` for the reason [`process_is_alive`] gives.
+#[cfg(unix)]
+fn terminate(pid: u32) -> bool {
+    std::process::Command::new("/bin/kill")
+        .arg("-TERM")
+        .arg(pid.to_string())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+/// ⚠️ **Windows signals nothing.** A timed-out popup stays open until somebody
+/// answers it or Herdr stops, exactly as in 0.5.2, and it holds the slot that
+/// long. The pre-check in [`ask`] still keeps a popup from opening headless,
+/// because that is a socket call and works on every platform.
+///
+/// Compile-verified only, like [`process_is_alive`] above.
+#[cfg(not(unix))]
+fn terminate(_pid: u32) -> bool {
+    false
 }
 
 // ── The popup half ────────────────────────────────────────────────────────
@@ -1880,10 +2013,9 @@ pub fn run(env: &Environment) -> Result<(), String> {
     // Report that a pane really appeared, before drawing anything. The waiting
     // side cannot learn this from `plugin.pane.open`, which answers `ok` either
     // way, and the process id is what lets a popup the user closes be noticed
-    // at once.
-    if let Some(started) = &popup.started_file {
-        let _ = std::fs::write(started, std::process::id().to_string());
-    }
+    // at once. 🔑 The marker stays open and locked until this returns, which is
+    // what lets the waiting side end this process when it gives up.
+    let _marker = popup.started_file.as_deref().and_then(mark_started);
 
     // A dialog with no buttons is bare, and a dialog with no answer file has
     // nowhere to answer. Either one means nobody is waiting on a choice.
@@ -2347,6 +2479,139 @@ mod tests {
         // could answer a constant `true` and every test above would still pass.
         assert!(process_is_alive(&std::process::id().to_string()));
         assert!(!process_is_alive(&reaped_pid().to_string()));
+    }
+
+    /// A process standing in for a popup: alive, not this process, and ours to
+    /// reap. Anything that outlives a test is killed by the test itself.
+    #[cfg(unix)]
+    fn stand_in() -> std::process::Child {
+        std::process::Command::new("/bin/sleep")
+            .arg("30")
+            .spawn()
+            .unwrap()
+    }
+
+    /// Writes `pid` to `marker` holding the lock, exactly as [`run`] leaves it.
+    fn hold(marker: &Path, pid: u32) -> std::fs::File {
+        use std::io::Write;
+        let mut file = std::fs::File::create(marker).unwrap();
+        file.lock().unwrap();
+        file.write_all(pid.to_string().as_bytes()).unwrap();
+        file
+    }
+
+    /// Whether `child` exits within two seconds, reaping it if it does.
+    #[cfg(unix)]
+    fn exits(child: &mut std::process::Child) -> bool {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline {
+            if child.try_wait().unwrap().is_some() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        false
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_popup_the_wait_gave_up_on_is_ended() {
+        // 🚨 ✅ Measured 2026-09-24 on 0.9.1: a timed-out popup stayed alive
+        // and held the global slot until somebody answered it or Herdr stopped.
+        let channel = Channel::new().unwrap();
+        let mut popup = stand_in();
+        let _held = hold(&channel.started, popup.id());
+
+        assert_eq!(channel.watch_within(QUICK, QUICK), Ended::TimedOut);
+
+        let ended = exits(&mut popup);
+        let _ = popup.kill();
+        assert!(ended, "the popup outlived the wait that gave up on it");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_marker_nobody_holds_is_never_signalled() {
+        // 🚨 The pid-reuse case. The popup exited, which released its lock,
+        // and another process now carries its pid. That process is alive, so
+        // the liveness check cannot tell it apart, and only the lock can.
+        let channel = Channel::new().unwrap();
+        let mut unrelated = stand_in();
+        std::fs::write(&channel.started, unrelated.id().to_string()).unwrap();
+
+        assert_eq!(channel.watch_within(QUICK, QUICK), Ended::TimedOut);
+        assert!(!channel.end_popup());
+
+        let ended = exits(&mut unrelated);
+        let _ = unrelated.kill();
+        let _ = unrelated.wait();
+        assert!(
+            !ended,
+            "a process the kit could not tie to the popup was signalled"
+        );
+    }
+
+    #[test]
+    fn only_a_held_marker_counts_as_the_popup() {
+        let channel = Channel::new().unwrap();
+        assert!(!popup_holds(&channel.started), "a missing marker was held");
+
+        std::fs::write(&channel.started, "12").unwrap();
+        assert!(
+            !popup_holds(&channel.started),
+            "an unlocked marker was held"
+        );
+
+        let held = hold(&channel.started, 12);
+        assert!(popup_holds(&channel.started));
+        drop(held);
+        assert!(
+            !popup_holds(&channel.started),
+            "the lock outlived the popup's handle"
+        );
+    }
+
+    #[test]
+    fn the_popup_half_locks_its_marker_before_the_pid_can_be_read() {
+        // 🔑 `run` goes through this, so the kill works only if this holds.
+        let channel = Channel::new().unwrap();
+        let marker = mark_started(&channel.started).expect("the marker was not written");
+        assert!(popup_holds(&channel.started));
+        assert_eq!(
+            Channel::read(&channel.started),
+            Some(std::process::id().to_string())
+        );
+        drop(marker);
+        assert!(!popup_holds(&channel.started));
+    }
+
+    #[test]
+    fn only_a_plain_pid_that_is_not_this_process_may_be_signalled() {
+        assert_eq!(popup_pid("12"), Some(12));
+        let own = std::process::id().to_string();
+        for text in [
+            "0",
+            "+12",
+            "012",
+            " 12",
+            "12 ",
+            "-1",
+            "",
+            "twelve",
+            own.as_str(),
+        ] {
+            assert_eq!(popup_pid(text), None, "{:?} could be signalled", text);
+        }
+    }
+
+    #[test]
+    fn a_held_marker_naming_this_process_is_never_signalled() {
+        // Reached through `end_popup`, and not only through `popup_pid`, so a
+        // guard moved out of the path that signals is noticed. If it failed,
+        // this test process would receive the signal itself.
+        let channel = Channel::new().unwrap();
+        let _held = hold(&channel.started, std::process::id());
+        assert!(!channel.end_popup());
     }
 
     /// The id of a process that has certainly exited and been reaped.

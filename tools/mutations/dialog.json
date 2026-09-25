@@ -304,6 +304,56 @@
       "name": "end of input chooses no button",
       "find": "        // End of input is not an answer.\n        return DISMISSED_WORD.to_string();",
       "replace": "        // End of input is not an answer.\n        return \"0\".to_string();"
+    },
+    {
+      "name": "a popup nobody can see is not opened",
+      "find": "if transport.clear_window_title() == Ok(ClientWindowTitleReason::NoForegroundClient) {",
+      "replace": "if false {"
+    },
+    {
+      "name": "only the measured reason stops a popup",
+      "find": "if transport.clear_window_title() == Ok(ClientWindowTitleReason::NoForegroundClient) {",
+      "replace": "if transport.clear_window_title() != Ok(ClientWindowTitleReason::Cleared) {"
+    },
+    {
+      "name": "giving up on a popup ends it",
+      "find": "        self.end_popup();\n        Ended::TimedOut",
+      "replace": "        Ended::TimedOut"
+    },
+    {
+      "name": "a marker nobody holds is never signalled",
+      "find": "if !popup_holds(&self.started) {",
+      "replace": "if false {"
+    },
+    {
+      "name": "a held marker means another handle holds the lock",
+      "find": "matches!(file.try_lock(), Err(std::fs::TryLockError::WouldBlock))",
+      "replace": "!matches!(file.try_lock(), Err(std::fs::TryLockError::WouldBlock))"
+    },
+    {
+      "name": "the popup half locks its marker",
+      "find": "    let _ = file.lock();\n",
+      "replace": ""
+    },
+    {
+      "name": "pid zero is never signalled",
+      "find": "(pid > 0 && pid.to_string() == text && pid != std::process::id())",
+      "replace": "(pid.to_string() == text && pid != std::process::id())"
+    },
+    {
+      "name": "only a plainly written pid is signalled",
+      "find": "(pid > 0 && pid.to_string() == text && pid != std::process::id())",
+      "replace": "(pid > 0 && pid != std::process::id())"
+    },
+    {
+      "name": "this process is never signalled",
+      "find": "(pid > 0 && pid.to_string() == text && pid != std::process::id())",
+      "replace": "(pid > 0 && pid.to_string() == text)"
+    },
+    {
+      "name": "ending a popup sends a signal that ends it",
+      "find": ".arg(\"-TERM\")",
+      "replace": ".arg(\"-0\")"
     }
   ]
 }

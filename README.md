@@ -51,6 +51,9 @@ said "more than 1.80". Three crates in the runtime crate's normal tree declare
 dependency and declares no `rust-version` at all, plus `hashbrown 0.17.1` and
 `indexmap 2.14.2`, which both declare `1.85` outright and arrive through `toml`.
 
+➕ **With the `dialog` feature on, it is 1.89, from 0.5.3.** `dialog` locks a file with
+`File::lock`, which stabilised in 1.89.0. `SCOPE.md` §7.5.9 says why it needs the lock.
+
 ⚠️ **1.85 is reasoned rather than measured.** No toolchain between 1.80 and 1.97 is
 installed here, so nothing has been built at the boundary. What is reproducible is that
 1.80 fails. Underneath all of it sits an independent 1.80 floor that moves for its own
@@ -695,11 +698,11 @@ itself against a server that accepts a connection and then says nothing. So the 
 builds exactly that server and times the call.
 
 ```sh
-just mutate tools/mutations/client.json    # the transport's 20 guards
-just mutate tools/mutations/dialog.json    # the dialogs' 59
+just mutate tools/mutations/client.json    # the transport's 21 guards
+just mutate tools/mutations/dialog.json    # the dialogs' 69
 just mutate tools/mutations/pin_block.json # the plugin pin-block check's 15
 just mutate tools/mutations/report.json    # the issue reports' 19
-just mutate tools/mutations/surface.json   # the shared seam's 2
+just mutate tools/mutations/surface.json   # the shared seam's 3
 just mutate tools/mutations/update.json    # the update check's 85
 ```
 

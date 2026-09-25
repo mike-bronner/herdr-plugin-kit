@@ -19,6 +19,11 @@
       "name": "anything that is not the busy code stays a plain failure",
       "find": "other => OpenError::Failed(format!(\"{}: {}\", other, message)),",
       "replace": "_ => OpenError::Busy,"
+    },
+    {
+      "name": "a transport that cannot send the pre-check still opens the popup",
+      "find": "Err(\"this transport cannot send client.window_title.clear\".to_string())",
+      "replace": "Ok(ClientWindowTitleReason::NoForegroundClient)"
     }
   ]
 }

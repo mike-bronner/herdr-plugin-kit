@@ -10,9 +10,11 @@
 //! drift into exactly the defect §7.2 names.
 //!
 //! ⚠️ **A shared seam is a coupling, and this one is bounded by keeping the
-//! trait at two methods.** If `dialog` ever needs a third call, it declares
-//! that call itself rather than widening this. A module here holds only what
-//! both modules require.
+//! trait at two methods for `report`.** A module here holds only what both
+//! modules require. ➕ `dialog` needed a third call in 0.5.3, and a trait of its
+//! own was not possible: `dialog::ask` takes `impl Transport`, and 0.5.2's
+//! signatures must still compile. So the call is a default method that exists
+//! only when `dialog` is compiled, and `report` still sees two.
 //!
 //! The filesystem work stays out. `dialog`'s answer file and `report`'s issues
 //! file are both temporary files keyed on the pid and a counter, and they are
@@ -21,6 +23,8 @@
 //! the popup reads it afterwards. Four similar lines are a cheaper duplicate
 //! than a helper that has to be told which of those it is doing.
 
+#[cfg(feature = "dialog")]
+use crate::api::generated::ClientWindowTitleReason;
 use crate::api::generated::{NotificationShowParams, NotificationShowReason, PluginPaneOpenParams};
 
 /// The one Herdr error code the kit matches, and the measurement behind it.
@@ -81,6 +85,10 @@ impl OpenError {
 
 /// The two socket calls a user-facing module needs, and deliberately no more.
 ///
+/// ➕ With `dialog` on there is a third, `clear_window_title`, with a default
+/// body. Only `dialog` sends it. It is named in prose rather than linked, for
+/// the reason `lib.rs` gives about gated items.
+///
 /// 🔑 **Named for what its callers require, not for the transport behind it.**
 /// Calling it `Herdr` would overclaim: it holds two of the protocol's hundred
 /// and two methods, and a consumer reading `impl Herdr for MyClient` would
@@ -128,4 +136,27 @@ pub trait Transport {
         &mut self,
         params: NotificationShowParams,
     ) -> Result<NotificationShowReason, String>;
+
+    /// Sends `client.window_title.clear`, and answers the reason Herdr gave.
+    ///
+    /// ➕ **`dialog`'s third call, added in 0.5.3, and it exists only when
+    /// `dialog` is compiled.** `report` never sees it, so the trait `report`
+    /// holds is still the two calls both modules need. `dialog::ask` sends it
+    /// before it opens a popup, and reads
+    /// [`ClientWindowTitleReason::NoForegroundClient`] as "nobody can see a
+    /// popup". SCOPE.md §7.5.9 carries the measurement.
+    ///
+    /// 🔑 **A default method, because the signatures of 0.5.2 must still
+    /// compile.** A consumer that implements this trait itself keeps
+    /// compiling unchanged. The default answers `Err`, which `ask` reads as
+    /// "unknown" and then opens the popup as 0.5.2 did. The kit's own
+    /// [`api::client::Client`](crate::api::client::Client) overrides it.
+    ///
+    /// ⚠️ **Not a free question.** With a client attached, Herdr re-emits
+    /// its default window title and drops any title override. Mike accepted
+    /// that cost on 2026-09-24.
+    #[cfg(feature = "dialog")]
+    fn clear_window_title(&mut self) -> Result<ClientWindowTitleReason, String> {
+        Err("this transport cannot send client.window_title.clear".to_string())
+    }
 }

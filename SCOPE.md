@@ -126,11 +126,11 @@ herdr-plugin-kit/
 │   ├── test_kit_pin.py               # the pin block, run, and a plugin's copy held
 │   ├── fixtures/kit_pin/             # two real plugin copies, and kit 0.5.1's text
 │   └── mutations/
-│       ├── client.json               # the transport's 20 mutations
-│       ├── dialog.json               # the dialogs' 59 mutations
+│       ├── client.json               # the transport's 21 mutations
+│       ├── dialog.json               # the dialogs' 69 mutations
 │       ├── pin_block.json            # the plugin pin-block check's 15, in Python
 │       ├── report.json               # the issue reports' 19 mutations
-│       ├── surface.json              # the shared seam's 2 mutations
+│       ├── surface.json              # the shared seam's 3 mutations
 │       └── update.json               # the update check's 85 mutations
 ├── .github/workflows/
 │   ├── kit-ci.yml                    # the kit's own, fast
@@ -905,7 +905,8 @@ with a measured consequence attached.
 
 ```sh
 rm -rf /private/tmp/hgeo && mkdir -p /private/tmp/hgeo
-XDG_CONFIG_HOME=/private/tmp/hgeo herdr --session geo server &
+XDG_CONFIG_HOME=/private/tmp/hgeo XDG_STATE_HOME=/private/tmp/hgeo/state \
+  herdr --session geo server &
 ```
 
 `XDG_CONFIG_HOME` moves Herdr's **entire** config root, so the socket, `plugins.json` and
@@ -913,6 +914,13 @@ XDG_CONFIG_HOME=/private/tmp/hgeo herdr --session geo server &
 `HERDR_SOCKET_PATH` may already point at the live socket and `--session` is what stops the
 probe answering there. ⚠️ Keep the root **short**, under `/private/tmp`: a deep path dies
 with `local socket name length exceeds capacity of sun_path of sockaddr_un`.
+
+➕ 🚨 **Set `XDG_STATE_HOME` as well. Amended 2026-09-25.** `XDG_CONFIG_HOME` does not move
+the **state** root. ✅ Measured 2026-09-24 on Herdr 0.9.1: an isolated server started
+without it created `~/.local/state/herdr/plugins/<probe id>` in the **live** state root.
+Earlier probes had already left `probe.startup`, `probe.badpanes` and `probe.dialog`
+there. Point it inside the probe root, so one `rm -rf` removes everything the probe wrote.
+Every client you attach to the probe needs the same two variables.
 
 #### 🚨 Both halves of the socket rule, or neither
 
@@ -965,6 +973,8 @@ isolation needs no redirected binary and no shim.
    ones, which is the tell.
 2. `plugin list` shows only what you linked.
 3. The live `plugins.json` is **byte-identical afterwards**, by sha256 and mtime.
+   ➕ Check `~/.local/state/herdr` the same way, because that is where a missing
+   `XDG_STATE_HOME` writes.
 
 ✅ On 0.9.0 the probe socket is at `<config root>/herdr/sessions/<session>/herdr.sock`,
 measured 2026-09-09.
@@ -1462,6 +1472,12 @@ shape here would refuse a placement the trait never restricted.
 Everything above still describes it, including the name: it is named for what its callers
 require, and there are now two of them. §7.4.1 has the reason.
 
+➕ **A third call, `clear_window_title`, from 0.5.3.** It sends `client.window_title.clear`,
+and only `dialog` needs it, so it exists only when `dialog` is compiled. 🔑 **It is a
+default method, and the default answers `Err`**, so a consumer's own `Transport` still
+compiles and still opens its popups as 0.5.2 did. `Client` overrides it. §7.5.9 says why
+`ask` sends it.
+
 #### 7.5.7 Costs, recorded rather than discovered later
 
 ⚠️ **`crossterm` fails the bar `toml` cleared in §5.** `toml` was accepted because all
@@ -1656,7 +1672,7 @@ waiting" is unavailable to it, and anything that names no keypress writes `DISMI
 ⚠️ Escape cannot be typed as a line, so a button on Escape has no line that reaches it.
 
 ⚠️ **What is not covered.** Every decision above is unit-tested across the configurations and
-mutation-verified (59 mutations on this module, none surviving). That `interact` hands the
+mutation-verified (69 mutations on this module since 0.5.3, none surviving). That `interact` hands the
 resolved keys to the two decoders is **not** tested, because reaching `interact` needs a pty
 — the same limit `TerminalState` already carries, and the same one the pre-change code had.
 
@@ -1715,6 +1731,108 @@ replaced, and it fails closed in both directions.
 `y` on its destructive button and leave Enter inert, Escape answers the safe one, Ctrl-C
 ends the dialog without choosing, and the four styled states and the framed rendering arrive
 with them. Its migration is `src/confirm.rs`, planned against the table above.
+
+#### 7.5.9 ➕ No popup outlives `ask`, and none opens where nobody can see it — 0.5.3
+
+🚨 **What was wrong in 0.5.2.** ✅ Measured 2026-09-24 against kit 0.5.2 on isolated
+Herdr 0.9.1 servers, set up by §5.3's method:
+
+- With workspaces restored and no client attached, `plugin.pane.open` answers `ok`. The
+  popup runs on a real pty that nobody sees, and it writes its started marker.
+- `ask` answers `Unanswered(TimedOut)` after 120.2 s.
+- **The popup process is still alive after `ask` returns, and it holds the global slot.**
+  Every other open answers `ui_busy`, the project-finder picker included. That lasts until
+  somebody attaches and answers the popup, or Herdr stops.
+- A client that attaches after the timeout sees the dialog and can answer it. **The answer
+  is lost silently**, because the channel directory went when `ask` returned.
+- The slot frees as soon as the popup process exits, answered or killed.
+- A client that attached once and then detached does not protect. Later popups run
+  headless again.
+
+**Decided by Mike 2026-09-24: two guards, both of them.** He rejected doing only one.
+
+| Guard | What it does | Why it is not enough alone |
+|---|---|---|
+| **The pre-check**, the fast path | `ask` sends `client.window_title.clear` before it opens anything. The reason `no_foreground_client` answers `Unanswered::NeverShown` at once, and no popup is opened | A client can detach between the pre-check and the open. A transport that does not forward the call never asks |
+| **The timeout kill**, the backstop | When the wait runs out, `ask` sends `SIGTERM` to the popup process before it answers `TimedOut` | It frees the slot only after the full 120 s wait |
+
+🔑 **Why that call.** ✅ `client.window_title.clear` was the only signal that told the two
+states apart. It answered `changed:false, reason:"no_foreground_client"` headless and
+`changed:true, reason:"cleared"` attached. That held across both `[ui.toast] delivery`
+configs, after a focus-out event, and after a client detached. `notification.show`'s
+reason changes with `[ui.toast] delivery`, so it cannot be used. Env vars, the tty, the
+popup size, `status` and `session.snapshot` showed no difference.
+
+⚠️ **Two costs, both accepted by Mike on 2026-09-24:**
+
+- **The pre-check is not free.** With a client attached, the call re-emits Herdr's default
+  window title and removes any title override. No plugin in Mike's repositories sets a
+  title today. A plugin that does will see its title reset each time it asks.
+- **The reason code is undocumented.** `no_foreground_client` is what 0.9.1 was measured
+  to answer, and the schema says nothing about when it is sent. Only that one reason stops
+  a popup. `cleared`, `set`, a reason this build does not know, and any error all open the
+  popup as 0.5.2 did, and the kill is the backstop behind them.
+
+🚨 **The kill never signals a pid it cannot tie to this dialog's own popup.** A process
+that exits frees its pid, and a later process can be given the same one. Signalling that
+process is worse than leaving an orphan popup. So the popup half holds its started
+marker **locked** for its whole life: `run` takes the lock before it writes the pid. A pid
+cannot be reused while its process lives, so a held lock ties the pid to the popup. The
+kill fires only when all of these hold:
+
+- Another handle holds the marker locked, which is the popup being alive.
+- The marker names the pid exactly as a number, and it is not `0`, which names a process
+  group.
+- The pid is not the asking process.
+
+⚠️ **One window stays open, and it is microseconds wide.** The popup can exit between the
+lock check and the signal, and its pid can be reused in that gap. Herdr must reap it first,
+and the pid space must come round to it. Closing this needs a pidfd or a process handle.
+`std` offers neither on every Unix, and `lib.rs` forbids reaching them with `unsafe`.
+
+⚠️ **Windows signals nothing.** A timed-out popup stays open there until somebody answers
+it or Herdr stops, exactly as in 0.5.2. The pre-check still works on Windows, because it is
+a socket call. Compile-verified only, like every Windows path in this kit.
+
+📏 **The lock raises the `dialog` feature's toolchain floor to 1.89.** `File::lock` and
+`File::try_lock` stabilised in 1.89.0, read from `std`'s own stability attributes rather
+than built at the boundary. The floor without `dialog` is unchanged. §11.8.1 carries the
+rest.
+
+🔑 **Source-compatible with 0.5.2.** The pre-check is a default method on `Transport`
+(§7.5.6), and the default answers `Err`, which opens as 0.5.2 did. ⚠️ **So a wrapper
+transport that does not forward the call gets the kill and never the pre-check.**
+project-finder's `Quiet` in `src/update.rs` is one: it forwards `open_pane` and nothing
+else, so it needs a one-line `clear_window_title` forward to get the fast path.
+
+**What a caller sees change.** A headless `ask` answers `NeverShown` at once, where it
+answered `TimedOut` after 120 s. project-finder's `settle` reads both as "not shown", so
+it keeps working unchanged.
+
+⚠️ **What is not covered.**
+
+- **That `run` holds the lock for its whole life** is not tested, because reaching `run`
+  needs a pty. The function that takes the lock is tested, and the live check below
+  exercises the whole path.
+- **`notify` sends no pre-check.** A bare dialog opened headless still holds the slot until
+  somebody dismisses it or Herdr stops. It was out of 0.5.3's scope.
+- **A popup that starts after the 3 s startup window** writes no marker `ask` ever reads,
+  so it has no pid to end. It then shows a dialog whose answer has nowhere to go.
+
+✅ **Confirmed 2026-09-25 on an isolated Herdr 0.9.1**, by §5.3's method with
+`XDG_STATE_HOME` set:
+
+| Case | What `ask` answered | Popup process after `ask` | A second open after `ask` |
+|---|---|---|---|
+| Headless, the kit's `Client` | `NeverShown` in 0.001 s, no popup opened | none | ✅ `ok` |
+| Headless, a transport that forwards only 0.5.2's two calls | `TimedOut` after 120.2 s. A second open during the wait answered `ui_busy` | ✅ gone, ended by the kill | ✅ `ok` |
+| Attached, Enter pressed | `Chose(0)` after 2.0 s | gone, it exited by itself | ✅ `ok` |
+| Attached, nobody answered | `TimedOut` after 120.2 s | ✅ gone, ended by the kill | ✅ `ok`, and the attached client then drew the new popup |
+
+🪤 **A fresh root shows Herdr's first-run onboarding dialog, and it covers the popup.** The
+first attached run pressed Enter into the onboarding rather than into the dialog. Dismiss
+it before asking: Enter, then Escape. The live `plugins.json` and the listing of
+`~/.local/state/herdr/plugins` were unchanged afterwards, so `XDG_STATE_HOME` held.
 
 ## 8. Module: `update` (feature-gated)
 
@@ -3204,6 +3322,12 @@ pattern-constrained string in Herdr's schema (§3) and which landed in **1.80**.
 is a property of the generated file rather than of the lock, so re-resolving the tree
 never lowers it and `just sync-api` can raise it.
 
+➕ **A third floor applies to the `dialog` feature only: 1.89, from 0.5.3.** `dialog` locks
+the popup's started marker with `File::lock` and `File::try_lock`, which stabilised in
+1.89.0 (§7.5.9). That is read from `std`'s own `#[stable(since = "1.89.0")]` attributes and
+not built at the 1.88/1.89 boundary. A consumer that leaves `dialog` off keeps the floor
+above.
+
 ✅ **Dropping the field changed no dependency resolution.** Cargo's MSRV-aware resolver
 consults `rust-version`, so this was checked rather than assumed: `Cargo.lock` is
 byte-identical after a full re-resolution, and `cargo metadata --locked` still passes.
@@ -3840,6 +3964,11 @@ defect §7.2 exists to fix.
 
 **Cost**: a coupling, bounded by keeping the trait at two methods. A third call `dialog`
 needs later gets declared in `dialog`.
+
+➕ **Amended 2026-09-25, for 0.5.3.** `dialog` needed a third call, and it could not be
+declared in `dialog`: `ask` takes `impl Transport`, and a new bound there breaks every
+0.5.x caller. So it is a default method on `Transport` that exists only when `dialog` is
+compiled. `report` still sees two methods. §7.5.9 has the call.
 
 **Not shared**: the temp-file idiom. Both key a path on the pid and a counter, and they
 are still different things — `dialog` makes a directory it removes once the answer
